@@ -1446,15 +1446,21 @@ Deno.test("the checker accepts the prelude it reads", async () => {
 // A refinement type, X = (p : T) | condition: T's values for which it holds
 // (docs/semantics.md#refinement-types), checked by the run and, on values the
 // check knows, statically.
-const POSITIVE = "Positive = (n : Int) | n > 0\n";
+const POSITIVE = "Positive = (n : Int) | n > 0\n", I32 = "I32 = (n : Int) | -2147483648 <= n && n <= 2147483647\n";
 for (const [source, output] of [
     [POSITIVE + 'x = 3 : Positive\nx', '3'], [POSITIVE + 'f (x : Positive) = x * 2\nf 4', '8'],
     [POSITIVE + 'd (x : Positive) = "positive"\nd x = "other"\nmap d [-1,1]', '["other","positive"]'],
-    [POSITIVE + '[Positive <= Int, Int <= Positive, isType Positive 3, isType Positive -3]', '[True,False,True,False]'],
-    [POSITIVE + 'typeOf (3 : Positive)', 'Int'], [POSITIVE + 'Small = (n : Positive) | n < 10\n[Small <= Positive, isType Small 12]', '[True,False]'],
+    [POSITIVE + '[isType Positive (3 : Positive), isType Positive 3, Int <= Positive]', '[True,False,False]'],
+    [POSITIVE + 'typeOf (3 : Positive)', 'Positive'],
+    [POSITIVE + 'Small = (n : Positive) | n < 10\n[typeOf (3 : Small), typeOf ((3 : Positive) : Small)]', '[Small,Small]'],
     ['Bounded lo hi = (n : Int) | lo <= n && n <= hi\nx = 5 : Bounded 1 10\nx', '5'],
     ['Ordered = ([a,b] : [Int,Int]) | a <= b\n[isType Ordered [1,2], isType Ordered [2,1]]', '[True,False]'],
-    [POSITIVE + 'PosOrText = (Positive | String)\n[isType PosOrText "a", isType PosOrText 4, isType PosOrText -4]', '[True,True,False]'],
+    [POSITIVE + 'PosOrText = (Positive | String)\n[isType PosOrText "a", isType PosOrText (4 : Positive), isType PosOrText 4]', '[True,True,False]'],
+    // A refinement of a scalar named by a capitalized name keeps its name, as
+    // Int32 does: through arithmetic, its condition checked on each result,
+    // while a typed pattern takes a plain value it holds, binding that value.
+    [I32 + 'a = 100 : I32\n[typeOf a, typeOf (a + 1), (a : Int) + 1, a == 100]', '[I32,I32,101,True]'],
+    [I32 + 'h (x : I32) = typeOf x\nh x = "other"\n[h 5, h (5 : I32), h 1.5, h 3000000000]', '[Int,Int,"other","other"]'],
     [POSITIVE + 'Box (x : Positive) = _\nBox 2', 'Box 2'],
     ['Scalar = (n : UInt) | n <= 1114111 && (n < 55296 || n > 57343)\nc (x : Scalar) = x\nc 65', '65'],
 ]) {
@@ -1468,6 +1474,7 @@ for (const [source, message] of [
     [POSITIVE + 'f (x : Positive) = x\nh y = f y\nh 0', '0 is not in Positive'],
     [POSITIVE + 'g [(a : Positive), b] = a\ng [-1,2]', '-1 is not in Positive'],
     [POSITIVE + 'k = 0 - 2\nBox (x : Positive) = _\nBox k', '-2 is not in Positive'],
+    [I32 + 'a = 2000000000 : I32\na + a', '4000000000 is not in I32'], [I32 + 'x = 3000000000 : I32', '3000000000 is not in I32'],
 ]) {
     Deno.test(`a refinement type rejects: ${JSON.stringify(source)}`, () => {
         try { run(session(), source); } catch (error) { if (String(error).includes(message)) return; throw error; }

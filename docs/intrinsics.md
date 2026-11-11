@@ -78,11 +78,10 @@ Int8 = (n : Int) | -128 <= n && n <= 127
 UInt8 = (n : UInt) | n <= 255
 ```
 
-The range is checked where a value becomes one (`300 : UInt8` is an error),
-never by wrapping around. One thing the definitions leave out: a refinement's
-values are its base's, while an `Int8` keeps its name (`typeOf (1 : Int8)` is
-`Int8`), as a named subtype's values do (`Meters = Float`); a program cannot
-yet name a refinement that way.
+A capitalized name for a refinement of a scalar names a subtype, so an `Int8`
+keeps its name (`typeOf (1 : Int8)` is `Int8`) through arithmetic, and the
+range is checked where a value becomes one and on each result (`300 : UInt8`
+and `(200 : UInt8) + (100 : UInt8)` are errors), never by wrapping around.
 
 ## Inexact numbers
 

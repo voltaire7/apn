@@ -20,7 +20,10 @@ sqrt (4 : Count)            # 2: builtins and (x : Int) patterns see the Int
 
 Its own pattern, `(Count c)`, is chosen before `(n : Int)` and accepts only a
 `Count` (a plain `5` is not one); applying `Count` or a list type
-(`([1,2] : List Count)`) makes one.
+(`([1,2] : List Count)`) makes one. A refinement of a scalar named so
+(`Positive = (n : Int) | n > 0`) is a named subtype too, whose values also hold
+its condition and whose typed pattern takes a plain value that does, as the
+sized integers' do (see [refinement types](semantics.md#refinement-types)).
 
 A constructor makes a distinct type instead (see
 [variants](templates-and-types.md#variants-parameters-and-distinct-wrappers)):

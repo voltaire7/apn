@@ -168,7 +168,8 @@ export function valueToString(v: Value): string {
 // A constructor argument as source writes it: Some (Some 1), Some -1.
 export function compoundArgument(v: Value): boolean {
     switch (v.kind) {
-        case "variant": return v.v.length > 0;
+        // A named subtype's value shows as its base's (Count 2 is 2).
+        case "variant": return v.family?.base && v.v.length === 1 ? compoundArgument(v.v[0]) : v.v.length > 0;
         case "pending": return v.step.op === "return" || v.step.op === "throw";
         case "io": case "closure": case "clauseFn": case "contract": case "functionType": return true;
         case "native": return v.applied.length > 0;

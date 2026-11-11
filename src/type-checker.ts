@@ -1870,10 +1870,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // A capitalized name for a scalar type names a subtype (Money = Float), as
     // at runtime; undefined for anything else.
+    // So does a refinement of one (Int32 = (n : Int) | ...), its condition kept.
     function namedSubtype(name: string, t: Ty): Ty | undefined {
-        const type = resolve(t), base = type.k === "type" && !type.refined ? resolve(type.value) : undefined;
+        const type = resolve(t);
+        let base = type.k === "type" ? resolve(type.value) : undefined;
+        if (type.k === "type" && type.refined && base?.k === "variant" && base.base) base = resolve(base.base);
         if (base?.k !== "atom" || !NAMED_BASES.has(base.name)) return undefined;
-        return { k: "type", value: { k: "variant", name, args: [], base } };
+        const refined = type.k === "type" && type.refined ? { refined: { ...type.refined, name } } : {};
+        return { k: "type", value: { k: "variant", name, args: [], base }, ...refined };
     }
     // A capitalized function applied to all its parameters, as the run
     // makes it (Interpreter.construct): what its body gives. Clauses with

@@ -245,6 +245,17 @@ export class Interpreter {
         if (PRELUDE_TYPES.has(name)) return bound === this.preludeBindings.get(name);
         return bound.kind === "type" && bound.name === name && !bound.family;
     }
+    // Whether a refinement's base is a scalar type (through refinements and
+    // named subtypes): naming one names a subtype.
+    private scalarRefinement(t: Value): boolean {
+        for (let base = t; ; ) {
+            base = this.reference(base);
+            if (base.kind !== "type") return false;
+            if (base.refine) { base = base.choices![0]; continue; }
+            if (base.family?.base) { base = base.family.base; continue; }
+            return NAMED_BASES.has(base.name) && !base.family && !base.alias && !base.arguments?.length && !base.variable;
+        }
+    }
     // (p : T), T a refinement: the value as its base's pattern takes it
     // (converted: (c : Scalar) takes 65 as (c : UInt) does), its condition
     // holding, then p.
@@ -657,6 +668,11 @@ export class Interpreter {
                         // and (Money x) accepts only Money values.
                         if (value.kind === "type" && NAMED_BASES.has(value.name) && !value.family && !value.alias && !value.arguments?.length && !value.variable) {
                             return { kind: "type", name, family: { name, base: value } };
+                        }
+                        // So does a refinement of one (Int32 = (n : Int) | ...), its
+                        // values those of the refinement.
+                        if (value.kind === "type" && value.refine && this.scalarRefinement(value)) {
+                            return { kind: "type", name, family: { name, base: { ...value, name } } };
                         }
                         return this.remembered(name, [], value);
                     } finally { this.env = caller; }
@@ -3750,12 +3766,17 @@ export class Interpreter {
             // A pending monadic value takes this type's monad (Option Int { return 42 }).
             if (actual.kind === "pending" && (type.family || actual.step.op === "call")) actual = this.dataValue(this.realize(actual, type));
             if (type.family?.base) {
-                if (actual.kind === "variant" && actual.family?.base) {
+                // A named refinement's base may be named too (Small = (n : Positive)
+                // | n < 10): a value of it, which its refinement takes, is held as
+                // the plain value under it.
+                const refined = this.reference(type.family.base);
+                if (actual.kind === "variant" && actual.family?.base && (actual.family === type.family || !(refined.kind === "type" && refined.refine))) {
                     if (actual.family !== type.family) throw new APNError("runtime", `${type.name} requires explicit unwrapping of ${actual.family.name}`);
                     return actual;
                 }
-                return { kind: "variant", tag: type.family.name, family: type.family,
-                    v: [this.conform(type.family.base, actual)] };
+                let held = this.conform(type.family.base, actual);
+                while (held.kind === "variant" && held.family?.base) held = this.dataValue(held.v[0]);
+                return { kind: "variant", tag: type.family.name, family: type.family, v: [held] };
             }
             if (type.family) {
                 if (actual.kind !== "variant" || actual.family !== type.family) throw new APNError("runtime", `${type.name} expects a ${type.name} variant`);
@@ -5902,6 +5923,15 @@ export class Interpreter {
                     const actual = this.dataValue(v);
                     const input = type.kind === "record" ? this.recordPatternInput(type, actual) : this.isList(actual) ? actual : null;
                     return input !== null && this.matchPattern(p.args[0], this.conform(type, input), binds);
+                }
+                // A named refinement's takes one of its values, or a plain value
+                // its refinement holds, as (x : Int32) takes 5: either binds the
+                // plain value.
+                const refined = type.kind === "type" && type.family?.base && this.reference(type.family.base);
+                if (refined && refined.kind === "type" && refined.refine && p.args.length === 1) {
+                    const actual = this.dataValue(v);
+                    if (actual.kind === "variant" && actual.family === (type as Extract<Value, { kind: "type" }>).family) return this.matchPattern(p.args[0], actual.v[0], binds);
+                    return !(actual.kind === "variant" && actual.family?.base) && this.refinedPattern(refined, p.args[0], v, binds);
                 }
                 // A type without parameters takes its value: (Color c) takes Red,
                 // (Money x) Money 2's payload.
