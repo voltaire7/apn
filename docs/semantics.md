@@ -1408,8 +1408,12 @@ exact decimal arithmetic or recover precision lost in an earlier computation.
 `Float` construction explicitly returns a value to flexible precision.
 
 Other numeric combinations retain their existing lossless promotion rules:
-same-type operations preserve the type and check integer overflow; otherwise
-arithmetic tries an existing suitable operand type before using the numeric tower.
+same-type operations preserve the type and check integer overflow, and so
+does a sized integer with a plain integer, whose result (not the plain operand)
+must fit: `(2000000000 : Int32) - 3000000000` is the `Int32` `-1000000000`, and
+`(1233421412 : Int32) + 10^20` is an error, never a wrapped or widened number;
+otherwise arithmetic tries an existing suitable operand type before using the
+numeric tower.
 Exact-to-inexact conversion must still be lossless. Integer `/` can produce a
 typed `Fraction`. Float32 arithmetic rounds its result to binary32. Other numeric
 native functions return their natural numeric result types; use a constructor to

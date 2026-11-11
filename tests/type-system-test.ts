@@ -48,6 +48,10 @@ for (const [source, expected] of [
     ["typeOf (123 : Int32)", "Int32"], ["isType Number (1 : Int32)", "True"],
     ["xs = [(1 : Int32) + (2 : Int32), (1 : Int32) + 2]; [xs, map typeOf xs]", "[[3,3],[Int32,Int32]]"],
     ["x = (1 : Int32) / (2 : Int32); [x, typeOf x]", "[1/2,Fraction]"],
+    // A sized integer with a plain one keeps its type; the result must fit,
+    // whatever the plain operand is.
+    ["x = (2000000000 : Int32) - 3000000000; [x, typeOf x]", "[-1000000000,Int32]"],
+    ["x = (5 : UInt8) / 2; [x, typeOf x]", "[5/2,Fraction]"],
     ["take 3 (100 * _ -> (0 : Int))", "[0,0,0]"],
     ["length (100 * _ -> (0 : Int))", "100"],
     ["take 3 (100 * Int)", "[0,1,2]"],
@@ -73,7 +77,7 @@ for (const [source, expected] of [
         if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
     });
 }
-for (const source of ["(123 : String)", "(True : Char)", "List 1", "([] : Record)", "(2 : Function)", "(1 : Type)", "[] 1", "(1 : Variant)", "((3.7 : Float) : Int)", "(2147483648 : Int32)", "(-1 : UInt)", "(4294967296 : UInt32)", "(127 : Int8) + (1 : Int8)", "cast UInt -1", "cast Int8 128", "1/3 + .5", "f (x : Float32) = x\nf (.1 : Float)"]) {
+for (const source of ["(123 : String)", "(True : Char)", "List 1", "([] : Record)", "(2 : Function)", "(1 : Type)", "[] 1", "(1 : Variant)", "((3.7 : Float) : Int)", "(2147483648 : Int32)", "(-1 : UInt)", "(4294967296 : UInt32)", "(127 : Int8) + (1 : Int8)", "(1233421412 : Int32) + 123512512351245342332", "(1233421412 : Int32) + 1000000000", "cast UInt -1", "cast Int8 128", "1/3 + .5", "f (x : Float32) = x\nf (.1 : Float)"]) {
     Deno.test(`checked type conversion: ${source}`, () => {
         try { const interp = new Interpreter(); interp.renderString(interp.run(parse(source))); }
         catch (e) { if (e instanceof APNError) return; throw e; }

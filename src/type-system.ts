@@ -105,6 +105,10 @@ export function typedPower(a: Numeric, b: Numeric): Numeric {
     return target && result.kind === "float" ? castNumeric(target, result, true) : result;
 }
 
+// An integer type's result that is no integer (5 / 2): a Fraction or Float.
+function integerQuotient(result: Numeric): Numeric {
+    return { ...result, typeName: result.kind === "rational" ? "Fraction" : "Float" };
+}
 export function typedArithmetic(op: string, a: Numeric, b: Numeric): Numeric {
     const floats = floatingOperands(a, b);
     if (floats) return castNumeric(floats[2], arithmetic(op, floats[0], floats[1]), true);
@@ -119,6 +123,14 @@ export function typedArithmetic(op: string, a: Numeric, b: Numeric): Numeric {
     }
     else if (a.typeName && !b.typeName) target = a.typeName;
     else if (b.typeName && !a.typeName) target = b.typeName;
+    // A sized integer with a plain integer keeps its type, and the result,
+    // not the plain operand, is what it must hold: (2000000000 : Int32) -
+    // 3000000000 is the Int32 -1000000000, and Int32 + 10^20 an error.
+    const plainInteger = (v: Numeric) => !v.typeName && v.kind === "int";
+    if (target && /^U?Int/.test(target) && !(a.typeName && b.typeName) && (plainInteger(a) || plainInteger(b))) {
+        const [left, right] = implicitOperands(a, b), result = arithmetic(op, left, right);
+        return result.kind === "int" ? castNumeric(target, result) : integerQuotient(result);
+    }
     if (target && !["Number", "Real", "Integer", "Exact", "Inexact"].includes(target)) {
         try { a = castNumeric(target, a); b = castNumeric(target, b); }
         catch (e) {
@@ -129,7 +141,7 @@ export function typedArithmetic(op: string, a: Numeric, b: Numeric): Numeric {
     const [left, right] = implicitOperands(a, b);
     const result = arithmetic(op, left, right);
     if (!target) return result;
-    if (/^(U?Int)/.test(target) && result.kind !== "int") return { ...result, typeName: result.kind === "rational" ? "Fraction" : "Float" };
+    if (/^(U?Int)/.test(target) && result.kind !== "int") return integerQuotient(result);
     // Floating arithmetic rounds as part of the operation, not an implicit cast.
     return castNumeric(target, result, target === "Float" || target === "Float64" || target === "Float32");
 }
