@@ -89,6 +89,11 @@ parse = intrinsics.parse
 # load file: an action reading file.apn beside the running file, its code the
 # result (each run reads it again): m <- load "f"; use m, or do m to run it.
 load file = map parse (intrinsics.readFileFrom (file ++ ".apn"))
+# A file's names are public; the statement private makes what its top level
+# binds after it the file's own (an import or a use of its code sees none of
+# them), and public ends that.
+private = intrinsics.visibility False
+public = intrinsics.visibility True
 
 # Functor, Applicative and Monad. IO and lists are built in; any other type
 # joins by defining instances of map, >>= and return (as the option

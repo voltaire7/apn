@@ -22,8 +22,8 @@ for (const [source, expected] of [
 });
 Deno.test('use exports retain their defining module scope', () => {
     const i = new Interpreter();
-    const actual = result(i, 'module = { private = 40; [add = x -> private + x] }\nuse module\nadd 2');
-    if (actual !== '42' || i.env.get('private') !== undefined) throw new Error(actual);
+    const actual = result(i, 'module = { hidden = 40; [add = x -> hidden + x] }\nuse module\nadd 2');
+    if (actual !== '42' || i.env.get('hidden') !== undefined) throw new Error(actual);
 });
 for (const source of ['use 1', 'use [[x = 2], 3]', 'use [use 2]', 'use [x = 1, use 2]']) {
     Deno.test(`use rejects input without partially installing bindings: ${source}`, () => {

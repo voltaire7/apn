@@ -202,6 +202,9 @@ export class Env {
     version: boolean;
     // A scope's newest version, for env views, which stay live.
     newest?: Env;
+    // A file's top level once private or public has run: whether what it
+    // binds now is public, and each name's part (true: public).
+    privacy?: { open: boolean; names: Map<string, boolean> };
 
     constructor(parent: Env | null = null, version = false) {
         this.parent = parent;
@@ -237,6 +240,15 @@ export class Env {
 
     setLocal(name: string, v: Value) {
         this.map.set(name, v);
+        // A file's top level after private keeps what it binds (see Privacy).
+        const privacy = this.version ? this.root().privacy : this.privacy;
+        if (privacy && !name.startsWith("$")) {
+            const was = privacy.names.get(name);
+            if (was !== undefined && was !== privacy.open) {
+                throw new APNError("runtime", `'${name}' is bound both public and private in this file`, { hint: "bind each name in one part of the file" });
+            }
+            privacy.names.set(name, privacy.open);
+        }
     }
 
     // Set in the scope where the variable already exists, else local scope.

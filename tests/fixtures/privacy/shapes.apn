@@ -1,0 +1,7 @@
+pi = 3
+area r = pi * r * r
+private
+hidden = 7
+helper x = x + hidden
+public
+perimeter r = helper (2 * pi * r)

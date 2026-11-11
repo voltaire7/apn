@@ -63,3 +63,37 @@ for (const [source, opened] of [
     if (!!i.env.get(name) !== opened) throw new Error(`${name} ${opened ? "not opened" : "opened"}`);
 });
 
+
+// private and public mark the parts of a file's top level (Jai's #scope_file
+// and #scope_export): an import or a use of its code sees the public names,
+// which keep seeing the private ones (docs/semantics.md#module-imports).
+for (const checked of [false, true]) {
+    const session = () => {
+        const i = new Interpreter();
+        if (checked) i.enableChecking();
+        i.sourceDir = new URL("fixtures/privacy", import.meta.url).pathname;
+        return i;
+    };
+    for (const [source, expected] of [
+        ['shapes <- import "shapes"\n[shapes.area 2, shapes.perimeter 1]', '[12,13]'],
+        ['m <- load "shapes"\nuse m\n[area 2, perimeter 1]', '[12,13]'],
+        ['m <- load "shapes"\nm.pi', '3'],
+    ]) Deno.test(`private names stay in their file${checked ? " (checked)" : ""}: ${JSON.stringify(source)}`, () => {
+        const i = session(), actual = i.renderString(i.run(parse(source)));
+        if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+    });
+    for (const [source, message] of [
+        ['shapes <- import "shapes"\nshapes.hidden', checked ? "missing field 'hidden'" : "no field 'hidden'"],
+        ['m <- load "shapes"\nuse m\nhelper 1', "unbound variable 'helper'"],
+        ['m <- load "shapes"\nm.helper', checked ? "missing field 'helper'" : "unbound variable 'helper'"],
+        ['twice <- import "twice"\ntwice.x', "'x' is bound both public and private"],
+    ]) Deno.test(`private names stay in their file${checked ? " (checked)" : ""}: ${JSON.stringify(source)} fails`, () => {
+        try { session().run(parse(source)); } catch (error) { if (String(error).includes(message)) return; throw error; }
+        throw new Error("accepted");
+    });
+}
+Deno.test("private marks a file's top level, not a block", () => {
+    try { new Interpreter().run(parse("f x = {\n    private\n    x\n}\nf 1")); }
+    catch (error) { if (String(error).includes("private and public mark a file's top level")) return; throw error; }
+    throw new Error("accepted");
+});
