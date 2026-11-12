@@ -1361,7 +1361,7 @@ S (S Z)                          # 2, a UInt
 ```
 
 `S k` destructures, it does not unwrap: `k` is the predecessor, itself a `UInt`,
-while `(k : UInt)` binds the untyped payload like any numeric constructor pattern.
+while `(k : UInt)` binds a `UInt`, as any typed pattern binds a value of its type.
 A bare `Z` in a pattern takes no fields (`plus Z m = m`). A program that declares
 its own constructor named `Z` or `S` gets it in that scope, matched as a variant;
 a number never matches a variant pattern.
@@ -1423,7 +1423,9 @@ integer with an `Int`, whose result (not the `Int`) must fit:
 `(2000000000 : Int32) - 3000000000` is the `Int32` `-1000000000`, and
 `(1233421412 : Int32) + 10^20` is an error, never a wrapped or widened number.
 Two different sized types do not mix: `(1 : Int32) + (2 : Int64)` is an error,
-and `(x : Int64)` converts one explicitly. Another typed number keeps its type
+and `(x : Int64)` converts one explicitly. A typed parameter is a value of its
+type, so the check sees it from the patterns alone:
+`f (x : Int32) (y : Int64) = x + y` is a static error. Another typed number keeps its type
 with an untyped one where both convert to it (`(1 : Float32) / 10` is a
 `Float32`); otherwise arithmetic uses the numeric tower.
 Exact-to-inexact conversion must still be lossless. Integer `/` can produce a
@@ -1455,9 +1457,10 @@ matches, which outrank conversion matches. Ties retain source order. Converting
 either a typed or an untyped input must be lossless; explicit floating-point
 construction is a separate operation and does not relax pattern matching. The same
 ranking chooses among any function's clauses and a `match`'s alternatives:
-`0 ~ [n -> "any", 0 -> "zero"]` is `"zero"`. Numeric constructor patterns extract
-untyped payloads: `unwrap (x : Int32) = x` returns `5` for `(5 : Int32)`. Return an explicit
-constructor, as above, when the result should retain a type. Patterns do not mutate
+`0 ~ [n -> "any", 0 -> "zero"]` is `"zero"`. A typed pattern binds what ascription
+makes, a value of its type: `unwrap (x : Int32) = x` returns the `Int32` `5`, given
+`5` or `(5 : Int32)`, while `(x : Number)` and the other aggregates bind the value
+as it is (`(x : Int)` of `3` is `3`, and its `x / 2` the `Fraction` `3/2`). Patterns do not mutate
 the original argument or strip types from unrelated values.
 Repeated variable names assert equality, so `(x : Number) (x : Number)` is not a
 catch-all for two different numbers.

@@ -396,15 +396,6 @@ const explicitDynamic: Ty = { k: "dynamic", explicit: true };
 const isExplicit = (t: Ty): boolean => { const value = resolve(t); return value.k === "dynamic" && !!value.explicit; };
 const variable = (): Ty => ({ k: "var" });
 const atom = (name: string): Ty => name === "Dynamic" ? explicitDynamic : { k: "atom", name };
-// The payload a numeric constructor pattern binds: the number without its
-// type annotation (Int for UInt8, Float for Float32); aggregates stay as written.
-function untypedPayload(t: Ty): Ty {
-    if (t.k !== "atom") return t;
-    if (/^U?Int(8|16|32|64|128)?$/.test(t.name)) return atom("Int");
-    if (/^Float(32|64)?$/.test(t.name)) return atom("Float");
-    if (t.name === "ComplexExact") return atom("Complex");
-    return t;
-}
 // A sized or unsigned integer type with an Int keeps its type, as at runtime
 // (UInt 5 - 1 is UInt 4; a result it cannot hold is a runtime error); two
 // different ones do not mix (see typedArithmetic).
@@ -2347,10 +2338,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const value = t.value.k === "atom" && t.value.name === "List" ? list(variable())
                         : t.value.k === "atom" && t.value.name === "HashMap" ? { k: "map", key: variable(), value: variable() } as Ty : t.value;
                     unify(value, expected, e);
-                    // A numeric constructor pattern binds the untyped payload, as at
-                    // runtime: (UInt8 x) binds 5 for UInt8 5, a plain integer. A
-                    // literal payload is still a value of the type: (UInt8 300) fails.
-                    p.args.forEach((x) => bind(x, x.p === "int" || x.p === "range" ? value : untypedPayload(value), scope, e, bound));
+                    // (x : UInt8) binds what 5 : UInt8 makes, a UInt8, as at runtime;
+                    // a literal is a value of the type: (300 : UInt8) fails.
+                    p.args.forEach((x) => bind(x, value, scope, e, bound));
                     return;
                 }
                 if ((t.k === "record" || t.k === "list") && p.args.length === 1) {

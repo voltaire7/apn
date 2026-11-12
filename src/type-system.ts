@@ -138,6 +138,7 @@ export function typedArithmetic(op: string, a: Numeric, b: Numeric): Numeric {
         try { a = castNumeric(target, a); b = castNumeric(target, b); } catch { target = undefined; }
     } else target = undefined;
     const [l, r] = implicitOperands(a, b), result = arithmetic(op, l, r);
+    if (target && /^U?Int/.test(target) && result.kind !== "int") return integerQuotient(result);
     return target ? castNumeric(target, result, ["Float", "Float32", "Float64"].includes(target)) : result;
 }
 export function numericHash(v: Numeric): string {

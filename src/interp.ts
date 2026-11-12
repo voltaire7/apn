@@ -72,6 +72,7 @@ const IO_RESULTS: Record<string, string> = {
 
 // Scalar types := names a subtype of (Money := Float): not aggregates.
 // The scalar types: a name for one is an alias whose values cannot carry it.
+const AGGREGATE_NUMERIC = new Set(["Number", "Real", "Integer", "Exact", "Inexact"]);
 const SCALAR_NAMES = new Set([...NUMERIC_TYPES.filter(t => !["Number", "Real", "Integer", "Exact", "Inexact"].includes(t)), "String", "Bool", "Char"]);
 
 // Builtins that take an undecided value as it is: they show it or pass it on.
@@ -5978,9 +5979,11 @@ export class Interpreter {
                     if (p.args.length !== 1) return false;
                     if (!NUMERIC_TYPES.includes(p.tag)) return this.matchesValueType(p.tag, v) && this.matchPattern(p.args[0], v, binds);
                     if (!isNumeric(v)) return false;
+                    // (x : Int32) binds what 5 : Int32 makes, an Int32; an
+                    // aggregate ((x : Number)) the value as it is.
                     let converted: Value;
-                    try { converted = numericPayload(castNumeric(p.tag, v)); } catch { return false; }
-                    return this.matchPattern(p.args[0], converted, binds);
+                    try { converted = castNumeric(p.tag, v); } catch { return false; }
+                    return this.matchPattern(p.args[0], AGGREGATE_NUMERIC.has(p.tag) ? v : converted, binds);
                 }
                 // Z and S k take a natural number apart: 0, or k + 1 (k a UInt).
                 if (isNumeric(v) && (p.tag === "Z" && !p.args.length || p.tag === "S" && p.args.length === 1)) {

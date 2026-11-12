@@ -32,9 +32,10 @@ for (const [source, expected] of [
     // with a plain one keeps its type in the checker, as at runtime.
     ["h (0 : UInt) = []; h (k : UInt) = [k]; [h 0, h 4]", "[[],[4]]"],
     ["toList (k : UInt) = k == 0 ? [] : k - 1 :: toList (k - 1); toList 3", "[2,1,0]"],
-    // A numeric type pattern binds the untyped payload, in the checker as at
+    // A numeric type pattern binds a value of its type, in the checker as at
     // runtime; S k binds the predecessor, a UInt.
-    ["widen (x : UInt8) = x + 300; widen 5", "305"],
+    ["widen (x : UInt8) = (x : Int) + 300; widen 5", "305"],
+    ["keep (x : UInt8) = typeOf (x + 1); keep 5", "UInt8"],
     ["down (x : UInt8) = x == 0 ? 0 : down (x - 1); down 3", "0"],
     ["pred (S k) = k; pred 5 - 1", "3"],
     // (_ x) takes the payload and discards the type.
@@ -56,6 +57,10 @@ for (const [source, kind, message] of [
     ["h (-1 : UInt) = 1; h 1", "type", "UInt cannot represent a negative integer"],
     ["h (300 : UInt8) = 1; h 1", "type", "value out of range for UInt8"],
     ["pred (S k) = k; pred 0", "type", "no clause of 'pred' matches these arguments"],
+    // x is a UInt8 inside: its sum must fit, and two sized types do not mix,
+    // which the check sees from the patterns alone.
+    ["widen (x : UInt8) = x + 300; widen 5", "runtime", "value out of range for UInt8"],
+    ["f (x : Int32) (y : Int64) = x + y\n1", "type", "cannot combine Int32 and Int64"],
 ] as const) {
     Deno.test(`natural numbers reject: ${source}`, () => {
         const error = failure(source);
