@@ -61,15 +61,14 @@ Deno.test("diagnostic positions use UTF-16 and stay within the document", () => 
     if (error.range.end.character > 5) throw new Error("range beyond EOF");
 });
 Deno.test("document parsing isolates declarations and restores REPL state", () => {
-    parse("EditorRemembered a = | EditorRemembered a");
-    const source = "EditorFresh a = | EditorFresh a";
-    equal(parseDocument(source)[0].t, "type");
-    equal(parseDocument(source)[0].t, "type");
-    try { parseDocument("EditorBroken a = | EditorBroken a\nfoo ="); } catch { /* intentional */ }
-    equal(parseDocument("EditorBroken a = | EditorBroken a")[0].t, "type");
-    // A declared constructor's name in a typed pattern is a schema: (x : T).
-    const typed = parse("f (x : EditorRemembered) = x")[0] as { clauses: { params: { p: string }[] }[] };
-    equal(typed.clauses[0].params[0].p, "schema");
+    // A computed type given known arguments is read as the type they compute.
+    const param = (source: string, document = false) =>
+        ((document ? parseDocument(source) : parse(source))[0] as { clauses: { params: { p: string }[] }[] }).clauses[0].params[0].p;
+    parse("EditorRemembered n = Vect n Int");
+    equal(param("f (x : EditorRemembered 2) = x", true), "constr");
+    try { parseDocument("EditorBroken n = Vect n Int\nfoo ="); } catch { /* intentional */ }
+    equal(param("f (x : EditorBroken 2) = x"), "constr");
+    equal(param("f (x : EditorRemembered 2) = x"), "schema");
 });
 Deno.test("LSP diagnostics follow open/change/close and ignore stale versions", () => {
     const server = initialized();

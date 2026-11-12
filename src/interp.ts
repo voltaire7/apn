@@ -17,7 +17,7 @@ import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWit
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, rewriteTypedPatterns, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, isUse } from "./ast.ts";
@@ -454,6 +454,7 @@ export class Interpreter {
                 if (this.runDepth === 1 && !this.dynamicDepth) this.running = { program, index };
                 const tl = written;
                 rewriteListConstructors(tl, tag => this.namesCons(tag));
+                rewriteTypedPatterns(tl, tag => this.patternHead(tag));
                 if (tl.t === "type") {
                     last = this.declare(tl.def, this.env.root()) ?? last;
                     continue;
@@ -4226,6 +4227,20 @@ export class Interpreter {
             return v;
         };
         return rangeValue(real(lo), second && real(second), hi && real(hi));
+    }
+    // What a typed pattern's type name is here (see rewriteTypedPatterns): a
+    // constructor or a function type, taking its value whole, or a type
+    // taking so many parameters.
+    private patternHead(name: string): { schema: boolean; arity: number } | undefined {
+        const bound = this.env.get(name);
+        if (!bound) return undefined;
+        const t = this.reference(bound);
+        if (t.kind === "native" && t.tag || t.kind === "variant" || t.kind === "closure" || t.kind === "functionType") return { schema: true, arity: 0 };
+        if (t.kind !== "type") return undefined;
+        const given = t.arguments?.length ?? 0;
+        const takes = t.alias ? t.alias.parameters.length : t.family ? t.family.parameters?.length ?? 0
+            : this.counted(t) ? 2 : !t.family && (t.name === "List" || t.name === "IO") ? 1 : 0;
+        return { schema: false, arity: Math.max(0, takes - given) };
     }
     // Whether a name is bound to the list's cons (the prelude's Cons).
     private namesCons(name: string): boolean {

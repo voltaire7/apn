@@ -318,6 +318,31 @@ export function rewriteInfixConstructors(node: unknown, tagOf: (op: string) => s
     for (const key of Object.keys(n)) delete n[key];
     Object.assign(n, { p: "constr", tag, args });
 }
+// (p : T args), written as the typed pattern {T args p, typed}, by what T is
+// where it runs (head): a constructor's or a function type's is the schema
+// (p : T args), taking the value whole ((b : Box) of Box 1); a type given
+// fewer arguments than it takes gets _ for the rest ((xs : List) is
+// (xs : List _)).
+export function rewriteTypedPatterns(node: unknown, head: (tag: string) => { schema: boolean; arity: number } | undefined): void {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) { node.forEach(x => rewriteTypedPatterns(x, head)); return; }
+    const n = node as Record<string, unknown>;
+    for (const value of Object.values(n)) if (value && typeof value === "object") rewriteTypedPatterns(value, head);
+    if (n.p !== "constr" || !n.typed) return;
+    const args = n.args as Pattern[], kind = head(n.tag as string);
+    if (!kind || !args.length) return;
+    const given = args.slice(0, -1), value = args[args.length - 1];
+    if (kind.schema) {
+        const asType = (q: Pattern): Expr | undefined => q.p === "var" ? { t: "var", name: q.name } : q.p === "int" ? { t: "int", v: q.v }
+            : q.p === "constr" && q.args.every(asType) ? q.args.reduce<Expr>((f, a) => ({ t: "app", f, a: asType(a)! }), { t: "var", name: q.tag }) : undefined;
+        if (!given.every(asType)) return;
+        const type = given.reduce<Expr>((f, a) => ({ t: "app", f, a: asType(a)! }), { t: "var", name: n.tag as string });
+        for (const key of Object.keys(n)) delete n[key];
+        Object.assign(n, { p: "schema", type, value });
+        return;
+    }
+    if (given.length < kind.arity) n.args = [...given, ...Array.from({ length: kind.arity - given.length }, (): Pattern => ({ p: "wildcard" })), value];
+}
 // The pattern Name args is when Name is a constructor where it runs (Some x =
 // m binds x): a list's cell when Name is the list's cons (Cons x xs = [1,2]).
 export function constructorPattern(name: string, args: Pattern[], cons: boolean): Pattern {

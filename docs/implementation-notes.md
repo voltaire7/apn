@@ -63,10 +63,13 @@ intentional evaluation change.
   so nothing after the parser sees them: `e : T` is `T e` marked `ascribed`
   (a function type, which applied would call its argument, is
   `((T r) -> r) e`), which the printers show as `(e : T)`. `(p : T)` is the
-  type pattern `(T args.. p)` for a type's name given names, literals and
-  types, which dispatches and binds as type patterns do; a schema for any
-  other type, a constructor's name, or a function type's (`functionTypes`);
-  `(t p)` for a type variable. `knownArguments` makes a computed type's
+  type pattern `(T args.. p)`, marked `typed`, for a name given names,
+  literals and types, and a schema for any other type; `(t p)` for a type
+  variable. What the name is decides it where it runs, per top-level
+  statement in the runtime and the checker alike (`rewriteTypedPatterns`): a
+  constructor's or a function type's is the schema `(p : T args)`, and a type
+  given fewer arguments than it takes gets `_` for the rest. The parser keeps
+  no constructor state. `knownArguments` makes a computed type's
   pattern a schema once its arguments are all known (`copy n (xs : Sized n)`
   tests `xs` against `Sized n`; `(xs : Pairs n a)` reads `n` back from the
   value). A lone ascription's parentheses are its own: the group is the

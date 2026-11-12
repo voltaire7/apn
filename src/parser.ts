@@ -452,9 +452,9 @@ class Parser {
     // unnecessary, as around an expression: needed tells where they are not.
     judgePattern(p: Pattern, needed: (p: Pattern) => boolean): void {
         const open = this.patternGroups.get(p);
-        // A type applied to a value ((Int x)) is the old typed spelling, whose
-        // own error says how to write it.
-        const typed = p.p === "constr" && (TYPE_NAMES.includes(p.tag) || declaredTypes.has(p.tag) && !declaredCtors.has(p.tag));
+        // A built-in type applied to a value ((Int x)) is the old typed
+        // spelling, whose own error says how to write it.
+        const typed = p.p === "constr" && !p.typed && p.args.length > 0 && TYPE_NAMES.includes(p.tag);
         if (open !== undefined) this.unnecessary.set(open, !typed && !needed(p));
     }
 
@@ -626,19 +626,6 @@ class Parser {
             this.next();
             const name = t.v;
             if (name === "_") return { p: "wildcard" };
-            // Z, the built-in zero, takes no fields unless the program redeclares it.
-            if (nullaryCtors.has(name) || name === "Z" && !declaredCtors.has(name)) return { p: "constr", tag: name, args: [] };
-            // A type applied in a pattern (Vect n Int xs): its arguments are
-            // types and indices, so a capitalized one takes nothing after it.
-            if (declaredTypes.has(name) && !declaredCtors.has(name) && this.startsParam(this.peek())) {
-                const args: Pattern[] = [];
-                while (this.startsParam(this.peek())) {
-                    const token = this.peek();
-                    if (token.k === "ident" && /^[A-Z]/.test(token.v) && token.v !== "_") { this.next(); args.push({ p: "constr", tag: token.v, args: [] }); }
-                    else args.push(this.field(this.parsePattern()));
-                }
-                return { p: "constr", tag: name, args };
-            }
             // constructor application: Some x. A capitalized argument takes
             // nothing after it (R low None high): one with fields is parenthesized.
             if (/^[A-Z]/.test(name)) {
@@ -1900,7 +1887,6 @@ class Parser {
         }
         if (guard) return { name, clauses: [{ params, body, guard }] };
         if (name === "return" && params.length > 1) throw new APNError("parse", "return takes one argument", { pos: equals.pos, hint: "`return = Some`" });
-        if (/^[A-Z]/.test(name) && !params.length && isFunctionType(body)) functionTypes.add(name);
         if (/^[A-Z]/.test(name) && params.length) computedTypes.add(name);
         return { name, clauses: [{ params, body }] };
     }
@@ -2322,27 +2308,13 @@ class Parser {
             const at = Math.min(...claimed.map(c => out.indexOf(c!)));
             const def = claimedDeclaration({ name, parameters, variants }, tag => claimed.find(c => c!.def.name === tag)!.def.variants[0]);
             for (const c of claimed) { out.splice(out.indexOf(c!), 1); this.unclaimed.delete(c!.def.name); }
-            declaredTypes.add(name); typeArity.set(name, parameters.length);
             out.splice(at, 0, { t: "type", def });
             return [];
         }
         // A union of list types (Pairs a = [] | a :: a :: Pairs a) is a union;
         // a family of lists, its type function's clauses (see listClauses).
-        if (variants.some(v => v.tag === "[]" || v.tag === "::")) {
-            declaredTypes.add(name); typeArity.set(name, parameters.length);
-            return [{ t: "type", def: { name, parameters, variants } }];
-        }
+        if (variants.some(v => v.tag === "[]" || v.tag === "::")) return [{ t: "type", def: { name, parameters, variants } }];
         if (new Set(variants.map(v => v.tag)).size !== variants.length) throw new Error("Parser: duplicate value constructor");
-        // Register only after the entire declaration has parsed successfully;
-        // alternatives that are types (Int | String) make a union, not constructors.
-        const types = variants.filter(v => v.tag !== name && declaredTypes.has(v.tag)).map(v => v.tag);
-        declaredTypes.add(name); typeArity.set(name, parameters.length);
-        for (const { tag, arity } of variants) {
-            if (types.includes(tag)) continue;
-            if (tag === "[]" || tag === "::") continue;
-            declaredCtors.add(tag);
-            if (arity === 0) nullaryCtors.add(tag); else nullaryCtors.delete(tag);
-        }
         return [{ t: "type", def: { name, parameters, variants } }];
     }
 
@@ -2484,9 +2456,6 @@ function constructorDeclaration(name: string, params: Pattern[], pos: number, bo
         return type;
     });
     if (new Set(names).size !== names.length) throw new APNError("parse", "a constructor's field names are distinct", { pos });
-    declaredTypes.add(name);
-    declaredCtors.add(name);
-    if (fields.length) nullaryCtors.delete(name); else nullaryCtors.add(name);
     // Its logic's _ is the raw value: intrinsics.tag Name Name [fields].
     const owner = { t: "var" as const, name };
     const tag: Expr = { t: "recordAccess", rec: { t: "var", name: "intrinsics" }, field: "tag" };
@@ -2503,44 +2472,21 @@ function joinClauses<T extends { t: string }>(statements: T[], definition: T & {
     else statements.push(definition);
 }
 
-// Constructors declared in the source, which decide how a pattern reads
-// ((x : T) of a type, of a constructor, a bare nullary name); whether
-// `Some v = ...` binds or defines is decided where it runs (evalDef).
-// Module-level so declarations persist across REPL lines (each line is
-// re-parsed standalone).
-let declaredCtors = new Set<string>();
-const nullaryCtors = new Set<string>();
-// Type names (built in or declared): in a pattern their arguments are types
-// and indices, so a capitalized one takes nothing after it (Vect n Int xs).
-const declaredTypes = new Set<string>(TYPE_NAMES);
-// Capitalized names defined as function types (Handler = a -> Int): a typed
-// pattern of one is a schema, (h : Handler) a function of that type.
-const functionTypes = new Set<string>();
+// Whether `Some v = ...` binds or defines, and what (x : T) reads as, are
+// decided where they run (evalDef, rewriteTypedPatterns), not here.
 // Capitalized names defined with parameters (SizedInts n = Vect n Int): types
-// a definition computes (see knownArguments).
+// a definition computes (see knownArguments). Module-level so they persist
+// across REPL lines (each line is re-parsed standalone).
 const computedTypes = new Set<string>();
-// The parameters a type takes, where the parser knows them: (xs : List) is
-// a list of anything, (List _ xs).
-const BUILTIN_ARITY: [string, number][] = [["List", 1], ["IO", 1], ["Vect", 2]];
-const typeArity = new Map<string, number>(BUILTIN_ARITY);
 
 // Tooling parses each document independently, without leaking REPL declarations.
 export function parseDocument(src: string): TopLevel[] {
-    const sets = [declaredCtors, nullaryCtors, declaredTypes, functionTypes, computedTypes];
-    const saved = sets.map((set) => [...set]);
-    const arities = [...typeArity];
-    sets.forEach((set) => set.clear());
-    typeArity.clear();
-    BUILTIN_ARITY.forEach(([name, count]) => typeArity.set(name, count));
-    TYPE_NAMES.forEach((name) => declaredTypes.add(name));
+    const saved = [...computedTypes];
+    computedTypes.clear();
     try { return parse(src); }
     finally {
-        sets.forEach((set, i) => {
-            set.clear();
-            saved[i].forEach((name) => set.add(name));
-        });
-        typeArity.clear();
-        arities.forEach(([name, count]) => typeArity.set(name, count));
+        computedTypes.clear();
+        saved.forEach((name) => computedTypes.add(name));
     }
 }
 
@@ -2706,11 +2652,11 @@ function typedPattern(p: Pattern, type: Expr): Pattern {
     const t = bareType(type);
     if (t.t === "var" && /^[a-z_]/.test(t.name)) return { p: "typeBind", name: t.name, value: p };
     if (t.t === "placeholder") return { p: "typeBind", name: "_", value: p };
+    // A name applied to names, literals and types: what it is (a type, a
+    // constructor, a function type) is decided where it runs (see
+    // rewriteTypedPatterns).
     const named = typeArguments(t);
-    if (named?.p === "constr" && !declaredCtors.has(named.tag) && !functionTypes.has(named.tag)) {
-        const missing = Math.max(0, (typeArity.get(named.tag) ?? 0) - named.args.length);
-        return { ...named, args: [...named.args, ...Array.from({ length: missing }, (): Pattern => ({ p: "wildcard" })), p], typed: true };
-    }
+    if (named?.p === "constr") return { ...named, args: [...named.args, p], typed: true };
     return { p: "schema", type, value: p };
 }
 // A computed type's pattern whose arguments are all known, bound by an
@@ -2733,7 +2679,7 @@ function knownArguments(node: unknown): void {
     for (const value of Object.values(record)) knownArguments(value);
 }
 function withKnownArguments(p: Pattern, bound: Set<string>): Pattern {
-    if (p.p === "constr" && computedTypes.has(p.tag) && !declaredCtors.has(p.tag) && p.args.length > 1) {
+    if (p.p === "constr" && p.typed && computedTypes.has(p.tag) && p.args.length > 1) {
         const args = p.args.slice(0, -1).map(typeOfPattern);
         if (args.every(a => a && freeLowercase(a).every(name => bound.has(name)))) {
             const type = (args as Expr[]).reduce<Expr>((f, a) => ({ t: "app", f, a }), { t: "var", name: p.tag });
@@ -2970,7 +2916,7 @@ export function patternSource(p: Pattern): string {
         // A type's pattern is written as the value it types: (xs : Vect n a).
         case "constr":
             if (!p.args.length) return p.tag;
-            if (!declaredCtors.has(p.tag)) return `(${patternSource(p.args[p.args.length - 1])} : ${[p.tag, ...p.args.slice(0, -1).map(patternSource)].join(" ")})`;
+            if (p.typed) return `(${patternSource(p.args[p.args.length - 1])} : ${[p.tag, ...p.args.slice(0, -1).map(patternSource)].join(" ")})`;
             return `(${p.tag} ${p.args.map(patternSource).join(" ")})`;
         case "typeBind": return `(${patternSource(p.value)} : ${p.name})`;
         case "recPat": return `[${p.v.map(([k, v]) => fieldSource(k, v)).join(", ")}]`;

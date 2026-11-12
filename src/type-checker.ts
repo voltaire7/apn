@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -7313,6 +7313,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A type declaration (Color = Red | Green), at the top level or in a block
     // (scope), as at runtime. Constructors declared with _ where the parser
     // could not see them are claimed here.
+    // What a typed pattern's type name is here, as at runtime
+    // (Interpreter.patternHead): a constructor or a function type, or a type
+    // taking so many parameters.
+    function patternHead(name: string, scope: Scope): { schema: boolean; arity: number } | undefined {
+        const entry = scope.get(name);
+        if (!entry) return undefined;
+        const t = resolve(entry.type);
+        // A lambda read as the function type it spells (Handler = a -> Int).
+        if (isConstructor(entry) || t.k === "fn" || t.k === "type" && resolve(t.value).k === "fn") return { schema: true, arity: 0 };
+        if (t.k === "factory") return { schema: false, arity: 2 };
+        if (t.k === "alias") return { schema: false, arity: t.params.length - t.args.length };
+        return t.k === "type" ? { schema: false, arity: typeParameters(t) } : undefined;
+    }
     // What a name is bound to, if the list's own constructor: the empty list
     // or the list's cons (the prelude's Nil and Cons).
     function listConstructor(tag: string, scope: Scope): "nil" | "cons" | undefined {
@@ -7414,6 +7427,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             else constructorOperators.delete(statement.name);
         }
         rewriteListConstructors(statement, tag => listConstructor(tag, scope) === "cons");
+        rewriteTypedPatterns(statement, tag => patternHead(tag, scope));
         rewriteInfixConstructors(statement, op => constructorOperators.get(op));
         checkingExpression = statement.t === "expr" || statement.t === "patDef" ? statement.value : statement.t === "def" ? statement.clauses[0].body : undefined;
         try {
