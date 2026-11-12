@@ -360,7 +360,7 @@ const placed = <E extends Expr>(x: E, source: Expr): E => { const place = source
 export function ternaryExpansion(e: Extract<Expr, { t: "ternary" }>): Expr {
     let core = sugar.get(e);
     if (core) return core;
-    const truth = placed({ t: "app", f: { t: "var", name: "Bool" }, a: e.cond, ascribed: true }, e.cond);
+    const truth = placed({ t: "app", f: { t: "var", name: "truthy" }, a: e.cond }, e.cond);
     core = placed({ t: "app", f: placed({ t: "app", f: truth, a: e.then }, e), a: e.els }, e);
     sugar.set(e, core);
     return core;
@@ -391,13 +391,13 @@ export function listPatternExpansion(p: Extract<Pattern, { p: "list" }>): Patter
 export type PatternLambda = Extract<Expr, { t: "patternLambda" }>;
 export type CoreMatch = { value: Expr; alternatives: PatternLambda[] };
 const expansions = new WeakMap<Expr, CoreMatch>();
-// A Bool applied to two values (Bool c a b, True a b), which the prelude's
+// A Bool applied to two values (truthy c a b, True a b), which the prelude's
 // clauses for get make a match on it: [True -> a, False -> b]. The caller
 // finds that Bool and get are the prelude's.
 export function boolSelection(e: Expr): CoreMatch | undefined {
     if (e.t !== "app" || e.f.t !== "app") return undefined;
     const head = e.f.f;
-    if (head.t !== "bool" && !(head.t === "app" && head.f.t === "var" && head.f.name === "Bool")) return undefined;
+    if (head.t !== "bool" && !(head.t === "app" && head.f.t === "var" && head.f.name === "truthy")) return undefined;
     let core = expansions.get(e);
     if (core) return core;
     const branch = (v: boolean, body: Expr): PatternLambda => placed({ t: "patternLambda", params: [{ p: "bool", v }], body }, body);

@@ -205,8 +205,8 @@ use `~` with guarded pattern lambdas instead (see
 [pattern functions](pattern-functions.md)).
 
 There is no `if`/`then`/`else`; use the ternary `cond ? a : b`, which is
-`Bool cond a b` as if written in its place: the condition's
-[truthiness](#empty-results-and-truthiness) is a Bool, which applied to the two
+`truthy cond a b` as if written in its place: the condition's
+[truth](#empty-results-and-truthiness) is a Bool, which applied to the two
 branches is one of them ([get](#records)); clauses
 for `get` a program adds for a Bool are the ones a ternary there uses. Only the
 selected branch runs, and the branches may differ in type (`x ? "yes" : False`;
@@ -340,14 +340,19 @@ takes (`inc : Int -> Int` then `inc = (+ 1)`) has the rest of the type as its
 body's. A result naming a type variable no parameter binds (`List b` beside
 `(a -> b)`) is left to inference.
 
-`e : T` is `e` as a value of `T`: a member of it, collapsed to it (`1.0 : Int`
-is the Int `1`; `1.5 : Int` is a lossy-conversion error; `123 : Int32` is an
-`Int32`). It is written outermost on a definition's right side
+`e : T` is `e` as a value of `T`: `e` itself if it is one, else what a
+conversion to `T` makes of it, and an error if none does. The conversions are
+`to T`'s: the built-in ones between numbers, lossless (`1.0 : Int` is the Int
+`1`; `1.5 : Int` is a lossy-conversion error; `123 : Int32` is an `Int32`), and
+those a program's `to` instances declare (`to Int East = 1` makes `East : Int`
+`1`, and `to Box (n : Int) = Box n` makes `3 : Box` `Box 3`). `to T e` is the
+same operation as a function. Nothing else converts: `5 : Bool` is an error,
+as `5 : String` is (a condition's truth is `truthy 5`). It is written outermost on a definition's right side
 (`x = 123 : Int32`) or in parentheses (`(5 : Int32) + 1`); a ternary ascribed
 is parenthesized, `(c ? a : b) : T`, and `x = c ? a : b : T` is an error.
-`(p : T)` in a pattern matches a value of `T`, as one, then `p`:
-`f (n : Int) = n + 1` takes `1.0` as `1`, and `(x : t)` binds the value's
-type `t`.
+`(p : T)` in a pattern matches what `e : T` makes of the value, then `p`, and
+fails where it fails: `f (n : Int) = n + 1` takes `1.0` as `1`, `(b : Box)`
+takes `3` as `Box 3`, and `(x : t)` binds the value's type `t`.
 
 A type is given a value only by ascription: `Int 5`, `Int $ x` and a type
 passed where a function goes (`f t = t 1`) are errors, `5 : Int` ascribes and
@@ -454,7 +459,7 @@ written. `tests/sugar-test.ts` holds each form beside its expansion.
 | `-x`, `!x` | `negate x`, `not x` |
 | `[a, b]` (a value or a pattern) | `a :: b :: []` |
 | `[a..]`, `[a,b..]`, `[a..c]`, `[a,b..c]` | `enumFrom a`, `enumFromThen a b`, `enumFromTo a c`, `enumFromThenTo a b c` |
-| `c ? a : b` | `Bool c a b` |
+| `c ? a : b` | `truthy c a b` |
 | `v.x` | `get v "x"` |
 | `xs i = v`, `v.x = y` | `xs = with xs i v`, `v = with v "x" y` |
 | `f x = e` | `f = x -> e` |
@@ -1860,11 +1865,12 @@ Mutable cells use their current contents. Nullary actions run under the usual
 demand rules. A list check inspects only its first cell, not its elements or
 remaining tail; infinite nonempty lists are truthy.
 
-`to Bool x`, `!x`, ternary conditions, pattern guards, `assert`, `filter`, and
-standard-library predicate consumers share these rules. `&&` and `||` return
+`truthy x` (the prelude's `truthy = intrinsics.truthy`), `!x`, ternary
+conditions, pattern guards, `assert`, `filter`, and standard-library predicate
+consumers share these rules. `&&` and `||` return
 Bool and short-circuit: `0 && missing` is false, `1 || missing` is true.
 Truthiness does not change equality or Bool pattern matching: `0 != False`,
-and `(x : Bool)` still matches booleans rather than every convertible value.
+and `(x : Bool)` and `x : Bool` take only booleans.
 
 Type variables preserve relationships: `typeOf (x, y -> x)` displays
 `a -> b -> a`, `typeOf (f, x -> f x)` displays `(a -> b) -> a -> b`, and

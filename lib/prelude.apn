@@ -30,8 +30,11 @@ infixr 9 \
 # assoc "key". Clauses for get extend it, so a type can be indexed:
 #     get (Grid cells) [Int r, Int c] = cells (3 * r + c)
 get = intrinsics.get
+# truthy x: x's truth, which conditions read (c ? a : b, !x, a guard):
+# False, zero, empty and null values are False, anything else True.
+truthy = intrinsics.truthy
 # A Bool applied to two values is one of them: True a b is a, False a b is b
-# (c ? a : b is (c : Bool) a b).
+# (c ? a : b is truthy c a b).
 get True a = _ -> a
 get False _ = b -> b
 ($) = intrinsics.apply
@@ -63,7 +66,7 @@ a | b = intrinsics.union [a,b]
 (\) = intrinsics.compose
 # Prefix - and ! are these functions: -x is negate x, !x is not x.
 negate = intrinsics.negate
-not x = (x : Bool) False True
+not x = truthy x False True
 # [a..] is enumFrom a, [a,b..] enumFromThen a b, [a..c] enumFromTo a c and
 # [a,b..c] enumFromThenTo a b c: numbers count, and a type repeats, [Int..]
 # being [Int,Int,Int..], a list that is its own tail. ([] is no bound.)

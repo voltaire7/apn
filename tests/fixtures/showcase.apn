@@ -1922,7 +1922,7 @@ print (typeOf (1 :: ["hello"]))         # => List (Int | String)
 
 # Empty results are lists; conditions use truthiness.
 print ({} == [])                        # => True
-print (Bool * [0,1,"","hello",[],[0]])  # => [False,True,False,True,False,True]
+print (map truthy [0,1,"","hello",[],[0]]) # => [False,True,False,True,False,True]
 print (0 && (missingTruthinessName : Dynamic))      # => False; right side is skipped
 print (1 || (missingTruthinessName : Dynamic))      # => True
 print (filter (x -> x) [0,1,2])      # => [1,2]

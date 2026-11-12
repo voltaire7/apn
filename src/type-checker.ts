@@ -1211,8 +1211,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const shown = text(schemaValue(a, { t: "placeholder" }));
                 return problem(`no from instance for ${shown}`, undefined, `define one, such as \`from ${shown} x = ...\``);
             }
-            // A constructor named after its type is that type (JSON = _: to JSON x).
-            const target = a.k === "type" ? resolve(a.value) : a.k === "variant" && !a.args.length ? a : undefined;
+            // A constructor named after its type is that type (JSON = _: to JSON x;
+            // Box (v : Int) = _: to Box 3).
+            const made = (x: Ty): Ty => { const r = resolve(x); return r.k === "fn" ? made(r.output) : r; };
+            const target = a.k === "type" ? resolve(a.value) : a.k === "variant" && !a.args.length ? a : a.k === "fn" && made(a).k === "variant" ? made(a) : undefined;
             if (!target) return problem(`${t.op} expects a type, as in ${t.op} String x`);
             const named = (name: string) => target.k === "variant" && target.name === name && !!scope.get(name)?.builtin;
             const chars = target.k === "list" && !target.items && resolve(target.element).k === "atom" && (resolve(target.element) as { name: string }).name === "Char";
@@ -1580,8 +1582,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const b = boolean(e.e, scope);
             return b === undefined ? undefined : !b;
         }
-        // Bool x is x's truth.
-        if (e.t === "app" && e.f.t === "var" && e.f.name === "Bool" && scope.get("Bool")?.builtin) return boolean(e.a, scope);
+        // truthy x is x's truth.
+        if (e.t === "app" && e.f.t === "var" && e.f.name === "truthy" && namesTruthy(scope)) return boolean(e.a, scope);
         if (e.t === "binop" && ["==", "!=", "<", ">", "<=", ">="].includes(e.op) && builtinAt(e, scope)) {
             const a = index(e.l, scope), b = index(e.r, scope);
             if (a && b && !a.terms.size && !b.terms.size) {
@@ -2552,11 +2554,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             for (const choice of a.choices) convert(target, choice, e, explicitFloat, seen, runtimeProjection);
             return target;
         }
-        if (t.k === "atom" && t.name === "Bool" && explicitFloat) return t;
         // A typed parameter of a built-in type takes a value of the program's
         // own type through its to instance, as at runtime: (Int i) takes East.
-        if (matching && t.k === "atom" && SCALAR_TYPES.has(t.name) && a.k === "variant") {
-            const made = builtinTyped(t.name, a, e);
+        // A value of another type converts as a to instance declares, as at
+        // runtime: (East : Int), a typed parameter (b : Box) given 3.
+        if (t.k === "atom" && SCALAR_TYPES.has(t.name) && a.k === "variant" || t.k === "variant" && !(a.k === "variant" && a.name === t.name) && ["atom", "list", "record", "variant"].includes(a.k)) {
+            const made = declaredTyped(t, a, e);
             if (made) return convert(target, made, e, explicitFloat, seen, runtimeProjection);
         }
         if (
@@ -2815,6 +2818,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!types?.every(t => t)) { runtimeChecks++; return explicitDynamic; }
                 return { k: "type", value: union(types as Ty[]) };
             }
+            // truthy x: x's truth; an action has none.
+            if (f.name === "truthy") {
+                if (isIO(args[0])) return problem("an action is not a condition", e, "bind its result first: `x <- action`");
+                return atom("Bool");
+            }
             // A refinement of T is T to the check; whether its condition holds
             // is decided when it runs.
             if (f.name === "refine") {
@@ -2996,8 +3004,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (describes && (t.k === "atom" && t.name === "List" || t.k === "variant" && t.args.length > (f.applied ?? 0))) {
                 a = { k: "type", value: schemaValue(a, e) };
             }
-            // Bool x takes x's truth (not x is Bool x False True); an action has none.
-            if (t.k === "atom" && t.name === "Bool" && isIO(a)) return problem("an action is not a condition", e, "bind its result first: `x <- action`");
             // List T: the type of lists of T.
             if (t.k === "atom" && t.name === "List" && a.k === "type") return { k: "type", value: list(a.value) };
             // IO T: the type of actions yielding T.
@@ -3504,9 +3510,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // typed pattern: there it is not converted.)
     function builtinTyped(name: string, t: Ty, e: Expr = { t: "placeholder" }): Ty | undefined {
         const a = resolve(t);
-        if (a.k !== "variant" || converting.has(a.name)) return undefined;
-        converting.add(a.name);
-        try { return convertedTo(atom(name), a, e); } finally { converting.delete(a.name); }
+        return a.k === "variant" ? declaredTyped(atom(name), a, e) : undefined;
+    }
+    // What a to instance makes of a value for a type, if the program declares
+    // one: (East : Int), (3 : Box) (Interpreter.declaredConversion).
+    function declaredTyped(target: Ty, t: Ty, e: Expr = { t: "placeholder" }): Ty | undefined {
+        const key = text(resolve(t));
+        if (converting.has(key)) return undefined;
+        converting.add(key);
+        try { return convertedTo(target, t, e); } finally { converting.delete(key); }
     }
     const converting = new Set<string>();
     // An index: an Int, or a value its to Int instance makes one.
@@ -5077,7 +5089,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // computed, as its other spellings are.
             if (head.t !== "var") return computed(e, scope);
             const entry = scope.get(head.name);
-            if ((NUMERIC_TYPES.includes(head.name) || EVALUATED_NATIVES.has(head.name) || ["Bool", "Mutable", "to", "from", "S"].includes(head.name)) && entry?.builtin) return computed(e, scope);
+            if ((NUMERIC_TYPES.includes(head.name) || EVALUATED_NATIVES.has(head.name) || ["truthy", "Mutable", "to", "from", "S"].includes(head.name)) && entry?.builtin) return computed(e, scope);
             if (/^[A-Z]/.test(head.name)) {
                 // A constructor applied to all its fields.
                 let t = resolve(entry?.type ?? dynamic);
@@ -5512,7 +5524,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     function evaluateTernary(e: Extract<Expr, { t: "ternary" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | Tail | undefined {
         const expansion = ternaryExpansion(e), selection = boolSelection(expansion)!;
-        return preludeSelection(selection, scope) && !env.has("Bool") && !env.has("get") ? matchStep(selection, env, scope, depth) : new Tail(expansion, env, scope, depth);
+        return preludeSelection(selection, scope) && !env.has("truthy") && !env.has("get") ? matchStep(selection, env, scope, depth) : new Tail(expansion, env, scope, depth);
     }
     function evaluateAppExpr(e: Extract<Expr, { t: "app" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | Tail | undefined {
         // (op) a b is a op b here too.
@@ -5599,8 +5611,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Whether a Bool applied to two values is the prelude's selection: Bool
     // (when named) and get are the prelude's, and no clause for get the program
     // adds could take a Bool first.
+    // Whether truthy here is the truthy intrinsic, as the prelude binds it.
+    function namesTruthy(scope: Scope): boolean {
+        const t = resolve(scope.get("truthy")?.type ?? dynamic);
+        return t.k === "intrinsic" && t.name === "truthy" && !t.args?.length;
+    }
     function preludeSelection({ value }: CoreMatch, scope: Scope): boolean {
-        return (value.t === "bool" || !!scope.get("Bool")?.builtin) && !getTakesBool();
+        return (value.t === "bool" || namesTruthy(scope)) && !getTakesBool();
     }
     // Whether a clause for get the program adds could take a Bool first.
     function getTakesBool(): boolean {
@@ -5806,7 +5823,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // a Bool selecting, then any other application.
     function evaluateApp(e: Extract<Expr, { t: "app" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | Tail | undefined {
         const selection = boolSelection(e);
-        if (selection && preludeSelection(selection, scope) && !env.has("Bool") && !env.has("get")) return matchStep(selection, env, scope, depth);
+        if (selection && preludeSelection(selection, scope) && !env.has("truthy") && !env.has("get")) return matchStep(selection, env, scope, depth);
         return evaluateApplication(e, env, scope, depth);
     }
     function evaluateApplication(e: Extract<Expr, { t: "app" }>, env: Map<string, Known>, scope: Scope, depth: number): Known | Tail | undefined {
@@ -5939,7 +5956,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (n === undefined) return undefined;
             return attempt(() => { const k = castNumeric("UInt", n) as { v: bigint }; return { kind: "int", v: k.v + 1n, typeName: "UInt" } as Numeric; });
         }
-        if (head.name === "Bool" && builtin && args.length === 1) {
+        if (head.name === "truthy" && builtin && args.length === 1) {
             const b = truth(value(args[0]));
             return b === undefined ? undefined : { boolean: b };
         }
@@ -7130,6 +7147,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A range's bounds ([] none); [1..] and the like are typed where written.
     { const n = variable(); native("intrinsics.range", [n, variable(), variable()], list(n)); }
     native("exit", [int], io(empty));
+    scope.set("intrinsics.truthy", { type: { k: "intrinsic", name: "truthy", arity: 1 } });
     native("null", [variable()], bool);
     native("length", [list(variable())], int);
     for (const name of ["take", "drop"]) { const t = variable(); native(name, [int, list(t)], list(t)); }

@@ -16,7 +16,7 @@ for (const [source, expected] of [
     ['True "yes" "no"', '"yes"'],
     ['False missing 7', '7'],
     ['(x -> x 1 2) False', '2'],
-    ['map (b -> (b : Bool) "t" "f") [0,1]', '["f","t"]'],
+    ['map (b -> truthy b "t" "f") [0,1]', '["f","t"]'],
     ['get x k = "http"; True 1 2', '1'],
 ] as const) Deno.test(`a Bool selects: ${source}`, () => {
     for (const checked of [false, true]) {
@@ -31,7 +31,7 @@ for (const [source, expected] of [
     ['[name = "old", enabled = False] [name = "new", enabled = True]', '[name = "new", enabled = True]'],
     ['[name = "old", enabled = False] ["new",True]', '[name = "new", enabled = True]'],
     ['[name = "old", enabled = False] []', '[name = "old", enabled = False]'],
-    ['[("hi" : String), (\'x\' : Char), to Bool 1]', '["hi",\'x\',True]'],
+    ['[("hi" : String), (\'x\' : Char), truthy 1]', '["hi",\'x\',True]'],
 ] as const) Deno.test(`scalar template replacement: ${source}`, () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(source)));

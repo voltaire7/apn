@@ -38,7 +38,7 @@ reverse (text : String) = from (List Char) (reverse (to (List Char) text))
 _prepend x xs = x :: xs
 
 # Predicate consumers keep their skipping loop in the primitive lazy filter.
-_predicate value = to Bool value
+_predicate value = truthy value
 dropWhile predicate xs = head
     (filter (rest -> null rest || not (_predicate (predicate (head rest)))) (iterate tail xs))
 takeWhile predicate xs = null xs ? []

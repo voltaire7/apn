@@ -21,13 +21,16 @@ the language still lacks, not exceptions the built-ins enjoy.
 ```apn
 Bool = True | False
 # A Bool applied to two values is one of them (the prelude's own clauses), so
-# c ? a : b is (c : Bool) a b, and not swaps the two.
+# c ? a : b is truthy c a b, and not swaps the two.
 get True a = _ -> a
 get False _ = b -> b
-not x = (x : Bool) False True
+not x = truthy x False True
 ```
 
-`True` and `False` are spelled as keywords; they are these two constructors.
+`True` and `False` are spelled as keywords; they are these two constructors. A
+condition's truth is `truthy x`, a function (`False`, zero, empty and null
+values are `False`, anything else `True`), not a conversion: `5 : Bool` is an
+error, as only a `Bool` is one.
 
 ## Natural numbers: `UInt`
 

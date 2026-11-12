@@ -109,6 +109,8 @@ export const NATIVES: Array<[string, number]> = [
     ["intrinsics.with", 3],
     // A union of types (Mixed = Int | String).
     ["intrinsics.union", 1],
+    // truthy x: x's truth, which conditions read.
+    ["intrinsics.truthy", 1],
     // refine T p: the values of T for which p is True (Positive = (n : Int) | n > 0).
     ["intrinsics.refine", 2],
     // import path: an action reading a module, its record the result.
@@ -921,12 +923,18 @@ export class Interpreter {
     // (Choosing the instance may meet the value again, in an instance's own
     // typed pattern: there it is not converted.)
     private builtinValue(name: string, v: Value): Value | undefined {
-        if (v.kind !== "variant" || !v.family || !this.makes(name) || this.converting.has(v)) return undefined;
+        if (v.kind !== "variant" || !v.family || !this.makes(name)) return undefined;
+        const made = this.declaredConversion({ kind: "type", name }, v);
+        return made && this.dataValue(made);
+    }
+    // What a program's to instance makes of a value for a type (to Int East),
+    // if it has one.
+    private declaredConversion(type: Value, arg: Value): Value | undefined {
+        if (!this.instances.has("to")) return undefined;
+        const v = this.demand(arg);
+        if (this.converting.has(v)) return undefined;
         this.converting.add(v);
-        try {
-            const made = this.instance("to", [{ kind: "type", name }, v]);
-            return made && this.dataValue(made);
-        } finally { this.converting.delete(v); }
+        try { return this.instance("to", [type, v]); } finally { this.converting.delete(v); }
     }
     private converting = new Set<Value>();
 
@@ -2298,18 +2306,21 @@ export class Interpreter {
         if (chosen) return new TailCall(chosen.clause.body, chosen.child);
         throw new APNError("runtime", "non-exhaustive match: no alternative fits this value");
     }
+    // Whether truthy here is the truthy intrinsic, as the prelude binds it.
+    private namesTruthy(): boolean {
+        const bound = this.env.get("truthy"), truthy = bound && this.reference(bound);
+        return truthy?.kind === "native" && truthy.name === "intrinsics.truthy" && !truthy.applied.length;
+    }
     private preludeSelection({ value }: CoreMatch): boolean {
         const get = this.extended("get", mkBool(true));
         if (get && get !== this.preludeBindings.get("get")) return false;
-        const type = value.t === "bool" ? undefined : this.env.get("Bool");
-        return !type || type.kind === "type" && type.name === "Bool" && !type.family && !type.alias && !type.choices;
+        return value.t === "bool" || this.namesTruthy();
     }
-    // A matched value demanded at once: Bool x with the builtin Bool is x's
-    // truth, taken in place.
+    // A matched value demanded at once: truthy x with the prelude's truthy
+    // is x's truth, taken in place.
     private matchedValue(value: Expr): Value {
-        if (value.t === "app" && value.f.t === "var" && value.f.name === "Bool") {
-            const type = this.env.get("Bool");
-            if (type?.kind === "type" && type.name === "Bool" && !type.family && !type.alias && !type.choices) return mkBool(this.truthy(this.eval(value.a)));
+        if (value.t === "app" && value.f.t === "var" && value.f.name === "truthy" && this.namesTruthy()) {
+            return mkBool(this.truthy(this.eval(value.a)));
         }
         return this.eval(value);
     }
@@ -4387,7 +4398,11 @@ export class Interpreter {
             if (actual.kind === "io") return { kind: "io", result: "Dynamic", run: () => this.constructType("Dynamic", this.runIO(actual)) };
             return actual;
         }
-        if (name === "Bool") return mkBool(this.truthy(value));
+        if (name === "Bool") {
+            const b = this.dataValue(value);
+            if (b.kind !== "bool") throw new APNError("runtime", `${this.typeText(b)} is not a Bool`, { hint: "a condition's truth is truthy x" });
+            return b;
+        }
         if (name === "Type") {
             if (!this.isTypeValue(value)) throw new APNError("runtime", "Type constructor expects a Type value");
             return this.inspectType(value);
@@ -4787,6 +4802,7 @@ export class Interpreter {
             case "intrinsics.get": return this.builtinGet(this.force(args[0]), args[1]);
             case "intrinsics.with": return this.assignItem(this.dataValue(args[0]), this.dataValue(args[1]), args[2]);
             case "intrinsics.union": return this.union([...this.elements(args[0])].map(x => this.reference(x)));
+            case "intrinsics.truthy": return mkBool(this.truthy(args[0]));
             case "intrinsics.refine": {
                 const base = this.reference(this.demand(args[0]));
                 if (!this.isTypeValue(base)) throw new APNError("runtime", `a refinement refines a type, and ${this.renderString(base)} is not one`);
@@ -5468,8 +5484,16 @@ export class Interpreter {
     // A type applied to a value, as e : T is: the value as a member of it,
     // collapsed to it (1.0 : Int is 1), Bool its truthiness, Dynamic a boundary.
     typeValue(f: Extract<Value, { kind: "type" }>, arg: Value): Value {
+        try { return this.typeMember(f, arg); }
+        catch (error) {
+            // A value not of the type converts as its to instance declares.
+            const made = error instanceof APNError ? this.declaredConversion(f, arg) : undefined;
+            if (made === undefined) throw error;
+            return made;
+        }
+    }
+    private typeMember(f: Extract<Value, { kind: "type" }>, arg: Value): Value {
         if (f.name === "$any" && !f.family && !f.alias) return arg;
-        if (f.name === "Bool" && !f.family && !f.alias && !f.choices) return mkBool(this.truthy(arg));
         if (f.refine) return this.conform(f, arg);
         // Applying a union checks that the value is one of its types.
         if (f.choices) {
@@ -5734,7 +5758,12 @@ export class Interpreter {
                     return this.matchPattern(p.value, this.conform(type, this.realize(action, type)), binds);
                 }
                 if (!type.family) return this.matchPattern({ p: "constr", tag: type.name, args: [p.value] }, actual, binds);
-                const variant = this.dataValue(actual);
+                let variant = this.dataValue(actual);
+                // Another value, what a to instance for the type makes of it.
+                if (!(variant.kind === "variant" && variant.family === type.family)) {
+                    const made = this.declaredConversion(type, variant);
+                    if (made) variant = actual = this.dataValue(made);
+                }
                 if (variant.kind !== "variant" || variant.family !== type.family) return false;
                 if (type.arguments?.length && !this.staticallyFits(p.type, v)) return false;
             }
@@ -5843,9 +5872,14 @@ export class Interpreter {
                     const input = type.kind === "record" ? this.recordPatternInput(type, actual) : this.isList(actual) ? actual : null;
                     return input !== null && this.matchPattern(p.args[0], this.conform(type, input), binds);
                 }
-                // A type without parameters takes its value: (Color c) takes Red.
+                // A type without parameters takes its value: (Color c) takes Red,
+                // and (b : Box) what a to Box instance makes of another value.
                 if (type.kind === "type" && type.family) {
-                    const actual = this.dataValue(v);
+                    let actual = this.dataValue(v);
+                    if (!(actual.kind === "variant" && actual.family === type.family) && p.args.length === 1 && !parameters) {
+                        const made = this.declaredConversion(type, actual);
+                        if (made) actual = this.dataValue(made);
+                    }
                     return p.args.length === 1 && !parameters && actual.kind === "variant" && actual.family === type.family &&
                         this.matchPattern(p.args[0], this.conform(type, actual), binds);
                 }
