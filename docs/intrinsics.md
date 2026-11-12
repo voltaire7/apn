@@ -151,9 +151,11 @@ HashMap k v = | HashMap (List [k,v])
 
 An action is a function from the state of the world to a result and the next
 state, and `>>=` threads that state through, which is why no action runs when
-it is applied, only when something runs it. `World` and `Ref` would be types
-whose values no program can make (abstract types), which APN cannot yet
-declare. A `Mutable` cell is a reference into the world's store, and `set` an
+it is applied, only when something runs it. `World` (the state
+of everything outside the program) and `Ref` (a place in the store) are the
+interpreter's: no program has a constructor for them, since their values exist
+only while a program runs. A program's own types have no such thing: APN has
+no abstract types, every constructor is public. A `Mutable` cell is a reference into the world's store, and `set` an
 action that changes the store; a `HashMap` is an association list whose keys
 appear once.
 
