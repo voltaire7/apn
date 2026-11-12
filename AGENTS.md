@@ -123,8 +123,9 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   at the same level end statements, +4 continues them. Lines are at most 99
   characters, each literal and comment counting as one, in every
   APN source (lib, examples, docs, test programs).
-- **Bindings:** a value never changes: `name = value` defines a new name for
-  its whole scope or starts a new version of a visible one, which code written
+- **Bindings:** code cannot change a value in an outer scope without
+  `Mutable`: `name = value` defines a new name for its whole scope or starts a
+  new version of a visible one, which stays in that scope and which code written
   before keeps not seeing (`f = x -> ...` is a clause of `f`, like
   `f x = ...`); records and lists are never mutated in place (updates bind a
   modified copy). Only `Mutable` cells mutate, and only through IO actions.
