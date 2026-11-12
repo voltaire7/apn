@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -34,11 +34,8 @@ const PENDING = "$monad";
 function pendingTy(t: Ty): Ty { return { k: "variant", name: PENDING, args: [t] }; }
 function isPending(t: Ty): boolean { return t.k === "variant" && t.name === PENDING && t.args.length === 1; }
 // Scalar types := names a subtype of (Money := Float), as at runtime.
-// A definition that adds an instance instead of binding a name: any
-// definition of a method (map f (Some x) = ..., return = Some).
-function isInstance(name: string, _clauses: { params: Pattern[] }[]): boolean {
-    return METHODS.has(name);
-}
+// The methods, by the names the prelude binds them to (return, >>=, ...).
+const METHOD_NAMES = new Set(METHOD_INTRINSICS.values());
 
 type Index = { constant: bigint; terms: Map<string, bigint> };
 type Ty =
@@ -6732,6 +6729,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return result;
     }
     // A value constructor: a variant, or a function that returns one.
+    // A definition of a method for a type (see isForTypes) adds an instance,
+    // which joins the method, instead of binding the name, as at runtime
+    // (Interpreter.travelling); a type a program declares counts wherever it
+    // was declared, so an instance the run keeps in its scope is checked as
+    // one joining the method.
+    function isInstance(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope): boolean {
+        return METHOD_NAMES.has(name) && travels(name, clauses, scope);
+    }
+    // Clauses for a visible function, for a declared type, join it.
+    function travels(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope): boolean {
+        return scope.has(name) && isForTypes(clauses, type => {
+            const entry = scope.get(type), t = entry && resolve(entry.type);
+            return type === "List" || isConstructor(entry) || t?.k === "type" && resolve(t.value).k === "variant";
+        }, METHOD_NAMES.has(name));
+    }
     function isConstructor(entry: Entry | undefined): boolean {
         if (!entry) return false;
         let t = resolve(entry.type);
@@ -6739,6 +6751,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return t.k === "variant";
     }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
+        try { defineIn(name, clauses, scope, location); }
+        finally { if (ownDefinitions.has(scope)) ownDefinitions.get(scope)!.add(name); else ownDefinitions.set(scope, new Set([name])); }
+    }
+    // The names each scope's own definitions bind (a block's scope starts
+    // with none: what it sees of its parent's is not its own).
+    const ownDefinitions = new WeakMap<Scope, Set<string>>();
+    function defineIn(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
         clauses = clauses.flatMap(c => matchedClauses(c.params, c.body, !!scope.get("~")?.builtin) ?? [c]).map(c => ({ ...c, params: c.params.map(p => typed(p, scope)) }));
         // Index claims (Vec (n + m) a ys) are proven by induction where they
         // can be; a wrong one is an error here, whether or not it is called.
@@ -6750,7 +6769,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // Definitions of map, >>=, <*> or return define an instance: inferred on
         // their own and recorded for the session; the method stays as it is.
         // Its first definition (the prelude's (>>=) = intrinsics.bind) binds it.
-        if (isInstance(name, clauses) && instances && scope.has(name) && scope.get(name)!.type !== forward.get(name)) {
+        if (isInstance(name, clauses, scope) && instances && scope.has(name) && scope.get(name)!.type !== forward.get(name)) {
             const forward = variable();
             instances.set(name, [...instances.get(name) ?? [], forward]);
             const own: Scope = new Map(scope);
@@ -6763,9 +6782,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             return;
         }
-        // Clauses for a math function or get overload it: arguments they do
-        // not take keep its previous meaning.
-        const previous = overloaded(name, clauses[0].params.length, scope.get(name));
+        // Clauses for a declared type overload the function they join:
+        // arguments they do not take keep its meaning.
+        const previous = overloaded(name, clauses, scope, scope.get(name));
         defineClauses(name, clauses, scope, location);
         const entry = scope.get(name);
         if (previous && entry) scope.set(name, { ...entry, type: { k: "overload", choices: [entry.type, previous], name } });
@@ -6791,10 +6810,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (!gotten(r)) return ["fn", "overload", "intrinsic"].includes(r.k) ? problem("get takes a value, not a function", e) : t;
         return r.k === "variant" || r.k === "atom" && r.name !== "Record" ? problem(`cannot apply ${text(t)}`, e) : t;
     }
-    // The meaning clauses for a name overload (as at runtime): a math
-    // function's or get's, when they take as many arguments.
-    function overloaded(name: string, params: number, previous: Entry | undefined): Ty | undefined {
-        if (!OVERLOADED_FUNCTIONS.has(name) || !previous || !params) return undefined;
+    // The meaning clauses overload (as at runtime): the function's they join,
+    // for a declared type, or that their own scope binds otherwise (get =
+    // intrinsics.get, then get True a = ...), when they take as many arguments.
+    function overloaded(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, previous: Entry | undefined): Ty | undefined {
+        const params = clauses[0].params.length;
+        // (A prelude operator's clauses meet its intrinsic where it is applied.)
+        if (!previous || !params || PRELUDE_OPERATORS.has(name) || !travels(name, clauses, scope) && !ownDefinitions.get(scope)?.has(name)) return undefined;
         let t = resolve(previous.type);
         while (t.k === "overload") t = resolve(t.choices[t.choices.length - 1]);
         let arity = t.k === "intrinsic" ? (t.arity ?? 1) - (t.args?.length ?? 0) : 0;
@@ -6990,12 +7012,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // dispatches: map f l of a Tree recurses, to String m of an Int in
         // to String (Money m) is the method. Its type starts as what its
         // patterns take, to decide.
-        const instance = isInstance(name, clauses) && previous && !previous.recursive;
+        const instance = isInstance(name, clauses, scope) && previous && !previous.recursive;
         const pending = forward.get(name) ?? (instance ? patternSkeleton(clauses, scope) : variable());
         forward.delete(name);
         // Its clauses' own calls of an overloaded math function may take the
         // previous meaning too (sin (Dual a b) = Dual (sin a) ...).
-        const fallback = previous && !previous.recursive ? overloaded(name, clauses[0].params.length, previous) : undefined;
+        const fallback = previous && !previous.recursive ? overloaded(name, clauses, scope, previous) : undefined;
         scope.set(name, { type: instance ? { k: "overload", choices: [pending, previous.type], name, prefer: true }
             : fallback ? { k: "overload", choices: [pending, fallback], name } : pending, mono: true, recursive: true });
         const typeTag = (p: Pattern | undefined) => p?.p === "constr" && TYPE_NAMES.includes(p.tag) ? p.tag : undefined;

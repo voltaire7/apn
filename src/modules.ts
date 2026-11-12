@@ -13,7 +13,8 @@
 
 import { parse, parseDocument } from "./parser.ts";
 import { NATIVE_EXPORTS } from "./native-exports.ts";
-import { type Expr, importedPath, METHODS, readsModule } from "./ast.ts";
+import { type Expr, importedPath, isForTypes, METHOD_INTRINSICS, readsModule } from "./ast.ts";
+import preludeSource from "../lib/prelude.apn" with { type: "text" };
 
 export const STD_DIRECTORY = new URL("../lib/std/", import.meta.url);
 export const BUNDLE_LIB = "/lib/";
@@ -291,13 +292,13 @@ export const QUALIFIED_MODULES = new Set(["random", "decode", "svg", "parser"]);
 // top-level names not starting with _, and each module's natives, for
 // completion and "add import" hints. The prelude needs no import. Without
 // read access to lib/ it is the natives alone.
-let standardIndex: Map<string, string[]> | undefined;
+let standardIndex: Map<string, string[]> | undefined, preludeNames: Set<string> | undefined;
 export function standardExports(): Map<string, string[]> {
     if (standardIndex) return standardIndex;
     const index = new Map<string, string[]>();
     // Each module by the spec that imports it: std/name.
     const add = (name: string, module: string) => {
-        if (/^[A-Za-z]/.test(name) && !METHODS.has(name)) index.set(name, [...new Set([...index.get(name) ?? [], `std/${module}`])]);
+        if (/^[A-Za-z]/.test(name)) index.set(name, [...new Set([...index.get(name) ?? [], `std/${module}`])]);
     };
     for (const [module, names] of Object.entries(NATIVE_EXPORTS)) names.forEach(name => add(name, module));
     let files: string[] = [];
@@ -306,8 +307,13 @@ export function standardExports(): Map<string, string[]> {
         const module = file.slice(0, -".apn".length);
         if (["prelude", "type", "do"].includes(module) || QUALIFIED_MODULES.has(module)) continue;
         try {
-            for (const item of parseDocument(Deno.readTextFileSync(new URL(file, STD_DIRECTORY)))) {
-                if (item.t === "def") add(item.name, module);
+            const items = parseDocument(Deno.readTextFileSync(new URL(file, STD_DIRECTORY)));
+            const prelude = preludeNames ??= new Set([...METHOD_INTRINSICS.values(), ...parseDocument(preludeSource).flatMap(item => item.t === "def" ? [item.name] : [])]);
+            // A definition for the module's own types extends the function it
+            // is named after, defining no name (map f (Some x) = ...).
+            const declared = new Set(items.flatMap(item => item.t === "type" ? [item.def.name, ...item.def.variants.map(v => v.tag)] : []));
+            for (const item of items) {
+                if (item.t === "def" && !(prelude.has(item.name) && isForTypes(item.clauses, name => declared.has(name), true))) add(item.name, module);
                 if (item.t === "patDef" && item.pattern.p === "var" && !readsModule(item.value)) add(item.pattern.name, module);
                 if (item.t === "type") { add(item.def.name, module); item.def.variants.forEach(v => add(v.tag, module)); }
             }

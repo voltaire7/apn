@@ -1,4 +1,4 @@
-import { clauseKey, importedPath, isLoadCall, matchOperands, METHODS, sourceLocations, type Expr, type Pattern, type TopLevel } from "./ast.ts";
+import { clauseKey, importedPath, isLoadCall, matchOperands, isForTypes, METHOD_INTRINSICS, sourceLocations, type Expr, type Pattern, type TopLevel } from "./ast.ts";
 import type { Diagnostic } from "./lint.ts";
 import { loadPath, readLoad, resolveModule } from "./modules.ts";
 import { parseDocument } from "./parser.ts";
@@ -118,11 +118,14 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
     // taking any argument (not an equivalent one, which replaces it) never runs.
     // A binding without parameters starts a new version of the name.
     type Definition = { name: string; clauses: Clause[] } | { rebinds: string[] };
+    const METHOD_NAMES = new Set(METHOD_INTRINSICS.values());
     const clauseOrder = (definitions: Definition[]) => {
         const earlier = new Map<string, Clause[]>();
         for (const d of definitions) {
             if ("rebinds" in d) { d.rebinds.forEach(name => earlier.delete(name)); continue; }
-            if (METHODS.has(d.name)) continue;
+            // A method's definition for a type is an instance of its own,
+            // tried before earlier ones.
+            if (METHOD_NAMES.has(d.name) && isForTypes(d.clauses, name => constructors.has(name), true)) continue;
             for (const c of d.clauses) {
                 if (!c.params.length) { earlier.delete(d.name); continue; }
                 const seen = (earlier.get(d.name) ?? []).filter(e => clauseKey(d.name, e) !== clauseKey(d.name, c));

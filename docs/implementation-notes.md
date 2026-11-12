@@ -185,8 +185,8 @@ The checker reads the prelude too: its own scope holds only what TypeScript
 implements (the natives and `intrinsics.*`), and `preludeScope` checks
 `lib/prelude.apn` over it once (`prelude: true`), each check copying the names
 it binds (`copyTypeScope`). A method's first definition binds it
-(`(>>=) = intrinsics.bind`); later clauses are instances (the prelude's are its
-own, which the intrinsic's typing covers). Where inference cannot derive a
+(`(>>=) = intrinsics.bind`); later clauses for a type are instances (the
+prelude's are its own, which the intrinsic's typing covers). Where inference cannot derive a
 prelude function's type (`sequence`'s recursion over any monad, `not` of an
 action, the `enum*` functions a range is), `PRELUDE_TYPINGS` types it by a
 rule, as an intrinsic is; the prelude still defines it. A prelude change needs
@@ -199,11 +199,11 @@ parses (later REPL input). The prelude binds each operator to an `intrinsics.*`
 native (`PRIMITIVE_OPERATORS` in `src/parser.ts`), forced at startup so a
 binop finds the native itself: `evalBinop` then runs `operate` directly
 (strict operands evaluated in place, `::`/`++`/`&&`/`||`/`$` over thunks) and
-applies any other binding as a function. A `clauseFn` defined for an operator
-or an `OVERLOADED_FUNCTIONS` name (math functions, `get`/`with`, `negate`/`not`) with the previous
-binding's arity (`arity`; the checker's `overloaded`) keeps it as
-`fallback`; a checked write accepts an imported one over the binding it
-extends. In the checker an operator name has its intrinsic's type, through
+applies any other binding as a function, unless clauses joined it (`joins`).
+A `clauseFn` defined for a function its own scope binds otherwise, with that
+binding's arity (`knownArity`, which runs no thunk but a field alias; the
+checker's `overloaded`), keeps it as `fallback`; a checked write accepts an
+imported one over the binding it extends. In the checker an operator name has its intrinsic's type, through
 the prelude's alias ((+) = intrinsics.add); a binop on another binding is inferred as the call `(op l) r`, and an overload
 of a prelude operator falls back to the builtin rule when its clauses do not
 accept known operand types; operands not known yet make an `overloaded:op`
@@ -213,8 +213,8 @@ as `$L, $R -> $L op $R`, and `operatorApplication` and `prefixApplication`
 are the one typing a binop or unop shares with a call of the intrinsic
 (`intrinsics.add`, `negate`, `not`). The checker's evaluator reads `(op)` the
 same way, and `evaluateOperator` is the builtin meaning a binop and a call of
-the intrinsic share (`evaluateBinop` only chooses a program's overload). A math function's clauses get an
-`overload` type of themselves and the previous meaning (also for their own
+the intrinsic share (`evaluateBinop` only chooses a program's overload). Clauses joining a function
+get an `overload` type of themselves and the previous meaning (also for their own
 recursive calls); an overload's partial calls, an intrinsic's included, stay an
 `overload` for the next argument to decide. `apply` gives a value outside
 `CALLABLE_KINDS` to the `get` in `this.env` when clauses extend it
@@ -372,9 +372,17 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   `runKnown`, at statements, `<-` and inside running do-blocks; a top-level
   `x <- action` keeps the run's facts (`runLocally` keeps its cells local).
   Tests: `tests/io-test.ts`.
-- Monads: clauses for `METHODS` (`ast.ts`: map, >>=, <*>, return, throw, ...) defined
-  after the prelude are registered in `instances` (newest tried first, by a
-  probing apply) and bind no name; `instanceFamilies` records the types they
+- Clauses that travel with a type (`isForTypes`, decided where they run by
+  `Interpreter.travelling`, by what the scope binds) bind no name: for a
+  method (`METHOD_INTRINSICS`: map, >>=, <*>, return, throw, to, from) they are
+  registered in `instances`, for any other function in `attachments` under
+  its root (`functionRoot`, through aliases and scoped extensions), and
+  `joinedCall` tries them (newest first, by a probing apply) before the
+  function's own clauses or builtin, so the operator and range fast paths
+  step aside (`joins`). The checker overloads the function with them
+  (`travels`, `overloaded`), and with a scope's own extension of what it
+  bound otherwise (`ownDefinitions`).
+- Monads: `instanceFamilies` records the types instances
   cover (a discarded value of a type with `>>=` makes a do-block). `return` builds a `pending` value
   (`PendingStep` return/bind/do) that `realize` turns into a concrete monad
   (IO, List, or a `return` instance keyed by a type pattern that matches type

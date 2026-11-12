@@ -102,8 +102,9 @@ See [zero initialization](zero-initialization.md) for type defaults and inspecti
 | `to T x` for another type | Applies `T`, as a conversion: `to Float 3`, `to Quote [year = 1]` |
 | `to [T1,T2] x` | A list template converts position by position, as `cast` does: `to [Char,Char] "hi"`; `[Char]` is exactly one `Char` |
 
-They are methods, like `map`: a program adds a type by defining an instance,
-which joins them everywhere. A bare type name in a pattern matches that type,
+They are methods, like `map`: a program adds a type by defining an instance
+beside the type's declaration, which [travels with the
+type](semantics.md#functions-travel-with-types). A bare type name in a pattern matches that type,
 so an instance names its type as its first parameter (as `option` defines
 `to Option (Ok x) = Some x` and `to Option (Err _) = None`):
 

@@ -3,7 +3,7 @@ import type { TypeScope } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeElementType, describeType } from "./type-description.ts";
-import { OVERLOADED_FUNCTIONS, METHODS, sourceLocations, boolSelection, ternaryExpansion, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
+import { isForTypes, METHOD_INTRINSICS, sourceLocations, boolSelection, ternaryExpansion, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { fieldSource, keySource } from "./record-keys.ts";
 import typeSource from "../lib/std/type.apn" with { type: "text" };
@@ -668,20 +668,8 @@ export class Interpreter {
             this.bindNames([[name, alias]]);
             return alias;
         }
-        // A definition of map, >>=, <*> or return defines an instance: it joins
-        // the method everywhere instead of shadowing it here. Its clauses are
-        // the instance (return x = Some x), or its value is (return = Some).
-        // The prelude's value of a method is the method itself.
-        if (METHODS.has(name) && (!this.loadingPrelude || clauses[0].params.length)) {
-            const child = new Env(this.env), arity = clauses[0].params.length, body = clauses[0].body;
-            const method: Value = arity ? { kind: "clauseFn", name, clauses, arity, env: child, applied: [] } : this.defer(() => {
-                const caller = this.env;
-                this.env = child;
-                try { return this.reference(this.eval(body)); } finally { this.env = caller; }
-            });
-            this.registerInstance(name, method, clauses);
-            return method;
-        }
+        const joined = this.travelling(name, clauses);
+        if (joined) return joined;
         // Existing collections interpret the parameter as a key expression;
         // unbound/function names retain ordinary pattern-clause definitions.
         const previous = this.env.get(name);
@@ -711,12 +699,12 @@ export class Interpreter {
             clauses = mergeClauses(name, extended ? previous.clauses : [], clauses, c => this.clauseHead(c, scope));
             // Capture a shared env containing the binding itself, enabling recursion.
             const child = new Env(this.env);
-            // Clauses for an operator (or a math function, or get) taking as many
-            // arguments overload it: the previous meaning still applies to
-            // arguments no clause matches. Redefining the clauses in the same
-            // scope keeps that fallback.
-            const overloaded = !isOperatorName(name) && !OVERLOADED_FUNCTIONS.has(name) || previous === undefined || this.arity(previous) !== arity ? undefined
-                : previous.kind === "clauseFn" && this.scopeBinding(name) === previous ? previous.fallback : previous;
+            // Clauses for a function this scope binds otherwise (get =
+            // intrinsics.get, then get True a = ...) extend it: its meaning
+            // still applies to arguments no clause matches. Redefining the
+            // clauses in the same scope keeps that fallback.
+            const overloaded = previous === undefined || this.scopeBinding(name) !== previous || this.knownArity(previous) !== arity ? undefined
+                : previous.kind === "clauseFn" ? previous.fallback : previous;
             const fn: Value = {
                 kind: "clauseFn", name, clauses, arity, env: child, applied: [], ...overloaded ? { fallback: overloaded } : {},
             };
@@ -1510,7 +1498,7 @@ export class Interpreter {
                         // range of numbers is made in place, and one of a type
                         // repeats it (enumFrom's own clause).
                         const name = rangeName(e), bound = this.loadingPrelude ? undefined : this.env.get(name);
-                        if (bound !== undefined && this.reference(bound) !== this.preludeBindings.get(name)) { next = new TailCall(rangeExpansion(e), this.env); break; }
+                        if (bound !== undefined && (this.reference(bound) !== this.preludeBindings.get(name) || this.joins(bound))) { next = new TailCall(rangeExpansion(e), this.env); break; }
                         const lo: Value = this.reference(this.dataValue(this.eval(e.lo)));
                         if (this.isTypeValue(lo) && bound && !e.second && !e.hi) { r = this.apply(this.reference(bound), lo); break; }
                         r = this.range(lo, e.second && this.eval(e.second), e.hi && this.eval(e.hi));
@@ -1549,7 +1537,7 @@ export class Interpreter {
                         const name = e.op === "neg" ? "negate" : "not", bound = this.env.get(name);
                         if (bound === undefined) throw new APNError("runtime", `unbound variable '${name}'`);
                         const f = this.reference(bound);
-                        if (f !== this.preludeBindings.get(name)) {
+                        if (f !== this.preludeBindings.get(name) || this.joins(f)) {
                             const result = this.apply(f, { kind: "thunk", body: e.e, env: this.env }, false, true, tailLoad);
                             if (result instanceof TailCall) next = result; else r = result;
                             break;
@@ -1887,7 +1875,7 @@ export class Interpreter {
         const f = bound.kind === "thunk" || bound.kind === "deferred" ? this.reference(bound) : bound;
         // A prelude operator bound to its intrinsic runs it directly; strict
         // ones evaluate their operands in place.
-        const op = f.kind === "native" && !f.applied.length ? PRIMITIVE_OPERATORS.get(f.name) : undefined;
+        const op = f.kind === "native" && !f.applied.length && !this.joins(f) ? PRIMITIVE_OPERATORS.get(f.name) : undefined;
         if (op && !LAZY_OPERATORS.has(op)) return this.operate(op, this.eval(e.l), this.eval(e.r));
         const l = this.delay(e.l), r = this.delay(e.r);
         if (op) return this.operate(op, l, r);
@@ -2255,6 +2243,8 @@ export class Interpreter {
                 // A constructor given a type for each field is the type of
                 // the values it makes: its logic runs only on values (Mod7 Int).
                 if (f.name === "__constr" && (!f.invoke || args.every(x => this.isTypeValue(this.demand(x))))) return this.variantValue(f.tag!, args, f.family);
+                const joined = this.joinedCall(f, args);
+                if (joined) return joined;
                 if (f.invoke) return f.invoke(args);
                 if (f.name === "use" && tailLoad) {
                     const code = this.dataValue(args[0]);
@@ -2269,6 +2259,8 @@ export class Interpreter {
                 // argument thunks prevent repeated effects across fallthrough.
                 // The definition name is the first binding in a named clause:
                 // the original function, even when applying a partial call.
+                const joined = this.joinedCall(f, raw);
+                if (joined) return joined;
                 const self = f.name !== "<lambda>" ? f.env.map.get(f.name) : undefined;
                 const chosen = this.choose(f.clauses, raw, f.env, self && [f.name, self]);
                 if (chosen) {
@@ -2376,8 +2368,10 @@ export class Interpreter {
     // goes to the builtin get directly.)
     private extended(name: "get" | "with", of?: Value): Value | undefined {
         const f = this.env.get(name);
+        if (!f) return undefined;
+        if (this.joins(f)) return f;
         if (name === "get" && f === this.preludeBindings.get("get") && of?.kind !== "bool") return undefined;
-        return f?.kind === "clauseFn" && f.fallback ? f : undefined;
+        return f.kind === "clauseFn" && f.fallback ? f : undefined;
     }
     // xs i = v binds xs to with xs i v: the builtin's copy, or what clauses for with give.
     private assigned(collection: Value, key: Value, value: Expr): Value {
@@ -2386,6 +2380,13 @@ export class Interpreter {
     }
 
     // How many arguments a function takes before it runs (undefined for a value).
+    // A visible binding's arity, if it is a function already known as one: a
+    // thunk is read only when it is a field of another value (an alias, (+) =
+    // intrinsics.add), never run.
+    private knownArity(v: Value): number | undefined {
+        if (v.kind === "thunk" && v.value === undefined && v.body.t !== "recordAccess") return undefined;
+        try { return this.arity(v); } catch (error) { if (error instanceof APNError) return undefined; throw error; }
+    }
     private arity(v: Value): number | undefined {
         v = this.force(v);
         if (v.kind === "native" || v.kind === "clauseFn") return v.arity - v.applied.length;
@@ -2980,7 +2981,6 @@ export class Interpreter {
     private loadingPrelude = true;
 
     // The builtin each method starts from (its IO and list instances).
-    static readonly METHOD_NATIVES = new Map([["map", "map"], ["intrinsics.return", "return"], ["intrinsics.throw", "throw"], ["intrinsics.bind", ">>="], ["intrinsics.ap", "<*>"], ["to", "to"], ["from", "from"]]);
     // to T x and from T x: a program's instances first (newest first), then
     // the builtin ones: String (its text, read back as parse does), JSON
     // (JSON text) and List Char (a string's characters). to of any other type
@@ -3012,7 +3012,7 @@ export class Interpreter {
     }
     // The method a value is: its builtin ((>>=) is intrinsics.bind).
     private methodOf(v: Value): string | undefined {
-        return v.kind === "native" && !v.applied.length ? Interpreter.METHOD_NATIVES.get(v.name) : undefined;
+        return v.kind === "native" && !v.applied.length ? METHOD_INTRINSICS.get(v.name) : undefined;
     }
     // A method as an overloaded function shows itself: its builtin (by name),
     // then each instance's clauses, one per line, oldest first.
@@ -3043,7 +3043,7 @@ export class Interpreter {
     private makers = new Map<string, boolean>();
     // The variant families a method's instances take, read from their clauses
     // (map's second parameter, the others' first), whether they were written
-    // as clauses or as a value (map = mapTree).
+    // as clauses or as a value (return = Some).
     private familiesOf(method: string): Set<unknown> {
         const known = this.instanceFamilies.get(method);
         if (known) return known;
@@ -5537,6 +5537,90 @@ export class Interpreter {
         let family = this.owners.get(key);
         if (!family) this.owners.set(key, family = { name });
         return family;
+    }
+
+    // Clauses for a visible function that are for a type this scope declares
+    // (see isForTypes) travel with the type's values: they join the function
+    // itself, which code anywhere calling it (a library's, a do-block's)
+    // sees, and the name here keeps meaning that function (a module exports
+    // it as it is). A method's join its instances; any other function's are
+    // tried before it.
+    private travelling(name: string, clauses: DefClause[]): Value | undefined {
+        // (Read only for clauses naming a type at all: a visible value is not run.)
+        const previous = isForTypes(clauses, () => true, true) ? this.env.get(name) : undefined;
+        const root = previous && this.functionRoot(previous);
+        if (!root) return undefined;
+        const method = root.kind === "native" ? METHOD_INTRINSICS.get(root.name) : undefined;
+        const arity = clauses[0].params.length;
+        // (A list's [] and :: name List, which the prelude declares.)
+        const forType = isForTypes(clauses, type => {
+            const v = this.scopeBinding(type);
+            return !!v && (type === "List" || (v.kind === "native" || v.kind === "variant" || v.kind === "type") && !!v.family);
+        }, !!method);
+        if (!forType || !method && this.arity(root) !== arity) return undefined;
+        const child = new Env(this.env), body = clauses[0].body, scope = this.env.root();
+        const make = (all: DefClause[]): Value => arity ? { kind: "clauseFn", name, clauses: all, arity, env: child, applied: [] } : this.defer(() => {
+            const caller = this.env;
+            this.env = child;
+            try { return this.reference(this.eval(body)); } finally { this.env = caller; }
+        });
+        if (this.scopeBinding(name) === undefined) this.bindNames([[name, previous]]);
+        if (method) {
+            const fn = make(clauses);
+            this.registerInstance(method, fn, clauses);
+            return fn;
+        }
+        // More clauses for it from one scope are one definition, as at home.
+        const key = this.functionKey(root)!, joined = this.attachments.get(key) ?? [];
+        const last = joined[joined.length - 1];
+        const merged = last && last.scope === scope && last.name === name && last.fn.kind === "clauseFn"
+            ? mergeClauses(name, last.fn.clauses, clauses, c => this.clauseHead(c, scope)) : undefined;
+        const fn = make(merged ?? clauses);
+        this.attachments.set(key, [...merged ? joined.slice(0, -1) : joined, { fn, scope, name }]);
+        return fn;
+    }
+    // The function a binding is, through aliases ((+) = intrinsics.add) and
+    // scoped extensions to what they extend; undefined for any other value
+    // (a thunk not yet known to be a function is not run: x = x never ends).
+    private functionRoot(value: Value): Value | undefined {
+        let v = value;
+        for (let n = 0; n < 64; n++) {
+            if (v.kind === "thunk" && v.value === undefined && v.body.t !== "recordAccess") return undefined;
+            if (v.kind === "thunk" || v.kind === "deferred") {
+                try { v = this.reference(v); } catch (error) { if (error instanceof APNError) return undefined; throw error; }
+                continue;
+            }
+            if (v.kind === "clauseFn" && v.fallback) { v = this.force(v.fallback); continue; }
+            break;
+        }
+        return v.kind === "clauseFn" || v.kind === "native" ? v : undefined;
+    }
+    // What a function is known by, across its partial applications.
+    private functionKey(f: Value): unknown {
+        return f.kind === "clauseFn" ? f.clauses : f.kind === "native" ? `native:${f.name}:${f.tag ?? ""}` : undefined;
+    }
+    // Clauses joined to a function by types declared elsewhere, oldest first.
+    private attachments = new Map<unknown, { fn: Value; scope: Env; name: string }[]>();
+    // Whether clauses for a type declared elsewhere joined this function.
+    private joins(f: Value): boolean {
+        if (!this.attachments.size) return false;
+        const root = this.functionRoot(f);
+        return !!root && this.attachments.has(this.functionKey(root));
+    }
+    // The first joined clauses taking these arguments, newest first.
+    private joinedCall(f: Value, args: Value[]): Value | undefined {
+        if (!this.attachments.size) return undefined;
+        const joined = this.attachments.get(this.functionKey(f));
+        if (!joined) return undefined;
+        next: for (let n = joined.length - 1; n >= 0; n--) {
+            let g = joined[n].fn;
+            for (const x of args) {
+                g = this.apply(g, x, true);
+                if (g.kind === "nomatch") continue next;
+            }
+            return g;
+        }
+        return undefined;
     }
 
     // A constructor the name is bound to here (a later Rect w h = r

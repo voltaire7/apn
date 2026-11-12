@@ -98,8 +98,8 @@ parse = intrinsics.parse
 load file = map parse (intrinsics.readFileFrom (file ++ ".apn"))
 
 # Functor, Applicative and Monad. IO and lists are built in; any other type
-# joins by defining instances of map, >>= and return (as the option
-# module does for Option and Result), which add to these methods everywhere.
+# joins by defining instances of map, >>= and return beside its declaration
+# (as the option module does for Option and Result), which travel with it.
 #     map f m       m with f applied to what it holds or yields
 #     return x      x in the monad the context decides (an annotation, a >>=,
 #                   or IO when run)
@@ -119,8 +119,6 @@ guard condition = condition ? return [] : throw ("guard failed: " ++ intrinsics.
 # >>= runs an action, and waits on a return no context has decided yet; each
 # other monad's are its clauses, f's returns made in that monad.
 (>>=) = intrinsics.bind
-[] >>= f = []
-(x :: rest) >>= f = f x ++ (rest >>= f)
 m >> k = m >>= _ -> k
 # f applied to what several values hold, in any monad (Elm's map2 ... map4).
 map2 f a b = map f a <*> b
@@ -142,20 +140,22 @@ unless condition action = condition ? return [] : action >> return []
 loop action = action >> loop action
 # Representations: to T x writes x as a T, from T x reads it back (to String,
 # to JSON, to (List Char); from String parses). They are methods: a program
-# adds a type by defining to or from for it, as for map. JSON names JSON text,
-# which to JSON writes as a String.
+# adds a type by defining to or from for it beside it, as for map. JSON names
+# JSON text, which to JSON writes as a String.
 JSON = _
 # tag owner ctor fields: a value that ctor made, belonging to owner, which
 # patterns of ctor read back (Some a = tag Option Some [a]). A constructor's _
 # is one: the value Box x = _ makes for Box 5 is tag Box Box [5].
 tag = intrinsics.tag
 # with v k x: a copy of v with k set to x; xs 2 = x binds xs to with xs 2 x.
-# Clauses for with extend it, as for get:
+# Clauses for with for a type, beside it, join it, as for get:
 #     with (Grid cells) [Int r, Int c] x = Grid (with cells (3 * r + c) x)
 with = intrinsics.with
 # A list is empty or an element on a list: endless lists, whose unfoldings
 # never end, are lists too ([Int..] is Cons Int [Int..]).
 List a = Nil | Cons a (List a)
+[] >>= f = []
+(x :: rest) >>= f = f x ++ (rest >>= f)
 # The length-indexed list, the same values: Nil has length zero, and Cons x xs
 # one more than xs. A family of lists is a type function's clauses (Vect Z a =
 # Nil and Vect (S k) a = Cons a (Vect k a)); any of this shape is the same type.

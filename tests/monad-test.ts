@@ -97,8 +97,10 @@ for (const [name, source, expected] of [
         ["[2,4]", "Some 6", "8"]],
     ["return is overloaded on its result", 'std <- import "std"; use std.option\nWrap a = | MkWrap a\nreturn = MkWrap\nMkWrap x >>= f = f x\nprint ({ return 5 } : Wrap Int)\nprint ({ return 6 } : Option Int)\nprint ({ return 7 } : Result Int String)\nprint ({ return 8 } : List Int)',
         ["MkWrap 5", "Some 6", "Ok 7", "[8]"]],
-    ["any definition of a method is an instance, curried or not", "Tree = Leaf Int | Node Tree Tree\nmapTree f (Leaf x) = Leaf (f x)\nmapTree f (Node l r) = Node (mapTree f l) (mapTree f r)\nmap = mapTree\ndouble m = map (* 2) m\nprint (double (Node (Leaf 1) (Leaf 2)))\nprint (double [1])",
-        ["Node (Leaf 2) (Leaf 4)", "[2]"]],
+    // A definition for a type its scope declares is an instance; one for no
+    // type is a function of that scope (map = mapTree names none).
+    ["a method's definition for a type is an instance", "Tree = Leaf Int | Node Tree Tree\nmap f (Leaf x) = Leaf (f x)\nmap f (Node l r) = Node (map f l) (map f r)\ndouble m = map (* 2) m\nprint (double (Node (Leaf 1) (Leaf 2)))\nprint (double [1])\nshow = x -> \"shown\"\nprint [show 1]",
+        ["Node (Leaf 2) (Leaf 4)", "[2]", '["shown"]']],
     ["a curried definition overloads like clauses", "describe = (_ : Int) -> \"Int\"\ndescribe = (_ : Float) -> \"Float\"\nprint [describe 1, describe 1.5]\nalso = x -> x + 1\nalso = x -> x + 2\nprint (also 1)",
         ['["Int","Float"]', "3"]],
     ["undecided values and actions print without running", 'print $ return 123\nprint [return "a"]\nprint (return 1 >>= x -> return x)\nprint (print 1)\nprint ({ return 1 } : IO Int)\nprint (typeOf (print 1))\nprint (typeOf (return 1))',

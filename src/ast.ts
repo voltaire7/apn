@@ -247,14 +247,43 @@ export function countingOf(name: string, clauses: { params: Pattern[]; body: Exp
     return { scale, offset: BigInt(empty.v.length) };
 }
 
-// Methods: a definition of one adds an instance (map f (Some x) = ...,
-// return = Some, throw _ = None) instead of binding the name.
-export const METHODS = new Set(["map", ">>=", "<*>", "return", "throw", "to", "from"]);
-// The math functions, get and with: clauses for one overload it, as clauses for an
-// operator do (sin (Dual a b) = ...); other arguments keep its previous meaning.
-export const OVERLOADED_FUNCTIONS = new Set(["sqrt", "exp", "log", "sin", "cos", "tan", "asin", "acos", "atan",
-    "atan2", "abs", "floor", "ceiling", "truncate", "round", "min", "max", "get", "with", "negate", "not"]);
-
+// The types a clause is written for, as the names it writes them with: each
+// constructor or type its parameters' patterns name (a list's [] and :: name
+// List), and, for a clause overloaded on its result (return x = Parser (...),
+// throw = Err), the constructor its body makes. A definition for a type its
+// own scope declares joins the function it is named after wherever the
+// type's values go.
+export function clauseTypeNames(clause: { params: Pattern[]; body: Expr }): { params: string[]; result?: string } {
+    const params: string[] = [];
+    const head = (e: Expr): string | undefined => {
+        while (e.t === "app") e = e.f;
+        return e.t === "var" && /^[A-Z]/.test(e.name) ? e.name : undefined;
+    };
+    const walk = (p: Pattern): void => {
+        if (p.p === "constr") { params.push(p.tag); p.args.forEach(walk); }
+        else if (p.p === "list") { params.push("List"); p.v.forEach(walk); }
+        else if (p.p === "cons") { params.push(p.op && p.op !== "::" ? p.op : "List"); walk(p.head); walk(p.tail); }
+        else if (p.p === "as") { walk(p.left); walk(p.right); }
+        else if (p.p === "typeBind") walk(p.value);
+        else if (p.p === "schema") { const name = head(p.type); if (name) params.push(name); walk(p.value); }
+    };
+    clause.params.forEach(walk);
+    return { params, result: head(clause.body) };
+}
+// Whether a definition is for one of these types (declared, by name): a
+// parameter names one, or, for a function overloaded on its result (a
+// method: return x = Parser ...), its body makes one.
+export function isForTypes(clauses: { params: Pattern[]; body: Expr }[], declared: (name: string) => boolean, byResult = false): boolean {
+    return clauses.some(clause => {
+        const { params, result } = clauseTypeNames(clause);
+        return params.some(declared) || byResult && !!result && declared(result);
+    });
+}
+// The intrinsics that are methods, by the name each is bound to: a type's
+// instances of one are found by the type (its value's, or the one a context
+// expects for return and throw).
+export const METHOD_INTRINSICS = new Map([["map", "map"], ["intrinsics.return", "return"], ["intrinsics.throw", "throw"],
+    ["intrinsics.bind", ">>="], ["intrinsics.ap", "<*>"], ["to", "to"], ["from", "from"]]);
 export type TopLevel = { t: "def"; name: string; clauses: DefClause[] } | { t: "expr"; value: Expr }
     | { t: "type"; def: DataDef }
     | { t: "patDef"; pattern: Pattern; value: Expr; eager?: boolean; update?: { name: string; value: Expr; error?: string } };

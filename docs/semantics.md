@@ -568,14 +568,14 @@ same precedence side by side need parentheses, as do two of one precedence
 and different associativity (`Int | String == t` is an error; write
 `(Int | String) == t`).
 
-Overloading an existing operator is fine and is the recommended way to give
-your own types arithmetic or comparison. Clauses defined for an operator are
-tried first; arguments no clause matches fall back to the operator's previous
-meaning, so the builtin behavior stays available:
+Overloading an existing operator for a type, beside the type's declaration, is
+the recommended way to give your own types arithmetic or comparison: the
+clauses [travel with the type](#functions-travel-with-types), tried first, and
+arguments no clause matches keep the operator's meaning:
 
 ```apn
 Money (m : Int) = _
-Money a + Money b = Money (a + b)   # the inner + is the builtin one
+Money a + Money b = Money (a + b)   # the inner + is +, these clauses included
 Money 3 + Money 4                       # Money 7
 1 + 2                                   # 3
 ```
@@ -606,15 +606,12 @@ to Int (Level n) = n
 Level 2 * 5                             # 10
 ```
 
-The math functions (`sqrt`, `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`,
-`atan`, `atan2`, `abs`, `floor`, `ceiling`, `truncate`, `round`, `min`, `max`),
-`get` and `with` ([indexing](#records)), and
-`negate` and `not` (so `-x` and `!x`) overload the same way, so a type can give
-them meaning too:
-`sin (Dual a b) = Dual (sin a) (b * cos a)` leaves `sin 0.5` as it was (the
-`glsl` module writes GLSL this way). Clauses overload only a function taking
-as many arguments: `log b x = ...` and the `http` module's `get request = ...`
-define new functions, as clauses for any other function do.
+Every other function works the same way, `get` and `with` ([indexing](#records))
+and `negate` and `not` (so `-x` and `!x`) included:
+`sin (Dual a b) = Dual (sin a) (b * cos a)` beside `Dual`'s declaration leaves
+`sin 0.5` as it was (the `glsl` module writes GLSL this way). Clauses join only
+a function taking as many arguments: `log b x = ...` and the `http` module's
+`get request = ...` define new functions.
 
 **Creating new operators is possible but not recommended.** A named function
 is easier to read, to search for and to explain; reach for a new symbol only
@@ -790,7 +787,26 @@ rebinds; parameter names do not matter, and `_` is a name nothing uses).
 clause, so `f = (x : Float) -> ...` after it overloads `f` exactly as a second
 clause would. A lambda whose parameter has the definition's own name
 (`x = x -> x`) stays a lambda, since as a clause that parameter would mean
-equality with `x`.
+equality with `x`. Clauses for a function the scope binds as another value
+(`get = intrinsics.get`, then `get True a = ...`) extend it too: what they do
+not take keeps its meaning. A definition in an inner scope shadows the visible
+function there, as any new version of a name does (a local `loop n = ...` is a
+function of its own).
+
+### Functions travel with types
+
+A type takes part in functions defined elsewhere as in Julia: clauses for a
+visible function, written for a type the same scope declares, join that
+function itself. They are for the type when a parameter's pattern names it or
+one of its constructors (`Money a + Money b`, `map f (Some x)`, `to String
+(Node l v r)`, `get (Grid cells) [r, c]`), or, for a method overloaded on its
+result, when the body makes one (`return = Some`, `return x = Parser ...`).
+Wherever a value of the type goes, code calling the function takes them first:
+a library's `sum` adds `Money`, a do-block's `>>=` runs a `Parser`, `print`
+shows a `Node` by its `to String`. They bind nothing in their own scope; the
+name keeps meaning the function, which now has them. Any other definition stays
+in its scope as above, so a program changes what a function means elsewhere
+only for its own types.
 
 ## IO actions
 
@@ -907,10 +923,11 @@ as `{ print 1; 2 }` is. IO is built in, as is a
 `return` still waiting for its monad; every other type, lists included (the
 prelude's `[] >>= f = []` and `(x :: rest) >>= f = f x ++ (rest >>= f)`), joins
 by **instances**: definitions of these methods,
-written like ordinary overloads, with parameters or curried (`map = mapTree`,
-`return = Some`). An instance adds to the method everywhere (prelude helpers,
-do-blocks and other modules see it) instead of shadowing it, and the newest
-instance whose clauses accept the arguments runs. `lib/std/option.apn` holds Option's and Result's:
+written like ordinary overloads, with parameters or curried (`return =
+Some`), written beside the type's declaration, so they [travel with
+the type](#functions-travel-with-types): prelude helpers, do-blocks and other
+modules see them, and the newest instance whose clauses accept the arguments
+runs. `lib/std/option.apn` holds Option's and Result's:
 
 ```apn
 map f (Some x) = Some (f x)
@@ -1547,8 +1564,9 @@ when first used (`shapes.solid.box`); a file wins over a folder of the same
 name, whose folder is then reached by path (`import "report/lines"`). Inside the
 library, a bare name is a module beside the file. A module is evaluated in a
 scope of its own, with the prelude and what it imports; the caller's bindings
-do not reach it. A method it defines (`map`, `>>=`, `return`, ...) is an
-instance from the moment it runs, opened or not (see "Monads and instances").
+do not reach it. Clauses it defines for its own types join their functions
+from the moment it runs, opened or not (see [functions travel with
+types](#functions-travel-with-types)).
 `load` is the prelude's `load file = map parse (intrinsics.readFileFrom (file ++
 ".apn"))`: an action reading `file.apn` beside the running file (again each time
 it runs), yielding its [code](#code). `parse source` is the code source writes,

@@ -1,7 +1,6 @@
 import { Interpreter } from "../src/interp.ts";
 import { parse } from "../main.ts";
-import { OVERLOADED_FUNCTIONS, METHODS } from "../src/ast.ts";
-import { isOperatorName } from "../src/parser.ts";
+import { isForTypes } from "../src/ast.ts";
 import { QUALIFIED_MODULES } from "../src/modules.ts";
 
 const decoded = (type: string, json: string) =>
@@ -208,15 +207,17 @@ const QUALIFIED = new Set([...QUALIFIED_MODULES, "playground"]);
 Deno.test("no two standard modules define the same name", () => {
     // A checked program cannot import two modules that bind one name to
     // different functions (a rebinding must keep its type).
-    const owners = new Map<string, string>();
+    const owners = new Map<string, string>(), prelude = new Interpreter();
     for (const entry of Deno.readDirSync(new URL("../lib/", import.meta.url))) {
         if (!entry.isFile || !entry.name.endsWith(".apn")) continue;
         const module = entry.name.slice(0, -4);
-        for (const statement of parse(Deno.readTextFileSync(new URL(`../lib/${entry.name}`, import.meta.url)), module)) {
-            // Instances (any definition of a method: map, return, empty, ...) join it, and clauses
-            // for an operator, a math function or get overload it; they bind no new name.
-            const instance = statement.t === "def" && (METHODS.has(statement.name) ||
-                (isOperatorName(statement.name) || OVERLOADED_FUNCTIONS.has(statement.name)) && statement.clauses[0].params.length > 0);
+        const statements = parse(Deno.readTextFileSync(new URL(`../lib/${entry.name}`, import.meta.url)), module);
+        const declared = new Set(statements.flatMap(s => s.t === "type" ? [s.def.name, ...s.def.variants.map(v => v.tag)] : []));
+        for (const statement of statements) {
+            // Clauses for the module's own types join the function they are
+            // named after (map f (Some x) = ..., return = Some); they bind no new name.
+            const instance = statement.t === "def" && prelude.env.get(statement.name) !== undefined &&
+                isForTypes(statement.clauses, name => declared.has(name), true);
             const names = instance ? [] : statement.t === "def" ? [statement.name]
                 : statement.t === "type" ? [statement.def.name, ...statement.def.variants.map(v => v.tag)]
                 : statement.t === "patDef" && statement.pattern.p === "var" ? [statement.pattern.name] : [];

@@ -37,6 +37,12 @@ for (const [name, source, expected] of [
     ["an overload falls back to the builtin", "Money = | Money Int\nMoney a + Money b = Money (a + b)\nprint (Money 3 + Money 4)\nprint (1 + 2)\nprint (\"a\" + \"b\")",
         ["Money 7", "3", "ab"]],
     ["a literal clause falls back to the builtin for other arguments", "1 + 1 = 3\nprint (1 + 1)\nprint (1 + 2)\nprint (2 + 2)", ["3", "3", "4"]],
+    // Clauses for a type travel with its values: code elsewhere (foldl's +)
+    // takes them, in a block's type too; a block's other clauses shadow.
+    ["clauses for a type travel with it", "Money = | Money Int\nMoney a + Money b = Money (a + b)\nprint (foldl (+) (Money 0) [Money 1, Money 2])\n" +
+        "f n = {\n    Box (v : Int) = _\n    Box a + Box b = Box (a + b)\n    foldl (+) (Box n) [Box 1]\n}\nprint (f 2)\n" +
+        "g n = {\n    x + y = x * y\n    n + 3\n}\nprint [g 2, 2 + 3]",
+        ["Money 3", "Box 3", "[6,5]"]],
     ["a new operator with a fixity", "infixr 5 +|+\nxs +|+ ys = xs ++ [0] ++ ys\nprint ([1] +|+ [2] +|+ [3])", ["[1,0,2,0,3]"]],
     ["an undeclared operator is infixl 9", "a <-> b = a - b\nprint (10 <-> 3 <-> 2)\nprint (2 * 5 <-> 1)", ["5", "8"]],
     ["an operator bound to a function", "(<||>) = max\nprint (3 <||> 7)\nprint ((<||>) 9 1)", ["7", "9"]],
