@@ -5,7 +5,7 @@ import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
 import { IMPORT_ONE, standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
-import { castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, numericType, SCALAR_TYPES, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
+import { castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
 import { APNError, didYouMean, formatFileReadError, typeApplied, withArticle } from "./errors.ts";
 import { bindingItem, DEFAULT_FIXITY, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
@@ -405,14 +405,19 @@ function untypedPayload(t: Ty): Ty {
     if (t.name === "ComplexExact") return atom("Complex");
     return t;
 }
-// A sized or unsigned integer type with a plain integer keeps its type, as at
-// runtime (UInt 5 - 1 is UInt 4; a result it cannot hold is a runtime error).
+// A sized or unsigned integer type with an Int keeps its type, as at runtime
+// (UInt 5 - 1 is UInt 4; a result it cannot hold is a runtime error); two
+// different ones do not mix (see typedArithmetic).
 function integerResult(a: Ty, b: Ty): Ty | undefined {
     if (a.k !== "atom" || b.k !== "atom") return undefined;
-    const sized = (name: string) => /^U?Int(8|16|32|64|128)?$/.test(name) && name !== "Int";
-    if (a.name === "Int" && sized(b.name)) return b;
-    if (b.name === "Int" && sized(a.name)) return a;
+    if (a.name === "Int" && sizedInteger(b.name)) return b;
+    if (b.name === "Int" && sizedInteger(a.name)) return a;
     return undefined;
+}
+// Two different sized integer types, which do not mix.
+function mixedSizes(a: Ty, b: Ty): [string, string] | undefined {
+    const [left, right] = a.k === "atom" && b.k === "atom" ? [sizedInteger(a.name), sizedInteger(b.name)] : [];
+    return left && right && left !== right ? [left, right] : undefined;
 }
 const fn = (input: Ty, output: Ty, binder?: string, coerce = false): Ty => ({ k: "fn", input, output, binder, coerce });
 const list = (element: Ty, length?: Index): Ty => ({ k: "list", element, length });
@@ -1616,6 +1621,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The result of arithmetic on two numeric types: lossless says which
     // operands are known lossless Ints.
     function arithmeticResult(op: string, x: Extract<Ty, { k: "atom" }>, y: Extract<Ty, { k: "atom" }>, lossless: boolean[] = []): Ty {
+        const mixed = mixedSizes(x, y);
+        if (mixed) return problem(`cannot combine ${mixed[0]} and ${mixed[1]}`, undefined, `convert one explicitly, as in \`(x : ${mixed[1]})\``);
         const binary64 = (t: Extract<Ty, { k: "atom" }>) => t.name === "Float" || t.name === "Float64";
         if (binary64(x) && y.name === "Int" && lossless[1]) return x;
         if (binary64(y) && x.name === "Int" && lossless[0]) return y;

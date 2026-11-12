@@ -3,7 +3,9 @@ import { Interpreter } from "../src/interp.ts";
 import { APNError } from "../src/errors.ts";
 
 for (const [source, expected] of [
-    ["xs = [(1 : Int32) + (2 : Int64), (1 : Int8) + (2 : Int)]; [xs, map typeOf xs]", "[[3,3],[Int64,Int]]"],
+    // A sized integer with an Int keeps its type; two different ones do not mix.
+    ["x = (2 : Int64) : Int32; xs = [(1 : Int32) + 2, (1 : Int8) + (2 : Int), (1 : Int32) + x]\n[xs, map typeOf xs]",
+        "[[3,3,3],[Int32,Int8,Int32]]"],
     ["[1,2] * Int", "[1,2]"],
     ['f (x : Number) = 1\nf 0 = 2\nf 0', '2'],
     ["typeOf $ True", "Bool"],
@@ -77,7 +79,7 @@ for (const [source, expected] of [
         if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
     });
 }
-for (const source of ["(123 : String)", "(True : Char)", "List 1", "([] : Record)", "(2 : Function)", "(1 : Type)", "[] 1", "(1 : Variant)", "((3.7 : Float) : Int)", "(2147483648 : Int32)", "(-1 : UInt)", "(4294967296 : UInt32)", "(127 : Int8) + (1 : Int8)", "(1233421412 : Int32) + 123512512351245342332", "(1233421412 : Int32) + 1000000000", "cast UInt -1", "cast Int8 128", "1/3 + .5", "f (x : Float32) = x\nf (.1 : Float)"]) {
+for (const source of ["(123 : String)", "(True : Char)", "List 1", "([] : Record)", "(2 : Function)", "(1 : Type)", "[] 1", "(1 : Variant)", "((3.7 : Float) : Int)", "(2147483648 : Int32)", "(-1 : UInt)", "(4294967296 : UInt32)", "(127 : Int8) + (1 : Int8)", "(1 : Int32) + (2 : Int64)", "(1 : UInt8) * (2 : UInt16)", "(1233421412 : Int32) + 123512512351245342332", "(1233421412 : Int32) + 1000000000", "cast UInt -1", "cast Int8 128", "1/3 + .5", "f (x : Float32) = x\nf (.1 : Float)"]) {
     Deno.test(`checked type conversion: ${source}`, () => {
         try { const interp = new Interpreter(); interp.renderString(interp.run(parse(source))); }
         catch (e) { if (e instanceof APNError) return; throw e; }

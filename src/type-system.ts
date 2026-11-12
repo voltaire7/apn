@@ -109,41 +109,36 @@ export function typedPower(a: Numeric, b: Numeric): Numeric {
 function integerQuotient(result: Numeric): Numeric {
     return { ...result, typeName: result.kind === "rational" ? "Fraction" : "Float" };
 }
+// A sized integer type (Int8 ... UInt128, UInt): a type of its own over a
+// range of Int (docs/intrinsics.md); Int itself is none.
+export function sizedInteger(name: string | undefined): string | undefined {
+    return name && name !== "Int" && /^U?Int(8|16|32|64|128)?$/.test(name) ? name : undefined;
+}
+// As the APN model of the sized integers defines them: the same type keeps
+// it, a sized integer with an Int keeps the sized type, the result (not the
+// Int) being what must fit, and two different sized types do not mix. Other
+// numbers follow the numeric tower.
 export function typedArithmetic(op: string, a: Numeric, b: Numeric): Numeric {
     const floats = floatingOperands(a, b);
     if (floats) return castNumeric(floats[2], arithmetic(op, floats[0], floats[1]), true);
-    let target: string | undefined;
-    if (a.typeName && b.typeName && canonical(a.typeName) === canonical(b.typeName)) target = a.typeName === b.typeName ? a.typeName : canonical(a.typeName);
-    else if (a.typeName && b.typeName) {
-        const rank = (name: string) => name.startsWith("Complex") ? 1000 : name === "Float" || name === "Float64" ? 900 : name === "Float32" ? 800 : name === "Fraction" ? 700 : name === "Int" || name === "UInt" ? 600 : Number(name.match(/\d+/)?.[0] ?? 0);
-        const candidates = [a.typeName, b.typeName].sort((x, y) => rank(y) - rank(x));
-        for (const name of candidates) {
-            try { castNumeric(name, a); castNumeric(name, b); target = name; break; } catch { /* try the other operand type */ }
-        }
+    const left = sizedInteger(a.typeName), right = sizedInteger(b.typeName);
+    if (left && right && left !== right) {
+        throw new APNError("runtime", `cannot combine ${left} and ${right}`, { hint: `convert one explicitly, as in \`(x : ${right})\`` });
     }
-    else if (a.typeName && !b.typeName) target = a.typeName;
-    else if (b.typeName && !a.typeName) target = b.typeName;
-    // A sized integer with a plain integer keeps its type, and the result,
-    // not the plain operand, is what it must hold: (2000000000 : Int32) -
-    // 3000000000 is the Int32 -1000000000, and Int32 + 10^20 an error.
-    const plainInteger = (v: Numeric) => !v.typeName && v.kind === "int";
-    if (target && /^U?Int/.test(target) && !(a.typeName && b.typeName) && (plainInteger(a) || plainInteger(b))) {
-        const [left, right] = implicitOperands(a, b), result = arithmetic(op, left, right);
-        return result.kind === "int" ? castNumeric(target, result) : integerQuotient(result);
+    const sized = left ?? right;
+    if (sized) {
+        const [l, r] = implicitOperands(a, b), result = arithmetic(op, l, r);
+        if (a.kind !== "int" || b.kind !== "int") return result;
+        return result.kind === "int" ? castNumeric(sized, result) : integerQuotient(result);
     }
+    // Another typed number keeps its type with an untyped one or its own
+    // ((1 : Float32) / 10 is a Float32), where both convert to it.
+    let target = a.typeName && b.typeName ? (a.typeName === b.typeName ? a.typeName : canonical(a.typeName) === canonical(b.typeName) ? canonical(a.typeName) : undefined) : a.typeName ?? b.typeName;
     if (target && !["Number", "Real", "Integer", "Exact", "Inexact"].includes(target)) {
-        try { a = castNumeric(target, a); b = castNumeric(target, b); }
-        catch (e) {
-            // A broader existing operand type can represent both without loss.
-            target = undefined;
-        }
-    }
-    const [left, right] = implicitOperands(a, b);
-    const result = arithmetic(op, left, right);
-    if (!target) return result;
-    if (/^(U?Int)/.test(target) && result.kind !== "int") return integerQuotient(result);
-    // Floating arithmetic rounds as part of the operation, not an implicit cast.
-    return castNumeric(target, result, target === "Float" || target === "Float64" || target === "Float32");
+        try { a = castNumeric(target, a); b = castNumeric(target, b); } catch { target = undefined; }
+    } else target = undefined;
+    const [l, r] = implicitOperands(a, b), result = arithmetic(op, l, r);
+    return target ? castNumeric(target, result, ["Float", "Float32", "Float64"].includes(target)) : result;
 }
 export function numericHash(v: Numeric): string {
     const x = toExact(v);
