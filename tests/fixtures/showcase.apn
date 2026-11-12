@@ -1855,7 +1855,7 @@ print (AccountId 7)                  # => AccountId 7
 print (getAccountId (AccountId 7))   # => 7
 print (AccountId 2 + AccountId 3)    # => AccountId 5
 print (AccountId == Int)             # => False
-idKind (_ : AccountId) = "account"
+idKind (_ : AccountId Int) = "account"
 idKind (_ : Int) = "int"
 print [idKind (AccountId 1), idKind 1] # => ["account","int"]
 double (n : Int) = n * 2

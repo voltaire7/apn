@@ -56,13 +56,13 @@ Deno.test("a type named apart from its constructor describes a field", () => {
     const source = 'Box a = | MkBox a\nWrap a = | Wrap (Box a)\nWrap (MkBox 1)';
     if (result(source) !== "Wrap (MkBox 1)") throw new Error(result(source));
 });
-// A constructor named as its type is the type where a type is expected:
-// after a declaration's or an ascription's ':', checked and run alike.
+// A constructor applied to a type for each field is the type of the values
+// it makes: after a declaration's or an ascription's ':', checked and run alike.
 for (const [source, expected] of [
-    ['Point = | Point Int Int\nr : Point = Point 1 2\nr', 'Point 1 2'],
-    ['Point = | Point Int Int\nx : Point\nx = Point 1 2\nx', 'Point 1 2'],
+    ['Point = | Point Int Int\nr : Point Int Int = Point 1 2\nr', 'Point 1 2'],
+    ['Point = | Point Int Int\nx : Point Int Int\nx = Point 1 2\nx', 'Point 1 2'],
     ['Box a = | Box a\nq : Box Int = Box 4\n[q, typeOf q]', '[Box 4, Box Int]'],
-    ['Point = | Point Int Int\nps : List Point = [Point 1 2]\nps', '[Point 1 2]'],
+    ['Point = | Point Int Int\nps : List (Point Int Int) = [Point 1 2]\nps', '[Point 1 2]'],
 ] as const) for (const checked of [true, false]) Deno.test(`a constructor names its type (checked=${checked}): ${source}`, () => {
     const interpreter = new Interpreter();
     if (checked) interpreter.enableChecking();
@@ -89,7 +89,7 @@ for (const checked of [true, false]) Deno.test(`a union of types is written in p
 // field to its name; a constructor takes one as a field, converting a list.
 for (const [source, expected] of [
     ['len3 [x : Int, y : Int, z : Int] = x + y + z\n[len3 [1,2,3], len3 [x = 1, y = 2, z = 4]]', '[6,7]'],
-    ['Vector3 [x : Int, y : Int, z : Int] = _\nv = Vector3 [1,2,3]\nsx (Vector3 [x = a]) = a\n[v, sx v, typeOf v]', '[Vector3 [x = 1, y = 2, z = 3], 1, Vector3]'],
+    ['Vector3 [x : Int, y : Int, z : Int] = _\nv = Vector3 [1,2,3]\nsx (Vector3 [x = a]) = a\n[v, sx v, typeOf v]', '[Vector3 [x = 1, y = 2, z = 3], 1, Vector3 [x : Int, y : Int, z : Int]]'],
 ] as const) for (const checked of [true, false]) Deno.test(`a record pattern of types (checked=${checked}): ${source}`, () => {
     const interpreter = new Interpreter();
     if (checked) interpreter.enableChecking();

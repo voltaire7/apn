@@ -17,7 +17,7 @@ import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWit
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, type PatternHead, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, isUse } from "./ast.ts";
@@ -258,7 +258,10 @@ export class Interpreter {
     }
     private refinedMember(type: Value, v: Value): Value | undefined {
         if (type.kind === "type" && type.refine) {
-            const member = this.refinedMember(this.reference(type.choices![0]), v);
+            let member = this.refinedMember(this.reference(type.choices![0]), v);
+            // A constructor's type converts another value as its to instance
+            // declares (to (Money Float) (x : Float) = Money x).
+            if (member === undefined && type.made) { const made = this.declaredConversion(type, v); if (made) member = this.dataValue(made); }
             return member !== undefined && this.truthy(this.demand(this.apply(type.refine, member))) ? member : undefined;
         }
         try { return this.conform(type, v); } catch (error) { if (error instanceof APNError) return undefined; throw error; }
@@ -937,7 +940,8 @@ export class Interpreter {
         const v = this.demand(arg);
         if (this.converting.has(v)) return undefined;
         this.converting.add(v);
-        try { return this.instance("to", [type, v]); } finally { this.converting.delete(v); }
+        const target = this.reference(type);
+        try { return this.instance("to", [target.kind === "type" && target.made ? target.made : type, v]); } finally { this.converting.delete(v); }
     }
     private converting = new Set<Value>();
 
@@ -1379,6 +1383,12 @@ export class Interpreter {
     private defaultField(v: Value, path: readonly Value[]): Value {
         v = this.force(v);
         v = this.sharedType(v) ?? v;
+        // A constructor's type (UserId Int) defaults as its type does, when
+        // that default is one of its values (UserId 0).
+        if (v.kind === "type" && v.refine && v.choices?.length === 1) {
+            const made = this.zeroValue(this.reference(v.choices[0]), path);
+            if (made.kind !== "type" && this.belongsToType(v, made)) return made;
+        }
         if (v.kind === "type") v = this.zeroValue(v, path);
         if (v.kind === "type" || v.kind === "functionType") throw new APNError("runtime", "this type needs an explicit default value");
         if (v.kind === "record") {
@@ -2242,8 +2252,10 @@ export class Interpreter {
                 }
                 const args = [...f.applied, arg];
                 if (args.length < f.arity) return { ...f, applied: args };
+                // A constructor given a type for each field is the type of
+                // the values it makes: its logic runs only on values (Mod7 Int).
+                if (f.name === "__constr" && (!f.invoke || args.every(x => this.isTypeValue(this.demand(x))))) return this.variantValue(f.tag!, args, f.family);
                 if (f.invoke) return f.invoke(args);
-                if (f.name === "__constr") return this.variantValue(f.tag!, args, f.family);
                 if (f.name === "use" && tailLoad) {
                     const code = this.dataValue(args[0]);
                     if (this.isList(code) && this.codeItems(code)) throw new TailLoad(code, this.env);
@@ -3061,8 +3073,13 @@ export class Interpreter {
         const family = (v: Value) => v.kind === "variant" && v.family ? v.family : undefined;
         const lf = family(l), rf = family(r);
         if (!lf && !rf || lf === rf) return undefined;
-        const to = (v: Value, f?: VariantFamily) => f && this.instance("to", [{ kind: "type", name: f.name, family: f }, v]);
-        const left = to(l, rf), right = to(r, lf);
+        // Converted to the other's type, as a to instance for it is written.
+        const target = (other: Value): Value => {
+            const type = this.callNative("typeOf", [other]);
+            return type.kind === "type" && type.made ? type.made : { kind: "type", name: family(other)!.name, family: family(other) };
+        };
+        const to = (v: Value, other: Value, f?: VariantFamily) => f && this.instance("to", [target(other), v]);
+        const left = to(l, r, rf), right = to(r, l, lf);
         if (left && right) {
             throw new APNError("runtime", `ambiguous: '${op}' could convert ${lf!.name} to ${rf!.name} or ${rf!.name} to ${lf!.name}`,
                 { hint: `convert one explicitly, as in \`to ${rf!.name} x\`` });
@@ -3697,7 +3714,8 @@ export class Interpreter {
     }
 
     conform(typeIn: Value, value: Value): Value {
-        const read = this.reference(typeIn);
+        // A constructor given types (Point Int Int) is the type it names.
+        const given = this.reference(typeIn), read = given.kind === "variant" ? this.sharedType(given) ?? given : given;
         // A refinement's value is its base's, for which its condition holds.
         if (read.kind === "type" && read.refine) {
             const member = this.conform(read.choices![0], value);
@@ -3706,7 +3724,7 @@ export class Interpreter {
         }
         const written = this.asWritten.get(read);
         if (written) return this.writtenValue(read, this.conform(written.made, value));
-        const type = read.kind === "closure" || read.kind === "clauseFn" ? this.asType(read) ?? read : this.sharedType(read) ?? typeIn;
+        const type = read.kind === "closure" || read.kind === "clauseFn" ? this.asType(read) ?? read : read !== given ? read : typeIn;
         // A type variable not decided by a call takes any value.
         if (type.kind === "type" && type.variable) return value;
         if (type.kind === "type" && this.counted(type)) {
@@ -4192,25 +4210,63 @@ export class Interpreter {
     // Applied to types, one for each of its type's parameters, it is that type
     // applied to them (Box Int, Pair Int String); unbox (Box x) still takes a
     // Box apart, its pattern having as many arguments as it has fields.
+    // A constructor is a function that does not evaluate: applied to a type
+    // for each field, it is the type of the values it makes from them (Some
+    // Int, Box Int); a constructor taking fields, unapplied, is a function, and
+    // a nullary one a value (None), unless it is its type's own name (JSON).
     sharedType(v: Value): Extract<Value, { kind: "type" }> | undefined {
-        if (!(v.kind === "native" && v.tag || v.kind === "variant") || !v.family || v.family.name !== v.tag) return undefined;
-        if (v.kind === "native" && v.applied.length) return undefined;
+        if (v.kind !== "variant" || !v.family) return undefined;
         const type: Extract<Value, { kind: "type" }> = { kind: "type", name: v.family.name, family: v.family };
-        if (v.kind === "native" || !v.v.length) return type;
-        if (v.v.length !== this.typeArguments(v.family)) return undefined;
+        if (!v.v.length) return v.family.name === v.tag ? type : undefined;
+        let args: Value[];
+        try { args = v.v.map(field => this.reference(this.demand(field))); }
+        catch (error) { if (error instanceof APNError) return undefined; throw error; }
+        if (!args.every(arg => this.isTypeValue(arg))) return undefined;
+        // Its type's own constructor given its parameters is that type applied.
+        if (v.family.name === v.tag && v.v.length === this.typeArguments(v.family)) return { ...type, arguments: args };
+        return this.constructedType(v.family, v.tag, args);
+    }
+    // The types a constructor's fields are declared with, where they are types.
+    private declaredFieldTypes(family: VariantFamily, tag: string): Value[] | undefined {
+        const specs = family.fields?.get(tag);
+        if (!specs) return undefined;
+        const caller = this.env;
+        this.env = new Env(family.env);
         try {
-            const args = v.v.map(field => this.reference(this.demand(field)));
-            return args.every(arg => this.isTypeValue(arg)) ? { ...type, arguments: args } : undefined;
+            const types = specs.map(spec => this.asType(this.eval(spec)));
+            return types.every(Boolean) ? types as Value[] : undefined;
         } catch (error) {
             if (error instanceof APNError) return undefined;
             throw error;
-        }
+        } finally { this.env = caller; }
     }
-    // How many type arguments the constructor a name is bound to takes, if it
-    // shares its type's name (see typeArguments); -1 if not one.
-    private sharedParameters(name: string): number {
-        const bound = this.env.get(name), ctor = bound && this.reference(bound);
-        return ctor && this.sharedType(ctor) && ctor.kind !== "type" && "family" in ctor && ctor.family ? this.typeArguments(ctor.family) : -1;
+    // The type of the values a constructor makes from these types: those of
+    // its type it makes whose fields are of them, one type for one spelling.
+    private constructedTypes = new Map<string, Extract<Value, { kind: "type" }>>();
+    private constructedType(family: VariantFamily, tag: string, args: Value[]): Extract<Value, { kind: "type" }> {
+        const key = `${this.familyKey(family)} ${tag} ${args.map(arg => this.typeKey(arg)).join(" ")}`;
+        let made = this.constructedTypes.get(key);
+        if (!made) {
+            const test: Value = { kind: "native", name: "$constructed", arity: 1, applied: [], invoke: ([given]) => {
+                const v = this.dataValue(given);
+                return mkBool(v.kind === "variant" && v.family === family && v.tag === tag && v.v.length === args.length &&
+                    args.every((arg, n) => arg.kind === "type" && arg.variable || this.belongsToType(arg, v.v[n])));
+            } };
+            const name = this.appliedName(tag, args);
+            // It is written as the constructor applied to the types, which a
+            // to instance for it takes apart: to (Money Float) (x : Float).
+            const written: Value = { kind: "variant", tag, family, v: args };
+            made = { kind: "type", name, choices: [{ kind: "type", name: family.name, family }], refine: test, made: written };
+            this.constructedTypes.set(key, made);
+        }
+        return made;
+    }
+    private familyKeys = new WeakMap<VariantFamily, number>();
+    private familyCount = 0;
+    private familyKey(family: VariantFamily): number {
+        let key = this.familyKeys.get(family);
+        if (key === undefined) this.familyKeys.set(family, key = this.familyCount++);
+        return key;
     }
     // How many type arguments a constructor sharing its type's name takes
     // where a type is expected: its type's parameters, when its fields are
@@ -4236,18 +4292,20 @@ export class Interpreter {
         return t?.kind === "type" && !!t.alias && !(t.alias.run.kind === "clauseFn" && isUnionBody(t.alias.run.clauses[0].body));
     }
     // What a typed pattern's type name is here (see rewriteTypedPatterns): a
-    // constructor or a function type, taking its value whole, or a type
-    // taking so many parameters.
-    private patternHead(name: string): { schema: boolean; arity: number } | undefined {
+    // constructor with so many fields, a type taking so many parameters, or
+    // another value read as a type (a function type).
+    private patternHead(name: string): PatternHead | undefined {
         const bound = this.env.get(name);
         if (!bound) return undefined;
         const t = this.reference(bound);
-        if (t.kind === "native" && t.tag || t.kind === "variant" || t.kind === "closure" || t.kind === "functionType") return { schema: true, arity: 0 };
+        if (t.kind === "native" && t.tag) return { kind: "constructor", fields: t.arity - t.applied.length };
+        if (t.kind === "variant") return t.v.length ? { kind: "schema" } : { kind: "constructor", fields: 0 };
+        if (t.kind === "closure" || t.kind === "functionType") return { kind: "schema" };
         if (t.kind !== "type") return undefined;
         const given = t.arguments?.length ?? 0;
         const takes = t.alias ? t.alias.parameters.length : t.family ? t.family.parameters?.length ?? 0
             : this.counted(t) ? 2 : !t.family && (t.name === "List" || t.name === "IO") ? 1 : 0;
-        return { schema: false, arity: Math.max(0, takes - given) };
+        return { kind: "type", arity: Math.max(0, takes - given) };
     }
     // Whether a name is bound to the list's cons (the prelude's Cons).
     private namesCons(name: string): boolean {
@@ -4314,6 +4372,10 @@ export class Interpreter {
                     try {
                         const type = this.asType(this.eval(spec));
                         if (!type) throw new APNError("runtime", `constructor ${tag} field must describe a type`);
+                        // Given a type for a field of values, the constructor
+                        // makes the type of the values it makes (UserId Int).
+                        const given = this.reference(value);
+                        if (this.isTypeValue(given) && !(type.kind === "type" && type.name === "Type" && !type.family)) return given;
                         return this.conform(type, value);
                     } finally { this.env = caller; }
                 });
@@ -4663,6 +4725,12 @@ export class Interpreter {
                 if (step.op === "call") return { kind: "type", inspect: true, name: "Undecided", description: [...new Set(step.choices.map(c => this.clauseHead(c, step.fn.env) ?? "a"))].join(" | ") };
                 const held = step.op === "return" ? this.typeText(step.value) : "a";
                 return { kind: "type", inspect: true, name: "Undecided", description: `m ${/\s/.test(held) && !/^[[(]/.test(held) ? `(${held})` : held}` };
+            }
+            // A type named by its one constructor, which unapplied is a function,
+            // is that constructor applied to its fields' types (UserId Int).
+            if (value.kind === "variant" && value.family && value.family.name === value.tag && value.v.length && this.typeArguments(value.family) < 0) {
+                const types = this.declaredFieldTypes(value.family, value.tag);
+                if (types) return this.constructedType(value.family, value.tag, types);
             }
             if (value.kind === "variant" && value.family) return { kind: "type", inspect: true, name: value.family.name, family: value.family, arguments: this.variantArguments(value) };
             if (isNumeric(value)) return { kind: "type", inspect: true, name: numericType(value) };
@@ -5279,13 +5347,17 @@ export class Interpreter {
     // type or a schema (a record or list of types), not a scalar (see Count =
     // Int) nor a constructor (an alias of one is that constructor), nor the
     // empty list, a value first (Nil = []).
+    // A type's name applied to these (Box Int, Vector3 [x : Int], Pairs (Box Int)).
+    private appliedName(name: string, args: Value[]): string {
+        return [name, ...args.map(arg => this.renderString(arg)).map(text => /\s/.test(text) && !/^\[.*\]$/.test(text) ? `(${text})` : text)].join(" ");
+    }
     private remembered(name: string, args: Value[], made: Value): Value {
         const remembers = made.kind === "type" ? !made.variable && !(SCALAR_NAMES.has(made.name) && !made.arguments?.length && !made.family)
             : (made.kind === "record" || this.isList(made) && this.cell(made) !== null) && this.isTypeValue(made);
         if (!remembers) return made;
         // A union of list types is known by its name (Pairs Int), not its unread choices.
         const named = (made.kind === "type" && made.choices && !made.name
-            ? { ...made, name: [name, ...args.map(arg => this.renderString(arg))].map(text => /\s/.test(text) ? `(${text})` : text).join(" ") }
+            ? { ...made, name: this.appliedName(name, args) }
             : { ...made }) as Value;
         this.asWritten.set(named, { name, args, made });
         return named;
@@ -5454,8 +5526,9 @@ export class Interpreter {
         return owner.kind === "type" || owner.kind === "clauseFn" ? owner.name : undefined;
     }
     private ownerFamily(given: Value): VariantFamily {
-        // A constructor sharing its type's name is the type here (Box x = _).
-        const owner = this.sharedType(given) ?? given;
+        // A constructor names its type here (Box x = _ is tag Box Box [x]).
+        if ((given.kind === "native" && given.tag || given.kind === "variant") && given.family) return given.family;
+        const owner = given;
         if (owner.kind === "type" && owner.family) return owner.family;
         const key = owner.kind === "type" ? owner.alias : owner.kind === "clauseFn" ? owner.clauses : undefined, name = this.ownerName(owner);
         if (!key || !name || !/^[A-Z]/.test(name)) {
@@ -5842,12 +5915,6 @@ export class Interpreter {
             const given = this.reference(v);
             return given.kind === "type" && given.name === p.tag && given.arguments?.length === parameters &&
                 p.args.every((arg, n) => this.matchPattern(arg, given.arguments![n], binds));
-        }
-        // (Box Int x): one more argument than Box's fields is a value of Box Int.
-        const shared = p.p === "constr" && p.args.length ? this.sharedParameters(p.tag) : -1;
-        if (p.p === "constr" && shared >= 0 && p.args.length === shared + 1) {
-            const flat = flatTypedPattern(p, () => shared);
-            if (flat) return this.matchPattern(flat, v, binds);
         }
         if (p.p === "constr" && parameters && p.args.length === parameters + 1) {
             // (Vect n a xs) takes a vector apart: a mismatch fails the match.

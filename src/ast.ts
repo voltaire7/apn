@@ -47,8 +47,8 @@ export type Expr =
     | { t: "patDef"; pattern: Pattern; value: Expr; eager?: boolean; update?: { name: string; value: Expr; error?: string } };
 
 export type Pattern =
-    | { p: "as"; left: Pattern; right: Pattern }
-    | { p: "schema"; type: Expr; value: Pattern }
+    | { p: "as"; left: Pattern; right: Pattern; written?: Pattern }
+    | { p: "schema"; type: Expr; value: Pattern; written?: Pattern }
     | { p: "wildcard" }
     | { p: "var"; name: string }
     | { p: "int"; v: bigint }
@@ -324,28 +324,59 @@ export function rewriteInfixConstructors(node: unknown, tagOf: (op: string) => s
     for (const key of Object.keys(n)) delete n[key];
     Object.assign(n, { p: "constr", tag, args });
 }
+// What the name a typed pattern (p : T args) is written with is where it
+// runs: a type taking so many parameters, a constructor with so many fields,
+// or another value read as a type (a function type: Handler = a -> Int).
+export type PatternHead = { kind: "type"; arity: number } | { kind: "constructor"; fields: number } | { kind: "schema" };
 // (p : T args), written as the typed pattern {T args p, typed}, by what T is
-// where it runs (head): a constructor's or a function type's is the schema
-// (p : T args), taking the value whole ((b : Box) of Box 1); a type given
-// fewer arguments than it takes gets _ for the rest ((xs : List) is
-// (xs : List _)).
-export function rewriteTypedPatterns(node: unknown, head: (tag: string) => { schema: boolean; arity: number } | undefined): void {
+// where it runs (head). A type given fewer arguments than it takes gets _ for
+// the rest ((xs : List) is (xs : List _)). A constructor is a function that
+// does not evaluate: given a type for each field it is the values it makes,
+// (b : Box Int) the pattern b.(Box (_ : Int)) and (x : None) x.None; given
+// fewer, the function type of the rest, (x : Some) is (x : a -> Some a).
+// Another value is the schema (p : T args).
+export function rewriteTypedPatterns(node: unknown, head: (tag: string) => PatternHead | undefined): void {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) { node.forEach(x => rewriteTypedPatterns(x, head)); return; }
     const n = node as Record<string, unknown>;
     for (const value of Object.values(n)) if (value && typeof value === "object") rewriteTypedPatterns(value, head);
     if (n.p !== "constr" || !n.typed) return;
-    const args = n.args as Pattern[], kind = head(n.tag as string);
+    const tag = n.tag as string, args = n.args as Pattern[], kind = head(tag);
     if (!kind || !args.length) return;
-    const given = args.slice(0, -1), value = args[args.length - 1];
-    if (kind.schema) {
-        const type = typeOfArguments(n.tag as string, given);
-        if (!type) return;
-        for (const key of Object.keys(n)) delete n[key];
-        Object.assign(n, { p: "schema", type, value });
+    const given = args.slice(0, -1), value = args[args.length - 1], written = { ...n } as Pattern;
+    const replace = (pattern: Pattern) => { for (const key of Object.keys(n)) delete n[key]; Object.assign(n, pattern, { written }); };
+    if (kind.kind === "type") {
+        if (given.length < kind.arity) n.args = [...given, ...Array.from({ length: kind.arity - given.length }, (): Pattern => ({ p: "wildcard" })), value];
         return;
     }
-    if (given.length < kind.arity) n.args = [...given, ...Array.from({ length: kind.arity - given.length }, (): Pattern => ({ p: "wildcard" })), value];
+    if (kind.kind === "schema") {
+        const type = typeOfArguments(tag, given);
+        if (type) replace({ p: "schema", type, value });
+        return;
+    }
+    // Given types for its fields, the schema (b : Box Int), which converts a
+    // value as ascription does; with _ among them (b : Box _), or none to give
+    // (x : None), the pattern of what it makes: b.(Box _), x.None.
+    // A type variable among them (b : Box t) binds the field's type instead.
+    const type = given.length === kind.fields && given.length ? typeOfArguments(tag, given) : undefined;
+    if (type && !typeVariables(type).length) { replace({ p: "schema", type, value }); return; }
+    if (given.length === kind.fields) {
+        // Each field's type is a typed pattern around _: Int is (_ : Int).
+        const field = (q: Pattern): Pattern => {
+            if (q.p === "var") return { p: "typeBind", name: q.name, value: { p: "wildcard" } };
+            if (q.p !== "constr") return q;
+            const typed: Pattern = { ...q, args: [...q.args, { p: "wildcard" }], typed: true };
+            rewriteTypedPatterns(typed, head);
+            return typed;
+        };
+        replace({ p: "as", left: value, right: { p: "constr", tag, args: given.map(field) } });
+        return;
+    }
+    if (given.length > kind.fields) return;
+    // The function type of the fields not given: a -> Some a.
+    const rest = Array.from({ length: kind.fields - given.length }, (_, i) => String.fromCharCode(97 + i));
+    const applied = typeOfArguments(tag, [...given, ...rest.map((name): Pattern => ({ p: "var", name }))]);
+    if (applied) replace({ p: "schema", type: rest.reduceRight<Expr>((body, name) => ({ t: "lambda", params: [name], body }), applied), value });
 }
 // A type argument written as a pattern, as the expression it is.
 function patternAsType(q: Pattern): Expr | undefined {
@@ -385,12 +416,15 @@ function knownArguments(p: Pattern, bound: Set<string>, computed: (tag: string) 
     }
     if (p.p !== "constr" || !p.typed || p.args.length < 2 || !computed(p.tag)) return;
     const type = typeOfArguments(p.tag, p.args.slice(0, -1));
-    const names: string[] = [], walk = (e: Expr): void => { if (e.t === "var" && /^[a-z]/.test(e.name)) names.push(e.name); else if (e.t === "app") { walk(e.f); walk(e.a); } };
-    if (type) walk(type);
-    if (!type || !names.every(name => bound.has(name))) return;
+    if (!type || !typeVariables(type).every(name => bound.has(name))) return;
     const value = p.args[p.args.length - 1];
     for (const key of Object.keys(n)) delete n[key];
     Object.assign(n, { p: "schema", type, value });
+}
+// The lowercase names a type expression written as patterns holds (Pairs n a).
+function typeVariables(e: Expr): string[] {
+    if (e.t === "var") return /^[a-z]/.test(e.name) ? [e.name] : [];
+    return e.t === "app" ? [...typeVariables(e.f), ...typeVariables(e.a)] : [];
 }
 // The pattern Name args is when Name is a constructor where it runs (Some x =
 // m binds x): a list's cell when Name is the list's cons (Cons x xs = [1,2]).

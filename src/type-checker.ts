@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -64,7 +64,7 @@ type Ty =
     // function's code, so they are trusted only at a direct call by name.
     // shared: a constructor sharing its type's name (Box x = _, Nothing = _),
     // which is that type where a type is expected (sharedType).
-    | { k: "fn"; input: Ty; output: Ty; shared?: boolean; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; summary?: Summary }
+    | { k: "fn"; input: Ty; output: Ty; shared?: boolean; constructs?: boolean; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; summary?: Summary }
     // formula: a list literal's code; open: the names its code reads that are
     // bound nowhere yet (a list joined before it may bind them), by where read.
     // endless: infinitely many elements, [Int..] ([1..], a range of a type).
@@ -1663,6 +1663,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             for (const [key, value] of t.fields) result.fields.set(key, schemaValue(value, e, seen));
             return result;
         }
+        // A constructor taking fields, unapplied, is a function: its own type.
+        let made: Ty = t;
+        while (made.k === "fn") made = resolve(made.output);
+        if (t.k === "fn" && made.k === "variant") return t;
         // A lambda (Handler = a -> IO []) where a type is expected is the
         // function type it spells: its parameter any type, its result read as one.
         if (t.k === "fn") return fn(variable(), schemaValue(t.output, e, seen));
@@ -2250,11 +2254,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         hint: module ? `${openHint(module)} to use \`${p.tag}\`` : near ? `did you mean '${near}'?`
                             : `declare a type with \`${p.tag}\` first` };
                 }
-                // A bare constructor sharing its type's name is the type there,
-                // as a bare type name is: to Money (Float x) = ...
-                if (!p.args.length && t.k === "fn" && sharedType(t)) {
-                    unify(expected, { k: "type", value: sharedType(t)! }, e);
-                    return;
+                // A constructor given a type name for each field that holds no
+                // type is the type of the values it makes, as a bare type name is
+                // the type: to (Money Float) (x : Float) = ...
+                const named = (q: Pattern) => q.p === "constr" && !q.args.length && resolve(scope.get(q.tag)?.type ?? dynamic).k === "type";
+                if (t.k === "fn" && t.constructs && p.args.length && p.args.every(named)) {
+                    let made: Ty = t;
+                    const fields: Ty[] = [];
+                    for (; made.k === "fn"; made = resolve(made.output)) fields.push(resolve(made.input));
+                    if (fields.length === p.args.length && fields.every(f => !(f.k === "atom" && f.name === "Type") && f.k !== "var")) {
+                        unify(expected, { k: "type", value: made }, e);
+                        return;
+                    }
                 }
                 // A capitalized function that tags its result (Box a = tag Box
                 // Box [a]), taken apart: (Box x) binds its fields.
@@ -2788,6 +2799,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (!valueBlind(f)) argument = { ...argument, ...needed(argument) };
         // A Mutable cell applies as its contents (an index into a list cell).
         while (f.k === "mutable") f = resolve(f.value);
+        // A constructor given a type for a field that is no type is the
+        // values it makes from that type's (UserId Int, Point Int Int), as at
+        // runtime: applied to a value of it, then a type once complete.
+        if (f.k === "fn" && f.constructs) {
+            const given = resolve(argument.type), input = resolve(f.input);
+            if (given.k === "type" && !(input.k === "atom" && input.name === "Type") && input.k !== "type" && input.k !== "var") {
+                const out = application(f, { type: given.value }, e, builtin), made = resolve(out);
+                return made.k === "fn" ? { ...made, constructs: true } : made.k === "variant" ? { k: "type", value: made } : out;
+            }
+        }
         if (f.k === "intrinsic") {
             const args = [...f.args ?? [], argument.type], entries = [...f.entries ?? [], argument];
             if (f.name === "get" && args.length === 1) builtinGetter(args[0], e);
@@ -3316,38 +3337,26 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return problem(`cannot apply ${text(f)}`, e);
     }
     // A list or record of types (Point = [x: Float, y: Float]) describes a type.
-    // The type a constructor sharing its name stands for, as at runtime
-    // (Interpreter.sharedType).
-    // Applied to a type for each of its type's parameters (Box Int), it is
-    // that type applied to them; given values (Box 5), a value.
+    // A constructor applied to types is the type of the values it makes, as at
+    // runtime (Interpreter.sharedType): Box Int, Some Int (to the check, its
+    // type's values, Option Int); given values (Box 5), a value. Unapplied,
+    // one taking fields is a function.
     function sharedType(t: Ty): Ty | undefined {
-        if (t.k === "variant" && t.shared) {
-            const args = t.args.map(resolve);
-            if (!args.every(a => a.k === "type")) return undefined;
-            return { ...t, shared: undefined, args: args.map(a => (a as Extract<Ty, { k: "type" }>).value) };
-        }
-        if (t.k !== "fn" || !t.shared) return undefined;
-        let out = resolve(t.output);
-        while (out.k === "fn") out = resolve(out.output);
-        return out.k === "variant" ? { ...out, shared: undefined } : out;
+        if (t.k !== "variant" || !t.shared && !t.args.length) return undefined;
+        const args = t.args.map(resolve);
+        if (!args.every(a => a.k === "type")) return undefined;
+        return { ...t, shared: undefined, args: args.map(a => (a as Extract<Ty, { k: "type" }>).value) };
     }
-    // Whether a type expression is headed by a constructor sharing its type's
-    // name (Point, Box Int), which is that type where a type is expected.
+    // Whether a type expression is a constructor applied to types (Box Int,
+    // Some Int) or its type's own nullary one (JSON), which is a type where a
+    // type is expected.
     function namesItsType(e: Expr, scope: Scope): boolean {
-        while (e.t === "app") e = e.f;
+        let applied = 0;
+        while (e.t === "app") { e = e.f; applied++; }
         if (e.t !== "var") return false;
-        const t = resolve(scope.get(e.name)?.type ?? dynamic);
-        return (t.k === "fn" || t.k === "variant") && !!t.shared;
-    }
-    // How many types a constructor sharing its type's name takes where a type
-    // is expected: its type's parameters, when its fields are exactly them
-    // (Box x = _), so (Box Int x) is a value of Box Int; 0 otherwise.
-    function sharedParameters(t: Ty): number {
-        if (t.k !== "fn" || !t.shared) return 0;
-        const inputs: Ty[] = [];
-        let out: Ty = t;
-        for (; out.k === "fn"; out = resolve(out.output)) inputs.push(resolve(out.input));
-        return out.k === "variant" && out.args.length === inputs.length && out.args.every((a, n) => resolve(a) === inputs[n]) ? inputs.length : 0;
+        let t = resolve(scope.get(e.name)?.type ?? dynamic), fields = 0;
+        for (; t.k === "fn"; fields++) t = resolve(t.output);
+        return t.k === "variant" && (applied ? applied === fields : !fields && !!t.shared);
     }
     function describing(x: Ty): boolean {
         return x.k === "type" || !!sharedType(x)
@@ -6630,10 +6639,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // ((Vec n a) xs) for a type with parameters, without rewriting the program
     // (the runtime takes a Vect apart itself: a mismatch fails the match).
     function typed(p: Pattern, scope: Scope): Pattern {
-        return typedForm(p, name => {
-            const t = resolve(scope.get(name)?.type ?? dynamic);
-            return typeParameters(t) || sharedParameters(t);
-        });
+        return typedForm(p, name => typeParameters(resolve(scope.get(name)?.type ?? dynamic)));
     }
     function bindsLength(p: Pattern, scope: Scope): boolean {
         while (p.p === "typeBind" || p.p === "as") p = p.p === "as" ? p.left : p.value;
@@ -6885,16 +6891,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (p.p !== "constr" || p.typed) return undefined;
             const entry = scope.get(p.tag);
             if (!isConstructor(entry)) return undefined;
-            // Given all its fields: a bare Box taking one is the type.
+            // Given all its fields; given type names for them, it is the type
+            // of the values it makes (to (Money Float) x), as in bind.
             let t = resolve(entry!.type), fields = 0;
             for (; t.k === "fn"; fields++) t = resolve(t.output);
-            return t.k === "variant" && fields === p.args.length ? t : undefined;
+            if (t.k !== "variant" || fields !== p.args.length) return undefined;
+            const named = (q: Pattern) => q.p === "constr" && !q.args.length && resolve(scope.get(q.tag)?.type ?? dynamic).k === "type";
+            return p.args.length && p.args.every(named) ? { k: "type", value: t } as Ty : t;
         };
         const inputs = clauses[0].params.map((_, i) => {
             const types = clauses.map(c => c.params[i] && typeOf(c.params[i]));
             const first = types[0] && resolve(types[0]);
-            return first?.k === "variant" && types.every(t => t && (resolve(t) as { name?: string }).name === first.name)
-                ? copy(first) : variable();
+            const same = (t: Ty | undefined) => t && text(resolve(t)) === text(first!);
+            return first && (first.k === "variant" || first.k === "type") && types.every(same) ? copy(first) : variable();
         });
         return inputs.reduceRight<Ty>((output, input) => fn(input, output), variable());
     }
@@ -7313,15 +7322,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // What a typed pattern's type name is here, as at runtime
     // (Interpreter.patternHead): a constructor or a function type, or a type
     // taking so many parameters.
-    function patternHead(name: string, scope: Scope): { schema: boolean; arity: number } | undefined {
+    function patternHead(name: string, scope: Scope): PatternHead | undefined {
         const entry = scope.get(name);
         if (!entry) return undefined;
         const t = resolve(entry.type);
+        if (isConstructor(entry)) {
+            let fields = 0;
+            for (let f = t; f.k === "fn"; f = resolve(f.output)) fields++;
+            return { kind: "constructor", fields };
+        }
         // A lambda read as the function type it spells (Handler = a -> Int).
-        if (isConstructor(entry) || t.k === "fn" || t.k === "type" && resolve(t.value).k === "fn") return { schema: true, arity: 0 };
-        if (t.k === "factory") return { schema: false, arity: 2 };
-        if (t.k === "alias") return { schema: false, arity: t.params.length - t.args.length };
-        return t.k === "type" ? { schema: false, arity: typeParameters(t) } : undefined;
+        if (t.k === "fn" || t.k === "type" && resolve(t.value).k === "fn") return { kind: "schema" };
+        if (t.k === "factory") return { kind: "type", arity: 2 };
+        if (t.k === "alias") return { kind: "type", arity: t.params.length - t.args.length };
+        return t.k === "type" ? { kind: "type", arity: typeParameters(t) } : undefined;
     }
     // What a name is bound to, if the list's own constructor: the empty list
     // or the list's cons (the prelude's Nil and Cons).
@@ -7390,7 +7404,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // parameter does (Circle 2 holds 2.0); a type parameter does not.
             for (const field of [...v.fields ?? []].reverse()) {
                 const type = typeExpr(field, own, captures);
-                t = fn(type, t, undefined, !variables(type).size);
+                t = { ...fn(type, t, undefined, !variables(type).size), constructs: true } as Ty;
             }
             if (v.tag === d.name) t = { ...t, shared: true } as Ty;
             scope.set(v.tag, { type: t, declaration: d });

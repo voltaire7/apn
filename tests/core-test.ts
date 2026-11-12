@@ -55,33 +55,31 @@ for (const checked of [true, false]) {
         [OPTION + "OptOrList a = (Option a | List a)\n[OptOrList Int, isType (OptOrList Int) [1]]", "[OptOrList Int, True]"],
         [CTOR + "map (Rect 1) [2,3]", "[Rect 1.0 2.0, Rect 1.0 3.0]"],
         [CTOR + 'f (Rect w h) = "rect"\nf _ = "other"\n[f (Rect 1 2), f [1,2]]', '["rect","other"]'],
-        [ID + "[UserId 5, typeOf (UserId 5), UserId 3 == 3]", "[UserId 5, UserId, False]"],
+        [ID + "[UserId 5, typeOf (UserId 5), UserId 3 == 3]", "[UserId 5, UserId Int, False]"],
         [ID + "UserId a + UserId b = UserId (a + b)\nUserId 2 + UserId 3", "UserId 5"],
-        // A constructor sharing its type's name is the type where one is
-        // expected: a field's or a slot's type, isType, a type's argument.
-        [ID + "Order (UserId u) (n : Int) = _\nOrder (UserId 5) 3", "Order (UserId 5) 3"],
-        [ID + "[[v : UserId] [], isType UserId (UserId 1), typeOf (UserId 1) == UserId]", "[[v = UserId 0], True, True]"],
+        // A constructor given a type for each field is the type of the values
+        // it makes: a field's or a slot's type, isType, a type's argument.
+        [ID + "Order (u : UserId Int) (n : Int) = _\nOrder (UserId 5) 3", "Order (UserId 5) 3"],
+        [ID + "[[v : UserId Int] [], isType (UserId Int) (UserId 1), typeOf (UserId 1) == UserId Int]", "[[v = UserId 0], True, True]"],
         [ID + "v = [id = UserId 1]\nv.id = UserId 2\nv.id", "UserId 2"],
-        [CTOR + "([Box 1] : List Box)", "[Box 1]"],
-        // Applied to types it is that type applied to them, where a type is
-        // expected: a typed pattern (flat too), a field, isType, a slot. Its own
-        // pattern, with as many arguments as fields, still takes it apart.
-        [CTOR + 'f (b : Box Int) = b\nf _ = 0\ng (Box Int b) = b\ng _ = 0\nunbox (Box x) = x\n[f (Box 5), f (Box "a"), g (Box 5), g (Box "a"), unbox (Box 5)]',
-            "[Box 5, 0, Box 5, 0, 5]"],
-        [CTOR + "Wrap (Box Int b) = _\n[Wrap (Box 1), isType (Box Int) (Box 1), isType (Box Int) (Box 1.5)]", "[Wrap (Box 1), True, False]"],
+        [CTOR + "([Box 1] : List (Box Int))", "[Box 1]"],
+        // So in a typed pattern, a field, isType, a slot; with a type variable
+        // it binds the field's type. Its own pattern still takes it apart.
+        [CTOR + 'f (b : Box Int) = b\nf _ = 0\nunbox (Box x) = x\n[f (Box 5), f (Box "a"), unbox (Box 5)]', "[Box 5, 0, 5]"],
+        [CTOR + "Wrap (b : Box Int) = _\n[Wrap (Box 1), isType (Box Int) (Box 1), isType (Box Int) (Box 1.5)]", "[Wrap (Box 1), True, False]"],
         [CTOR + "[[b = Box Int] [], ([Box 1] : List (Box Int)), Box Int, typeOf (Box 1) == Box Int]", "[[b = Box 0], [Box 1], Box Int, True]"],
-        [CTOR + "kind (Box t x) = t\nkind (Box 2)", "Int"],
+        [CTOR + "kind (x : Box t) = t\nkind (Box 2)", "Int"],
         // typeOf gives the narrowest type: its fields decide its parameters,
         // and one nothing decides is a type variable.
         [OPTION + CTOR + "Pair a b = _\n[typeOf (Box 5), typeOf (Pair 1 \"x\"), typeOf (Some (Some 1)), typeOf None, typeOf (Ok 2)]",
             "[Box Int, Pair Int String, Option (Option Int), Option a, Result Int e]"],
         [OPTION + "Node a = Leaf | Branch a (Node a)\nxs = Branch 1 xs\n[typeOf (Branch 1 Leaf), typeOf xs, typeOf (Some 1) == Option]",
             "[Node Int, Node Int, True]"],
-        [PERCENT + "[Percent 150, Percent 50, typeOf (Percent 1)]", "[Percent 100.0, Percent 50.0, Percent]"],
+        [PERCENT + "[Percent 150, Percent 50, typeOf (Percent 1)]", "[Percent 100.0, Percent 50.0, Percent Float]"],
         [PERCENT + "Percent a + Percent b = Percent (a + b)\nPercent 90 + Percent 20", "Percent 100.0"],
         [PERCENT + "g (Percent v) = v\n[g (Percent 150), g (tag Percent Percent [150.0])]", "[100.0,150.0]"],
         [PERCENT + "map Percent [1,200]", "[Percent 1.0, Percent 100.0]"],
-        ["Low (x : Int) = x > 5 ? Low 5 : _\n[l : Low] [l = Low 9]", "[l = Low 5]"],
+        ["Low (x : Int) = x > 5 ? Low 5 : _\n[[l : Low Int] [l = Low 9], Low Int]", "[[l = Low 5], Low Int]"],
         ["Even (n : Int) = n % 2 == 0 ? _ : Even (n + 1)\n[Even 3, Even 4]", "[Even 4, Even 4]"],
         ["Circle (r : Float) = r < 0 ? Circle (0 - r) : _\nSquare (s : Float) = _\nShape = Circle | Square\n[Circle -2, typeOf (Circle 1)]", "[Circle 2.0, Shape]"],
     ] as const) Deno.test(`core (checked=${checked}): ${source}`, () => {
@@ -107,9 +105,9 @@ for (const checked of [true, false]) {
         // constructor is not a conversion.
         [ID + "(UserId 5 : Int)", checked ? "cannot use UserId where Int is required" : "Int expects a number"],
         [ID + "f (UserId u) = u\nf 5", checked ? "cannot use Int where UserId is required" : "no clause"],
-        [ID + "Order (UserId u) (n : Int) = _\nOrder 5 3", checked ? "cannot use Int where UserId is required" : "UserId expects a UserId variant"],
+        [ID + "Order (u : UserId Int) (n : Int) = _\nOrder 5 3", checked ? "cannot use Int where UserId is required" : "UserId expects a UserId variant"],
         [PERCENT + "Percent 50 + 1", checked ? "cannot combine Percent and Int" : "cannot apply '+'"],
-        ['std <- import "std"; use std.function\nSpan (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _\n[s : Span] [s = Span 2 1]', "empty span"],
+        ['std <- import "std"; use std.function\nSpan (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _\n[s : Span Int Int] [s = Span 2 1]', "empty span"],
         ["Low (_ : Float) = 1 > 0 ? Low 1 : _\n1", "a constructor with logic names each field"],
         // A lowercase definition's _ stays unfinished.
         ["f x = _\nf 1", "not implemented"],

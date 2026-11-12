@@ -502,8 +502,9 @@ Percent 90 + Percent 20       # Percent 100.0: the clause calls Percent, so its 
 Span (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _
 ```
 
-Every way of making one runs it, a record slot's default too (`[s : Span] []`
-runs it on `Span 0 0`), and the checker checks that it gives the constructor's
+Every way of making one from values runs it, a record slot's default too
+(`[s : Span Int Int] []` runs it on `Span 0 0`); given types (`Span Int Int`),
+it is the type of its values and runs nothing. The checker checks that it gives the constructor's
 type. Its fields are named, since `_` holds them.
 
 A union of constructors declared with `_` claims them: they become one type's,
@@ -598,21 +599,21 @@ an invitation to rerun another clause.
 Existing value constructor names on the left destructure and cannot be
 redefined (see [constructor functions](#constructor-functions)).
 An unspecialized parent pattern `(value : Option _)` still binds the whole variant.
-A constructor pattern `(Some value)` extracts its field. A constructor sharing
-its type's name (`Box x = _`, `Box a = | Box a`) is the constructor where a
-value is expected and the type where one is expected: after a declaration's or
-an ascription's `:` (`p : Point = Point 1 2`, `q : Box Int = Box 4`,
-`ps : List Point`), a field's type (`Wrap (Box b) = _`), a record slot
-(`[b : Box] []` is `[b = Box 0]` for
-`Box (x : Int) = _`), `isType Box`, a type's argument (`List Box`), a union.
-Applied to a type for each of its type's parameters, it is likewise a value
-(`Box Int`, a `Box` holding `Int`) that reads as that type applied to them
-where a type is expected, as a lambda reads as a function type:
-`Wrap a = | Wrap (Box a)`, `isType (Box Int) (Box 1)`, `[b = Box Int] []`. So
-`f (b : Box Int) = ...`, or `f (Box Int b)`, takes a `Box Int` whole, while
-`unbox (Box x) = x`, with as many arguments as `Box` has fields, still takes it
-apart. This needs its fields to be exactly its parameters (`Box x = _`, not
-`Box (x : Int) = _`).
+A constructor pattern `(Some value)` extracts its field. A constructor is a
+function that does not evaluate. Applied to values it makes one (`Box 5`);
+applied to a type for each field it is a value (`Box Int`, a `Box` holding
+`Int`) that reads as the type of the values it makes from such fields where a
+type is expected, as a lambda reads as a function type: after a declaration's
+or an ascription's `:` (`p : Point Int Int = Point 1 2`, `q : Box Int = Box 4`,
+`ps : List (Point Int Int)`), a field's type (`Wrap (b : Box Int) = _`), a
+record slot (`[b : Box Int] []` is `[b = Box 0]`), `isType (Box Int) (Box 1)`, a
+type's argument, a `to` instance (`to (Money Float) (x : Float) = Money x`).
+`Some Int` is the `Some` values holding an `Int`, a part of `Option Int`. A
+constructor with logic runs it only on values: `Mod7 Int` is a type. Bare, a
+constructor taking fields is a function, so `(f : Some)` takes an `a -> Some
+a`. So `f (b : Box Int) = ...` takes a `Box Int` whole, `kind (b : Box t) = t`
+binds its field's type, and `unbox (Box x) = x`, with as many arguments as
+`Box` has fields, takes it apart.
 
 Nominal wrappers are single-constructor types (`UserId (id : Int) = _`); see
 [distinct types](type-and-resource-rules.md#distinct-types). No automatic

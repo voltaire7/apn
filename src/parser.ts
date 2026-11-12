@@ -2446,7 +2446,7 @@ function constructorDeclaration(name: string, params: Pattern[], pos: number, bo
         : undefined;
     const fields = params.map(p => {
         if (p.p === "var") { parameters.push(p.name); names.push(p.name); return typeOf(p)!; }
-        const [type, named] = p.p === "schema" ? [p.type, p.value] : p.p === "constr" && p.args.length ? [typeOf({ ...p, args: p.args.slice(0, -1) }), p.args[p.args.length - 1]] : [];
+        const [type, named] = p.p === "schema" ? [p.type, p.value] : p.p === "constr" && p.typed && p.args.length ? [typeOf({ ...p, args: p.args.slice(0, -1) }), p.args[p.args.length - 1]] : [];
         if (!type || !named || named.p !== "var" && named.p !== "wildcard" && !(named.p === "recPat" && p.p === "schema" && p.type.t === "record")) {
             throw new APNError("parse", "a constructor's field is a name, a typed name or a record of typed fields", { pos, hint: `${name} (x : Float) = _` });
         }
@@ -2832,6 +2832,8 @@ export function wholePatternSource(p: Pattern): string {
     return p.p === "cons" || p.p === "constr" && p.args.length && written.startsWith(`(${p.tag} `) ? written.slice(1, -1) : written;
 }
 export function patternSource(p: Pattern): string {
+    // A typed pattern rewritten where it runs shows as written.
+    if ((p.p === "as" || p.p === "schema") && p.written) return patternSource(p.written);
     switch (p.p) {
         case "as": return `${patternSource(p.left)}.${patternSource(p.right)}`;
         case "schema": {

@@ -505,15 +505,15 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
   and checker claim those the parser cannot see (`unionKind`'s `claim`, from
   each family's recorded declaration: `Interpreter.declarations`, the checker
   entry's `declaration`), all through `claimedDeclaration`.
-- A constructor sharing its type's name reads as the type where a type is
-  expected: at runtime through `sharedType` (in `asType`, `isTypeValue`,
-  `sameType`, `conform`, slot defaults and assignment, `union`), in the
-  checker through the `shared` mark on its type and on the values it makes
-  (`sharedType`, read by `describing`, `schemaValue`, the union intrinsic and
-  `alternative`). Applied to types it is the type applied (`typeArguments`,
-  `sharedParameters` for the flat typed pattern). An ascription's head reads
-  it so too: `sharedType` of the forced head at runtime, `namesItsType` then
-  `typeExpr` in the checker.
+- A constructor applied to a type for each field reads as the type of the
+  values it makes where a type is expected: at runtime through `sharedType`
+  (its type's own name with its parameters is that type applied; any other,
+  `constructedType`, a refinement of its type whose `made` is the constructor
+  as written, which `to` instances key on), in the checker through `sharedType`
+  and `namesItsType`, the `constructs` mark letting a constructor take type
+  arguments. A constructor with logic skips it given types (`apply`'s
+  `__constr`). Typed patterns of a constructor are rewritten where they run
+  (`rewriteTypedPatterns`: a schema, or with a type variable an as-pattern).
 - `X = A | B` written bare stays a `type` statement; runtime and checker decide
   whether it declares or claims by what its names are bound to (`unionKind`,
   worded once in `ast.ts`), and an existing type there is an error; only a

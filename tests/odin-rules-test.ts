@@ -8,16 +8,16 @@ function result(source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['UserId (x : Int) = _\n[UserId, UserId 3, typeOf (UserId 3)]', '[UserId, UserId 3, UserId]'],
+    ['UserId (x : Int) = _\n[UserId, UserId 3, typeOf (UserId 3)]', '[UserId, UserId 3, UserId Int]'],
     // A new type has only the operations its clauses define.
     ['Distance (x : Float) = _\nDistance a + Distance b = Distance (a + b)\nDistance 2 + Distance 3', 'Distance 5.0'],
-    ['UserId (x : Int) = _\nf (x : t) = [t,x]\nf (UserId 3)', '[UserId, UserId 3]'],
+    ['UserId (x : Int) = _\nf (x : t) = [t,x]\nf (UserId 3)', '[UserId Int, UserId 3]'],
     ['UserId (x : Int) = _\nAlias = UserId\n[Alias == UserId, Alias 3 == UserId 3]', '[True,True]'],
     ['UserId (x : Int) = _\nOrderId (x : Int) = _\n[UserId == OrderId, UserId 3 == OrderId 3, UserId 3 == 3]', '[False,False,False]'],
     ['Money (x : Float) = _\nf (x : Float) = "Float"\nf (Money x) = "Money"\n[f 1.2, f (Money 1.2)]', '["Float","Money"]'],
     ['UserId (x : Int) = _\nunpack (UserId n) = n\nunpack (UserId 123)', '123'],
     ['UserId (x : Int) = _\nOrderId (x : Int) = _\nf (UserId n) = n\nf _ = 0\nf (OrderId 3)', '0'],
-    ['UserId (x : Int) = _\n[v : UserId] []', '[v = UserId 0]'],
+    ['UserId (x : Int) = _\n[v : UserId Int] []', '[v = UserId 0]'],
     ['v = [x : Int] [y = 2]\nv', '[x = 0, y = 2]'],
     ['assert True "kept"', '"kept"'],
     ['std <- import "std"; use std.function\ncount = Mutable 0\nbracket 42 (_ -> set count 1) (x -> x + 1)\ncount', '1'],

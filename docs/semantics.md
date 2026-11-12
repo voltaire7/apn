@@ -1150,12 +1150,14 @@ fails only when used). A run infers these types even when it reports no type
 errors, so the choice never depends on checking; code no check reaches
 (`Dynamic`) has none, and there the pattern takes any list or that variant.
 Any other count is a static error (`(Pair x)` for `Pair a b`).
-A type without parameters takes its value at once (`(x : Int)`, `(c : Color)`), and
-a constructor sharing its type's name (`Box x = _`) is the constructor
-there, and its type is written after a value: `(b : Box Int)`. After any `:`
-it is the type (`p : Point = Point 1 2`, `q : Box Int = Box 4`): a type and the
-constructor named after it are two things a name can mean, by where it stands
-(see [templates and types](templates-and-types.md)).
+A type without parameters takes its value at once (`(x : Int)`, `(c : Color)`).
+A constructor is a function that does not evaluate, and reads as one there:
+bare, it is its function type (`(f : Some)` takes an `a -> Some a`, `(x :
+None)` the value `None`); given a type for each field, the type of the values
+it makes (`(b : Box Int)`, `(s : Some Int)`, `p : Point Int Int = Point 1 2`),
+converting a value as ascription does; a type variable among them binds that
+field's type (`kind (b : Box t) = t`). See [templates and
+types](templates-and-types.md#constructor-functions).
 
 Destructuring definitions immediately perform the pattern match, but bound
 variables remain deferred. Blocks create child scopes. Environments are
