@@ -139,8 +139,9 @@ unless condition action = condition ? return [] : action >> return []
 loop action = action >> loop action
 # Representations: to T x writes x as a T, from T x reads it back (to String,
 # to JSON, to (List Char); from String parses). They are methods: a program
-# adds a type by defining to or from for it, as for map.
-JSON = String
+# adds a type by defining to or from for it, as for map. JSON names JSON text,
+# which to JSON writes as a String.
+JSON = _
 # tag owner ctor fields: a value that ctor made, belonging to owner, which
 # patterns of ctor read back (Some a = tag Option Some [a]). A constructor's _
 # is one: the value Box x = _ makes for Box 5 is tag Box Box [5].

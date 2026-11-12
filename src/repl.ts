@@ -297,7 +297,7 @@ function helpText(): string {
         `  List Int is a list of any length; [Int] is exactly one Int; [Int..] endlessly many`,
         `  f x = 1; f x = "one"   overloads by result type: (f 0 : Int) is 1, (f 0 : String) "one"`,
         `  Option a = Some a | None`,
-        `  Count = Int     (a named Int: an Int wherever one is accepted, keeps its name)`,
+        `  Count = Int     (an alias: another name for Int, the same values)`,
         `  Positive = (n : Int) | n > 0   (a refinement: the Ints for which the condition holds)`,
         `  Box x = _   (a constructor: Box 5 stands for itself; Rect (w : Float) (h : Float) = _ converts fields)`,
         `  UserId (id : Int) = _   (a distinct type: none of Int's operations; UserId x patterns unwrap)`,

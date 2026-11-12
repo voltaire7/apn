@@ -71,17 +71,18 @@ positive, so every fraction has one spelling; a `Fraction` whose denominator is
 `ComplexExact [re : Fraction, im : Fraction]` with the same care.
 
 The sized integers (`Int8` ... `Int128`, `UInt8` ... `UInt128`) are `Int`
-restricted to a range, a [refinement type](semantics.md#refinement-types):
+restricted to a range, a [refinement type](semantics.md#refinement-types), each
+a type of its own over it (an alias would be the plain `Int`s):
 
 ```apn
-Int8 = (n : Int) | -128 <= n && n <= 127
-UInt8 = (n : UInt) | n <= 255
+Range8 = (n : Int) | -128 <= n && n <= 127
+Int8 (n : Range8) = _
+to Int (Int8 n) = n
 ```
 
-A capitalized name for a refinement of a scalar names a subtype, so an `Int8`
-keeps its name (`typeOf (1 : Int8)` is `Int8`) through arithmetic, and the
-range is checked where a value becomes one and on each result (`300 : UInt8`
-and `(200 : UInt8) + (100 : UInt8)` are errors), never by wrapping around.
+So `typeOf (1 : Int8)` is `Int8`, and the range is checked where a value
+becomes one and on each result (`300 : UInt8` and `(200 : UInt8) + (100 :
+UInt8)` are errors), never by wrapping around.
 
 ## Inexact numbers
 

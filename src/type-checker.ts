@@ -34,7 +34,6 @@ const PENDING = "$monad";
 function pendingTy(t: Ty): Ty { return { k: "variant", name: PENDING, args: [t] }; }
 function isPending(t: Ty): boolean { return t.k === "variant" && t.name === PENDING && t.args.length === 1; }
 // Scalar types := names a subtype of (Money := Float), as at runtime.
-const NAMED_BASES = new Set([...NUMERIC_TYPES.filter(t => !["Number", "Real", "Integer", "Exact", "Inexact"].includes(t)), "String", "Bool", "Char"]);
 // A definition that adds an instance instead of binding a name: any
 // definition of a method (map f (Some x) = ..., return = Some).
 function isInstance(name: string, _clauses: { params: Pattern[] }[]): boolean {
@@ -88,7 +87,7 @@ type Ty =
     // checks: what is still to be checked of the values it holds, as a
     // function's are (Handler (s -> s ++ "!") checks s ++ "!" once a is known).
     // fields: a capitalized function's value (Rect 3 4), its args the fields' types.
-    | { k: "variant"; name: string; args: Ty[]; base?: Ty; indexed?: boolean; checks?: Ty[]; fields?: boolean; shared?: boolean }
+    | { k: "variant"; name: string; args: Ty[]; indexed?: boolean; checks?: Ty[]; fields?: boolean; shared?: boolean }
     // f a: a type variable applied to types, as written ((a -> b) -> f a -> f b).
     // Its head, once known, is a ctor: a type missing its first parameters
     // (List, Option, Result _ e for f a; Result for f a e), so f a maps the
@@ -429,7 +428,7 @@ function wholeList(p: Pattern): p is Extract<Pattern, { p: "schema" }> {
 function takesValue(f: Extract<Ty, { k: "type" }>): boolean {
     const value = resolve(f.value);
     if (value.k === "atom" && CONSTRUCTING_TYPES.has(value.name)) return false;
-    const count = value.k === "variant" && !value.base ? value.args.length : value.k === "atom" && (value.name === "List" || value.name === "IO") ? 1 : 0;
+    const count = value.k === "variant" ? value.args.length : value.k === "atom" && (value.name === "List" || value.name === "IO") ? 1 : 0;
     return (f.applied ?? 0) >= count;
 }
 // List takes only a type (IO has its own message for a value).
@@ -442,7 +441,7 @@ function typeParameters(type: Ty): number {
     if (t.k === "factory") return 2;
     if (t.k !== "type" || t.applied) return 0;
     const value = resolve(t.value);
-    return value.k === "variant" && !value.base ? value.args.length : value.k === "atom" && (value.name === "List" || value.name === "IO") ? 1 : 0;
+    return value.k === "variant" ? value.args.length : value.k === "atom" && (value.name === "List" || value.name === "IO") ? 1 : 0;
 }
 const constant = (n: bigint): Index => ({ constant: n, terms: new Map() });
 const resolve = (t: Ty): Ty => t.k === "var" && t.link ? resolve(t.link) : t.k === "apply" ? appliedType(t) : t;
@@ -583,7 +582,7 @@ function children(t: Ty): Ty[] {
         case "record":
             return [...t.fields.values()];
         case "variant":
-            return [...t.args, ...t.base ? [t.base] : [], ...t.checks ?? []];
+            return [...t.args, ...t.checks ?? []];
         case "apply":
             return [t.head, ...t.args];
         case "ctor":
@@ -752,7 +751,7 @@ function copy(
             Object.assign(result, { args: t.args.map(a => ({ ...a, type: go(a.type) })), scope: new Map([...t.scope].map(([name, entry]) => [name, { ...entry, type: go(entry.type) }])) });
             break;
         case "variant":
-            Object.assign(result, { args: t.args.map(go), base: t.base && go(t.base), checks: t.checks?.map(go) });
+            Object.assign(result, { args: t.args.map(go), checks: t.checks?.map(go) });
             break;
         case "apply":
             Object.assign(result, { head: go(t.head), args: t.args.map(go) });
@@ -1212,9 +1211,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const shown = text(schemaValue(a, { t: "placeholder" }));
                 return problem(`no from instance for ${shown}`, undefined, `define one, such as \`from ${shown} x = ...\``);
             }
-            if (a.k !== "type") return problem(`${t.op} expects a type, as in ${t.op} String x`);
-            const target = resolve(a.value);
-            const named = (name: string) => target.k === "variant" && target.name === name && !!target.base;
+            // A constructor named after its type is that type (JSON = _: to JSON x).
+            const target = a.k === "type" ? resolve(a.value) : a.k === "variant" && !a.args.length ? a : undefined;
+            if (!target) return problem(`${t.op} expects a type, as in ${t.op} String x`);
+            const named = (name: string) => target.k === "variant" && target.name === name && !!scope.get(name)?.builtin;
             const chars = target.k === "list" && !target.items && resolve(target.element).k === "atom" && (resolve(target.element) as { name: string }).name === "Char";
             const string = target.k === "atom" && target.name === "String";
             if (t.op === "to") {
@@ -1272,17 +1272,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             else if (a.k === "atom" && a.name === "Record" && t.op === "pairs") { key = atom("String"); value = variable(); }
             else return problem(`${t.op} requires a collection; got ${text(a)}`);
             return list(t.op === "keys" ? key : t.op === "values" ? value : pair(key, value));
-        }
-        // A named subtype keeps its name through arithmetic with itself or a
-        // plain value of its base (Money 1 + 1.0 is a Money); two names do not mix.
-        if (a.k === "variant" && a.base || b?.k === "variant" && b.base) {
-            const named = (x: Ty | undefined) => x?.k === "variant" && x.base ? x : undefined;
-            const [x, y] = [named(a), named(b)];
-            if (x && y && x.name !== y.name) return problem(`cannot combine ${x.name} and ${y.name}`);
-            const kept = (x ?? y)!;
-            if (["<", ">", "<=", ">="].includes(t.op)) return operation(t.op, [x ? kept.base! : a, y ? kept.base! : b!]);
-            operation(t.op, [x ? kept.base! : a, y ? kept.base! : b!]);
-            return kept;
         }
         const numeric = (x: Ty) => x.k === "atom" && NUMERIC_TYPES.includes(x.name);
         const callable = (x: Ty) => ["fn", "type", "overload"].includes(x.k);
@@ -1570,9 +1559,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             return;
         }
-        // A named subtype is its base wherever the base is expected; a plain
-        // value is not one (converting makes one: List Count [1]).
-        if (actual.k === "variant" && actual.base && expected.k !== "variant") return unify(expected, actual.base, e, seen);
         // A Bool applied to two values is one of them (True a b is a): it is a
         // function of two arguments giving either.
         if (actual.k === "atom" && actual.name === "Bool" && expected.k === "fn") {
@@ -1867,17 +1853,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (error && typeof error === "object" && "message" in error) return false;
             throw error;
         } finally { choosing--; requirements.length = saved; }
-    }
-    // A capitalized name for a scalar type names a subtype (Money = Float), as
-    // at runtime; undefined for anything else.
-    // So does a refinement of one (Int32 = (n : Int) | ...), its condition kept.
-    function namedSubtype(name: string, t: Ty): Ty | undefined {
-        const type = resolve(t);
-        let base = type.k === "type" ? resolve(type.value) : undefined;
-        if (type.k === "type" && type.refined && base?.k === "variant" && base.base) base = resolve(base.base);
-        if (base?.k !== "atom" || !NAMED_BASES.has(base.name)) return undefined;
-        const refined = type.k === "type" && type.refined ? { refined: { ...type.refined, name } } : {};
-        return { k: "type", value: { k: "variant", name, args: [], base }, ...refined };
     }
     // A capitalized function applied to all its parameters, as the run
     // makes it (Interpreter.construct): what its body gives. Clauses with
@@ -2366,8 +2341,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     // A numeric constructor pattern binds the untyped payload, as at
                     // runtime: (UInt8 x) binds 5 for UInt8 5, a plain integer. A
                     // literal payload is still a value of the type: (UInt8 300) fails.
-                    const payload = value.k === "variant" && value.base ? value.base : value;
-                    p.args.forEach((x) => bind(x, x.p === "int" || x.p === "range" ? payload : untypedPayload(payload), scope, e, bound));
+                    p.args.forEach((x) => bind(x, x.p === "int" || x.p === "range" ? value : untypedPayload(value), scope, e, bound));
                     return;
                 }
                 if ((t.k === "record" || t.k === "list") && p.args.length === 1) {
@@ -2581,16 +2555,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.k === "atom" && t.name === "Bool" && explicitFloat) return t;
         // A typed parameter of a built-in type takes a value of the program's
         // own type through its to instance, as at runtime: (Int i) takes East.
-        if (matching && t.k === "atom" && SCALAR_TYPES.has(t.name) && a.k === "variant" && !a.base) {
+        if (matching && t.k === "atom" && SCALAR_TYPES.has(t.name) && a.k === "variant") {
             const made = builtinTyped(t.name, a, e);
             if (made) return convert(target, made, e, explicitFloat, seen, runtimeProjection);
-        }
-        // Converting a value of its base to a named subtype makes one, as
-        // applying the type (List Count [1]) or updating a slot does, and a
-        // typed parameter takes one so, as (x : Int32) takes 5, at runtime.
-        if (t.k === "variant" && t.base && a.k !== "variant") {
-            convert(t.base, a, e, explicitFloat, seen, runtimeProjection);
-            return target;
         }
         if (
             t.k === "atom" && a.k === "atom" && NUMERIC_TYPES.includes(t.name) &&
@@ -3046,17 +3013,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const result = variable();
                 unify(io(result), a, e);
                 convert((t as Extract<Ty, { k: "variant" }>).args[0], result, e);
-                return t;
-            }
-            // A base type applied to a named value unwraps it, as at runtime:
-            // Float (Money 1.2), Int (Money 1.0) as Int 1.0 would.
-            if (t.k === "atom" && NAMED_BASES.has(t.name) && a.k === "variant" && a.base) return application(f, { ...argument, type: a.base }, e);
-            // Applying a named subtype applies its base, as at runtime: F .1 with
-            // F = Float32 rounds like Float32 .1. Another name must be unwrapped.
-            if (t.k === "variant" && t.base) {
-                const given = resolve(argument.type);
-                if (given.k === "variant" && given.base) { if (given.name !== t.name) problem(`${t.name} requires explicit unwrapping of ${given.name}`, e); return t; }
-                application({ k: "type", value: t.base }, argument, e);
                 return t;
             }
             if (t.k === "var") {
@@ -3527,7 +3483,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function promotedOperands(op: string, l: Ty, r: Ty, e: Expr): [Ty, Ty] | undefined {
         if (!["+", "-", "*", "/", "%", "^", "<", ">", "<=", ">="].includes(op)) return undefined;
         const a = resolve(l), b = resolve(r);
-        const own = (x: Ty) => x.k === "variant" && !x.base ? x : undefined;
+        const own = (x: Ty) => x.k === "variant" ? x : undefined;
         const [x, y] = [own(a), own(b)];
         if (!x && !y || x && y && x.name === y.name) return undefined;
         const left = y && convertedTo(y, a, e), right = x && convertedTo(x, b, e);
@@ -3548,7 +3504,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // typed pattern: there it is not converted.)
     function builtinTyped(name: string, t: Ty, e: Expr = { t: "placeholder" }): Ty | undefined {
         const a = resolve(t);
-        if (a.k !== "variant" || a.base || converting.has(a.name)) return undefined;
+        if (a.k !== "variant" || converting.has(a.name)) return undefined;
         converting.add(a.name);
         try { return convertedTo(atom(name), a, e); } finally { converting.delete(a.name); }
     }
@@ -4362,7 +4318,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.k === "list") return { kind: "List" };
         if (t.k === "record") return { kind: "Record" };
         if (t.k === "map") return { kind: "HashMap" };
-        if (t.k === "variant" && !t.base) return { kind: "Variant" };
+        if (t.k === "variant") return { kind: "Variant" };
         if (["fn", "overload", "intrinsic"].includes(t.k)) return { kind: "Function" };
         return undefined;
     }
@@ -6839,8 +6795,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return;
         }
         defineBinding(name, clauses, scope, location, scope.get(name));
-        const defined = /^[A-Z]/.test(name) && scope.get(name), named = defined && namedSubtype(name, defined.type);
-        if (defined && named) scope.set(name, { ...defined, type: named });
+        const defined = /^[A-Z]/.test(name) && scope.get(name);
         // A refinement is known by its name in what it rejects.
         const refined = defined && resolve(defined.type);
         if (refined && refined.k === "type" && refined.refined) scope.set(name, { ...defined, type: { ...refined, refined: { ...refined.refined, name } } });

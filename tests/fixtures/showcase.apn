@@ -1291,7 +1291,7 @@ print ([10] 0)                      # => 10 (integer indexing)
 Count = Int
 Numbers = [Int]
 Point = [x : Float, y : Float]
-print (123 : Count)                 # => Count 123 (an alias of Int names a subtype)
+print (123 : Count)                 # => 123 (Count is another name for Int)
 print Numbers.[1]                  # => [1]
 print (Point [x = 1, y = 2])        # => [x = 1.0, y = 2.0]
 firstNumber (Numbers values) = head values
@@ -1844,23 +1844,23 @@ selectedKey = "x"
 indexedObject selectedKey = 3
 print indexedObject                 # => [x = 3]
 
-# An alias of a scalar type names a subtype: it keeps its name, is accepted
-# wherever its base is, and two names do not mix.
-AccountId = Int
-OtherId = Int
-getAccountId (n : AccountId) = n
-print (7 : AccountId)                # => AccountId 7
-print (getAccountId (7 : AccountId)) # => 7
-print ((2 : AccountId) + (3 : AccountId)) # => AccountId 5
-print ((1 : AccountId) + 1)          # => AccountId 2 (a plain Int joins it)
-print (AccountId == Int)            # => False
+# A type of its own is a constructor: it keeps its name and two names do not
+# mix; a to instance lets it stand wherever an Int is needed.
+AccountId (n : Int) = _
+OtherId (n : Int) = _
+to Int (AccountId n) = n
+AccountId a + AccountId b = AccountId (a + b)
+getAccountId (AccountId n) = n
+print (AccountId 7)                  # => AccountId 7
+print (getAccountId (AccountId 7))   # => 7
+print (AccountId 2 + AccountId 3)    # => AccountId 5
+print (AccountId == Int)             # => False
 idKind (_ : AccountId) = "account"
 idKind (_ : Int) = "int"
-print [idKind (1 : AccountId), idKind (1 : OtherId), idKind 1] # => ["account","int","int"]
-# AccountId 1 + OtherId 1           # error: cannot combine AccountId and OtherId
-# Applying a base type unwraps: OtherId (Int (AccountId 4)) moves between names.
-print ((4 : AccountId) : Float)      # => 4.0
-print (((4 : AccountId) : Int) : OtherId) # => 4, an OtherId
+print [idKind (AccountId 1), idKind 1] # => ["account","int"]
+double (n : Int) = n * 2
+print (double (AccountId 4))         # => 8, through to Int
+# AccountId 1 + OtherId 1           # error: no clause takes an OtherId
 
 # Nullary variants index lists in declaration order.
 Compass = Up | Down | Left | Right

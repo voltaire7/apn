@@ -13,7 +13,7 @@ for (const [source, expected] of [
     ['v = [type : Float, value = 123]; v.type = Int; v', '[type : Int, value = 123]'],
     ['xs = [Float]; xs 0 = .2; xs 0 = 1; xs', '[1.0]'],
     ['v = [x : Float] []; v "x" = 123; v.[x] = [456]; v.x', '456.0'],
-    ['Id = Int; v = [id = (1 : Id)]; v.id = 2; [v.id, typeOf v.id]', '[2,Id]'],
+    ['Id = Int; v = [id = (1 : Id)]; v.id = 2; [v.id, typeOf v.id]', '[2,Int]'],
     ['(identity : Int -> Int) <- return (x -> x); v = [f = identity]; v.f = x -> x + 1; v.f 2', '3'],
     ['[x = 1] [y = 2]', '[x = 1, y = 2]'],
 ] as const) Deno.test(`slot replacement: ${source}`, () => {
