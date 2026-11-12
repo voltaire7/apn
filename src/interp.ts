@@ -17,7 +17,7 @@ import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWit
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, rewriteTypedPatterns, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, isUse } from "./ast.ts";
@@ -454,6 +454,7 @@ export class Interpreter {
                 if (this.runDepth === 1 && !this.dynamicDepth) this.running = { program, index };
                 const tl = written;
                 rewriteListConstructors(tl, tag => this.namesCons(tag));
+                knownTypeArguments(tl, tag => this.computedType(tag));
                 rewriteTypedPatterns(tl, tag => this.patternHead(tag));
                 if (tl.t === "type") {
                     last = this.declare(tl.def, this.env.root()) ?? last;
@@ -4227,6 +4228,12 @@ export class Interpreter {
             return v;
         };
         return rangeValue(real(lo), second && real(second), hi && real(hi));
+    }
+    // Whether a name is bound to a type a definition with parameters computes
+    // (SizedInts n = Vect n Int; see knownTypeArguments).
+    private computedType(name: string): boolean {
+        const bound = this.env.get(name), t = bound && this.reference(bound);
+        return t?.kind === "type" && !!t.alias && !(t.alias.run.kind === "clauseFn" && isUnionBody(t.alias.run.clauses[0].body));
     }
     // What a typed pattern's type name is here (see rewriteTypedPatterns): a
     // constructor or a function type, taking its value whole, or a type

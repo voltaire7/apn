@@ -68,9 +68,9 @@ intentional evaluation change.
   variable. What the name is decides it where it runs, per top-level
   statement in the runtime and the checker alike (`rewriteTypedPatterns`): a
   constructor's or a function type's is the schema `(p : T args)`, and a type
-  given fewer arguments than it takes gets `_` for the rest. The parser keeps
-  no constructor state. `knownArguments` makes a computed type's
-  pattern a schema once its arguments are all known (`copy n (xs : Sized n)`
+  given fewer arguments than it takes gets `_` for the rest, and
+  `knownTypeArguments`, run first, makes the pattern of a type a definition
+  with parameters computes a schema once its arguments are all known (`copy n (xs : Sized n)`
   tests `xs` against `Sized n`; `(xs : Pairs n a)` reads `n` back from the
   value). A lone ascription's parentheses are its own: the group is the
   ascription, not a block around it. The old spellings are rejected where each is

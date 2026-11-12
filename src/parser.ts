@@ -1887,7 +1887,6 @@ class Parser {
         }
         if (guard) return { name, clauses: [{ params, body, guard }] };
         if (name === "return" && params.length > 1) throw new APNError("parse", "return takes one argument", { pos: equals.pos, hint: "`return = Some`" });
-        if (/^[A-Z]/.test(name) && params.length) computedTypes.add(name);
         return { name, clauses: [{ params, body }] };
     }
 
@@ -2472,23 +2471,10 @@ function joinClauses<T extends { t: string }>(statements: T[], definition: T & {
     else statements.push(definition);
 }
 
-// Whether `Some v = ...` binds or defines, and what (x : T) reads as, are
-// decided where they run (evalDef, rewriteTypedPatterns), not here.
-// Capitalized names defined with parameters (SizedInts n = Vect n Int): types
-// a definition computes (see knownArguments). Module-level so they persist
-// across REPL lines (each line is re-parsed standalone).
-const computedTypes = new Set<string>();
-
-// Tooling parses each document independently, without leaking REPL declarations.
-export function parseDocument(src: string): TopLevel[] {
-    const saved = [...computedTypes];
-    computedTypes.clear();
-    try { return parse(src); }
-    finally {
-        computedTypes.clear();
-        saved.forEach((name) => computedTypes.add(name));
-    }
-}
+// A document parses alone: whether `Some v = ...` binds or defines, and what
+// (x : T) reads as, are decided where they run (evalDef, knownTypeArguments,
+// rewriteTypedPatterns), so no declaration carries from one parse to the next.
+export const parseDocument = parse;
 
 // Where the string or character literal starting at pos ends.
 function literalEnd(source: string, pos: number): number {
@@ -2562,7 +2548,6 @@ export function parse(src: string, file = "<repl>"): TopLevel[] {
         if (!looseSpacing) p.reportUnnecessary();
         const grouped = groupClauses(out);
         rejectOldSpellings(grouped);
-        knownArguments(grouped);
         if (fileFixities.size) programFixities.set(grouped, fileFixities);
         return grouped;
     } catch (err) {
@@ -2658,50 +2643,6 @@ function typedPattern(p: Pattern, type: Expr): Pattern {
     const named = typeArguments(t);
     if (named?.p === "constr") return { ...named, args: [...named.args, p], typed: true };
     return { p: "schema", type, value: p };
-}
-// A computed type's pattern whose arguments are all known, bound by an
-// earlier parameter or written as literals (copy n (xs : SizedInts n)), tests
-// the value against the type they compute (a schema); one with an argument to
-// bind reads it back from the value (Pairs n a xs). Each parameter list, left
-// to right, in place.
-function knownArguments(node: unknown): void {
-    if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) { node.forEach(knownArguments); return; }
-    const record = node as Record<string, unknown>;
-    if (Array.isArray(record.params) && record.params.every(p => p && typeof p === "object" && "p" in p)) {
-        const bound = new Set<string>();
-        record.params = (record.params as Pattern[]).map(p => {
-            const known = withKnownArguments(p, bound);
-            for (const name of patternNames(known)) bound.add(name);
-            return known;
-        });
-    }
-    for (const value of Object.values(record)) knownArguments(value);
-}
-function withKnownArguments(p: Pattern, bound: Set<string>): Pattern {
-    if (p.p === "constr" && p.typed && computedTypes.has(p.tag) && p.args.length > 1) {
-        const args = p.args.slice(0, -1).map(typeOfPattern);
-        if (args.every(a => a && freeLowercase(a).every(name => bound.has(name)))) {
-            const type = (args as Expr[]).reduce<Expr>((f, a) => ({ t: "app", f, a }), { t: "var", name: p.tag });
-            return { p: "schema", type, value: withKnownArguments(p.args[p.args.length - 1], bound) };
-        }
-    }
-    const copy: Record<string, unknown> = { ...p };
-    for (const [key, value] of Object.entries(p)) {
-        if (Array.isArray(value)) copy[key] = value.map(x => x && typeof x === "object" && "p" in x ? withKnownArguments(x as Pattern, bound) : x);
-        else if (value && typeof value === "object" && "p" in value) copy[key] = withKnownArguments(value as Pattern, bound);
-    }
-    return copy as Pattern;
-}
-// A type argument written as a pattern, as the expression it is.
-function typeOfPattern(q: Pattern): Expr | undefined {
-    if (q.p === "var") return { t: "var", name: q.name };
-    if (q.p === "int") return { t: "int", v: q.v };
-    if (q.p === "constr") {
-        const args = q.args.map(typeOfPattern);
-        return args.every(Boolean) ? (args as Expr[]).reduce<Expr>((f, a) => ({ t: "app", f, a }), { t: "var", name: q.tag }) : undefined;
-    }
-    return undefined;
 }
 // The old spelling of a typed pattern, the type before the value (((T) p),
 // (t x)): an error once it is part of the program (parses that try a pattern

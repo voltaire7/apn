@@ -60,15 +60,14 @@ Deno.test("diagnostic positions use UTF-16 and stay within the document", () => 
     equal(error.range.end.line, 1);
     if (error.range.end.character > 5) throw new Error("range beyond EOF");
 });
-Deno.test("document parsing isolates declarations and restores REPL state", () => {
-    // A computed type given known arguments is read as the type they compute.
-    const param = (source: string, document = false) =>
-        ((document ? parseDocument(source) : parse(source))[0] as { clauses: { params: { p: string }[] }[] }).clauses[0].params[0].p;
+Deno.test("a document parses alone: no declaration carries between parses", () => {
+    // What (x : T) reads as is decided where it runs, whatever was parsed before.
+    const param = (source: string) => (parse(source)[0] as { clauses: { params: { p: string }[] }[] }).clauses[0].params[0].p;
+    const before = param("f (x : EditorRemembered 2) = x");
     parse("EditorRemembered n = Vect n Int");
-    equal(param("f (x : EditorRemembered 2) = x", true), "constr");
-    try { parseDocument("EditorBroken n = Vect n Int\nfoo ="); } catch { /* intentional */ }
-    equal(param("f (x : EditorBroken 2) = x"), "constr");
-    equal(param("f (x : EditorRemembered 2) = x"), "schema");
+    parse("EditorBox a = | EditorBox a");
+    equal(param("f (x : EditorRemembered 2) = x"), before);
+    equal(param("f (x : EditorBox) = x"), "constr");
 });
 Deno.test("LSP diagnostics follow open/change/close and ignore stale versions", () => {
     const server = initialized();

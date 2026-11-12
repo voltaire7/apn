@@ -204,6 +204,12 @@ export function claimedDeclaration(def: DataDef, own: (tag: string) => DataVaria
     });
     return { name: def.name, parameters: def.parameters, variants, claims: true };
 }
+// Whether a definition's body is a union of types (see unionClause): a union
+// of list types declared with parameters (Pairs a = [] | a :: a :: Pairs a)
+// is read from a value, not computed from known arguments.
+export function isUnionBody(e: Expr): boolean {
+    return e.t === "app" && e.f.t === "recordAccess" && e.f.field === "union" && e.f.rec.t === "var" && e.f.rec.name === "intrinsics";
+}
 // A union of existing types, as the definition X params = intrinsics.union [A, B];
 // a list's own alternatives are the list types they write ([], a :: X a).
 export function unionClause(def: DataDef): DefClause {
@@ -333,15 +339,58 @@ export function rewriteTypedPatterns(node: unknown, head: (tag: string) => { sch
     if (!kind || !args.length) return;
     const given = args.slice(0, -1), value = args[args.length - 1];
     if (kind.schema) {
-        const asType = (q: Pattern): Expr | undefined => q.p === "var" ? { t: "var", name: q.name } : q.p === "int" ? { t: "int", v: q.v }
-            : q.p === "constr" && q.args.every(asType) ? q.args.reduce<Expr>((f, a) => ({ t: "app", f, a: asType(a)! }), { t: "var", name: q.tag }) : undefined;
-        if (!given.every(asType)) return;
-        const type = given.reduce<Expr>((f, a) => ({ t: "app", f, a: asType(a)! }), { t: "var", name: n.tag as string });
+        const type = typeOfArguments(n.tag as string, given);
+        if (!type) return;
         for (const key of Object.keys(n)) delete n[key];
         Object.assign(n, { p: "schema", type, value });
         return;
     }
     if (given.length < kind.arity) n.args = [...given, ...Array.from({ length: kind.arity - given.length }, (): Pattern => ({ p: "wildcard" })), value];
+}
+// A type argument written as a pattern, as the expression it is.
+function patternAsType(q: Pattern): Expr | undefined {
+    if (q.p === "var") return { t: "var", name: q.name };
+    if (q.p === "int") return { t: "int", v: q.v };
+    if (q.p !== "constr") return undefined;
+    return typeOfArguments(q.tag, q.args);
+}
+// T args, written as patterns, as the type expression they write.
+function typeOfArguments(tag: string, args: Pattern[]): Expr | undefined {
+    const types = args.map(patternAsType);
+    return types.every(Boolean) ? (types as Expr[]).reduce<Expr>((f, a) => ({ t: "app", f, a }), { t: "var", name: tag }) : undefined;
+}
+// (xs : Sized n), Sized a type a definition with parameters computes
+// (computed, where it runs), with every argument known (bound by an earlier
+// parameter, or written as a literal: copy n (xs : Sized n)), is the schema of
+// the type they compute; one with an argument to bind reads it back from the
+// value ((xs : Pairs n a)). Each parameter list, left to right, in place.
+export function knownTypeArguments(node: unknown, computed: (tag: string) => boolean): void {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) { node.forEach(x => knownTypeArguments(x, computed)); return; }
+    const record = node as Record<string, unknown>;
+    if (Array.isArray(record.params) && record.params.every(p => p && typeof p === "object" && "p" in p)) {
+        const bound = new Set<string>();
+        for (const p of record.params as Pattern[]) {
+            knownArguments(p, bound, computed);
+            for (const name of patternNames(p)) bound.add(name);
+        }
+    }
+    for (const value of Object.values(record)) knownTypeArguments(value, computed);
+}
+function knownArguments(p: Pattern, bound: Set<string>, computed: (tag: string) => boolean): void {
+    const n = p as Record<string, unknown>;
+    for (const value of Object.values(n)) {
+        if (Array.isArray(value)) value.forEach(x => x && typeof x === "object" && "p" in x && knownArguments(x as Pattern, bound, computed));
+        else if (value && typeof value === "object" && "p" in value) knownArguments(value as Pattern, bound, computed);
+    }
+    if (p.p !== "constr" || !p.typed || p.args.length < 2 || !computed(p.tag)) return;
+    const type = typeOfArguments(p.tag, p.args.slice(0, -1));
+    const names: string[] = [], walk = (e: Expr): void => { if (e.t === "var" && /^[a-z]/.test(e.name)) names.push(e.name); else if (e.t === "app") { walk(e.f); walk(e.a); } };
+    if (type) walk(type);
+    if (!type || !names.every(name => bound.has(name))) return;
+    const value = p.args[p.args.length - 1];
+    for (const key of Object.keys(n)) delete n[key];
+    Object.assign(n, { p: "schema", type, value });
 }
 // The pattern Name args is when Name is a constructor where it runs (Some x =
 // m binds x): a list's cell when Name is the list's cons (Cons x xs = [1,2]).
