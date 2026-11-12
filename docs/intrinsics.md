@@ -83,10 +83,10 @@ Int8 (n : Range8) = _
 to Int (Int8 n) = n
 to Int8 (n : Int) = Int8 n
 Int8 a + Int8 b = Int8 (a + b)    # and -, *, %, ^ alike
+to String (Int8 n) = to String n
 ```
 
-So `typeOf (1 : Int8)` is `Int8`, it prints as its number (as a `to String`
-instance giving `n`'s text would make it), and the range is
+So `typeOf (1 : Int8)` is `Int8`, it prints as its number, and the range is
 checked where a value becomes one and on each result, as the constructor's
 field is (`300 : UInt8` and `(200 : UInt8) + (100 : UInt8)` are errors), never
 by wrapping around. An `Int` joins an `Int8` through `to Int8` (`(1 : Int8) +

@@ -44,7 +44,7 @@ type Index = { constant: bigint; terms: Map<string, bigint> };
 type Ty =
     // undecided: overloads differing only in result type, whose calls the
     // context decides; a union of their results is one of them, not either.
-    | { k: "overload"; choices: Ty[]; undecided?: boolean; name?: string }
+    | { k: "overload"; choices: Ty[]; undecided?: boolean; name?: string; prefer?: true }
     | { k: "union"; choices: Ty[]; undecided?: boolean; name?: string }
     | { k: "mutable"; value: Ty }
     | { k: "map"; key: Ty; value: Ty }
@@ -2858,6 +2858,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const deferred = evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument);
             if (deferred.k === "operation" && e.t !== "placeholder" && !deferred.written) { deferred.written = e; deferred.within = outermost; }
             return deferred;
+        }
+        // An instance's own use of its method (see defineBinding): itself where
+        // it takes the argument, and the method otherwise; a partial call stays
+        // both, for its next argument to decide.
+        if (f.k === "overload" && f.prefer) {
+            const [own, method] = f.choices;
+            if (resolve(argument.type).k === "var") return application(own, argument, e);
+            if (!succeeds(() => application(copy(own), { ...argument, type: copy(argument.type) }, e))) return application(method, argument, e);
+            const out = application(own, argument, e);
+            if (resolve(out).k !== "fn" || !succeeds(() => application(copy(method), { ...argument, type: copy(argument.type) }, e))) return out;
+            return { k: "overload", choices: [out, application(method, argument, e)], name: f.name, prefer: true };
         }
         if (f.k === "overload") {
             const input = resolve(argument.type);
@@ -6880,6 +6891,26 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const known = options.resultHeads.get(key);
         options.resultHeads.set(key, known === undefined || known === head ? head : "?");
     }
+    // A function's type as far as its clauses' patterns tell it: a parameter
+    // every clause takes apart with constructors of one type is of that type.
+    function patternSkeleton(clauses: { params: Pattern[] }[], scope: Scope): Ty {
+        const typeOf = (p: Pattern): Ty | undefined => {
+            if (p.p !== "constr" || p.typed) return undefined;
+            const entry = scope.get(p.tag);
+            if (!isConstructor(entry)) return undefined;
+            // Given all its fields: a bare Box taking one is the type.
+            let t = resolve(entry!.type), fields = 0;
+            for (; t.k === "fn"; fields++) t = resolve(t.output);
+            return t.k === "variant" && fields === p.args.length ? t : undefined;
+        };
+        const inputs = clauses[0].params.map((_, i) => {
+            const types = clauses.map(c => c.params[i] && typeOf(c.params[i]));
+            const first = types[0] && resolve(types[0]);
+            return first?.k === "variant" && types.every(t => t && (resolve(t) as { name?: string }).name === first.name)
+                ? copy(first) : variable();
+        });
+        return inputs.reduceRight<Ty>((output, input) => fn(input, output), variable());
+    }
     function defineBinding(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr, previous: Entry | undefined): void {
         const collection = previous && resolve(previous.type), c = clauses[0];
         // (Another value is assigned to when clauses for with give it slots.)
@@ -6958,12 +6989,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         forwardDefinitions.delete(name);
         const nonGeneric = captured(scope);
-        const pending = forward.get(name) ?? variable();
+        // An instance's own uses of its method are itself where they give it
+        // what its patterns take, and the method otherwise, as the run
+        // dispatches: map f l of a Tree recurses, to String m of an Int in
+        // to String (Money m) is the method. Its type starts as what its
+        // patterns take, to decide.
+        const instance = isInstance(name, clauses) && previous && !previous.recursive;
+        const pending = forward.get(name) ?? (instance ? patternSkeleton(clauses, scope) : variable());
         forward.delete(name);
         // Its clauses' own calls of an overloaded math function may take the
         // previous meaning too (sin (Dual a b) = Dual (sin a) ...).
         const fallback = previous && !previous.recursive ? overloaded(name, clauses[0].params.length, previous) : undefined;
-        scope.set(name, { type: fallback ? { k: "overload", choices: [pending, fallback], name } : pending, mono: true, recursive: true });
+        scope.set(name, { type: instance ? { k: "overload", choices: [pending, previous.type], name, prefer: true }
+            : fallback ? { k: "overload", choices: [pending, fallback], name } : pending, mono: true, recursive: true });
         const typeTag = (p: Pattern | undefined) => p?.p === "constr" && TYPE_NAMES.includes(p.tag) ? p.tag : undefined;
         const byType = clauses[0].params.some((_, i) => new Set(clauses.map(c => typeTag(c.params[i])).filter(Boolean)).size > 1);
         const self = { pending, targets: [] as Ty[], byType };

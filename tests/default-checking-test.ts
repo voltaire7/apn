@@ -1478,3 +1478,15 @@ for (const [source, message] of [
         throw new Error("accepted");
     });
 }
+
+// An instance's own use of its method is itself where its patterns take the
+// arguments, and the method otherwise, as the run dispatches.
+for (const [source, output] of [
+    ['Money (m : Int) = _\nto String (Money m) = to String m\n[to String (Money 5), to String 7]', '["5","7"]'],
+    ['Pair (a : Int) (b : Int) = _\nto String (Pair a b) = to String a ++ "," ++ to String b\nto String (Pair 1 2)', '"1,2"'],
+    ['Tree = Leaf Int | Node Tree Tree\nmap f (Leaf x) = Leaf (f x)\nmap f (Node l r) = Node (map f l) (map f r)\nmap (+ 1) (Node (Leaf 1) (Leaf 2))',
+        'Node (Leaf 2) (Leaf 3)'],
+]) Deno.test(`an instance calls its method: ${JSON.stringify(source)}`, () => {
+    const shown = run(session(), source);
+    if (shown !== output) throw new Error(`expected ${output}, got ${shown}`);
+});
