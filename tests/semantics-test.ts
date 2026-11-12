@@ -460,7 +460,6 @@ for (const source of ["x: Int = 5", "f x: Int = x", "f (x: Int) = x", "g = (x: I
     failure(`an unspaced ':' is no declaration: ${source}`, source, "spaces its ':'");
 }
 failure("a definition's type is declared on its own line", "f x y : Int = x + y", "declare f's type on a line of its own");
-failure("a declaration is followed by its definition", "x : Int\ny = 2\nprint y", "not followed by its definition");
 failure("a clause takes no more parameters than declared", "f : Int -> Int\nf a b = a\nprint 1", "declared with 1 parameter");
 failure("an ascribed ternary is parenthesized", "x = True ? 1 : 2 : Int\nprint x", "parenthesize a ternary");
 failure("a declared result is proved per clause", "app : Vect n a -> Vect m a -> Vect (n + m + 1) a\n" +

@@ -28,6 +28,10 @@ for (const [source, expected] of [
     ['v = [x : Int8] []\nv.x = 12\nv', '[x = 12]'],
     ['[x : Float, label = "origin", count = 7] []', '[x = 0.0, label = "origin", count = 7]'],
     ['[x : Int, y : Int] [extra = 3]', '[x = 0, y = 0, extra = 3]'],
+    // A declaration no definition follows is its type's zero, as a slot is.
+    ['x : Int\ny : [a : Float]\nU (v : Int) = _\nu : U Int\n[x,y,u]', '[0, [a = 0.0], U 0]'],
+    ['x = 3\nx : String\nx', '""'],
+    ['g n = {\n    y : Int\n    n + y\n}\ng 1', '1'],
     ['[nested : [x : Float], xs : [Int]] []', '[nested = [x = 0.0], xs = [0]]'],
     ['v = [x : Int, bad : Function] []\nv.x', '0'],
     ['cell = Mutable 1\nv = [cell = cell] []\nset v.cell $ 2\ncell', '2'],

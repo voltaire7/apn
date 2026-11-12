@@ -2058,18 +2058,17 @@ class Parser {
         const marker: Extract<TopLevel, { t: "expr" }> = { t: "expr", value: { t: "placeholder" } };
         // The function type after the first k pieces, for a clause with k parameters.
         const rest = (k: number): Expr => {
+            const at = this.i;
             this.i = k ? arrows[k - 1] + 1 : start;
-            const type = this.typeExpr(end);
-            this.i = end;
-            return type;
+            try { return this.typeExpr(end); } finally { this.i = at; }
         };
         // (A block keeps the marker's value as its statement.)
-        const declaration = { name, pos: nameToken.pos, pieces, rest };
+        const declaration = { name, pos: nameToken.pos, pieces, rest, marker };
         this.declarations.set(marker, declaration);
         this.declarations.set(marker.value, declaration);
         return marker;
     }
-    declarations = new WeakMap<object, { name: string; pos: number; pieces: Expr[]; rest: (k: number) => Expr }>();
+    declarations = new WeakMap<object, { name: string; pos: number; pieces: Expr[]; rest: (k: number) => Expr; marker: object }>();
     // Each declaration types the clauses of the definition right after it:
     // its parameters' types are typed patterns, and its result type the
     // claim of each clause's body (a function type, when fewer parameters
@@ -2078,11 +2077,20 @@ class Parser {
         for (let n = 0; n < items.length; n++) {
             const declaration = this.declarations.get(items[n]);
             if (!declaration) continue;
-            items.splice(n, 1);
             const { name, pos, pieces } = declaration, arity = pieces.length - 1;
             const defines = (item: TopLevel | Expr | undefined): item is Extract<TopLevel, { t: "def" }> | Extract<Expr, { t: "stmDef" }> =>
                 !!item && (item.t === "def" || item.t === "stmDef") && item.name === name;
-            if (!defines(items[n])) throw new APNError("parse", `the declaration of ${name} is not followed by its definition`, { pos, len: name.length });
+            // Alone, it defines the name as its type's zero, as a record slot
+            // does: x : Int is x = ([x : Int] []).x.
+            if (!defines(items[n + 1])) {
+                const type = declaration.rest(0);
+                const slots: Expr = { t: "record", v: [[name, type]], items: [{ t: "stmDef", name, clauses: [{ params: [], body: type }] }], declared: [name] };
+                const zero: Expr = { t: "recordAccess", rec: { t: "app", f: slots, a: { t: "list", v: [] } }, field: name, argument: { t: "var", name } };
+                const def = { name, clauses: [{ params: [], body: zero }] };
+                items[n] = items[n] === declaration.marker ? { t: "def", ...def } : { t: "stmDef", ...def } as Expr;
+                continue;
+            }
+            items.splice(n, 1);
             for (let m = n; defines(items[m]); m++) {
                 const item = items[m] as Extract<TopLevel, { t: "def" }>;
                 item.clauses = item.clauses.map(clause => {

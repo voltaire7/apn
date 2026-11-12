@@ -322,8 +322,10 @@ never hangs the prompt.
 
 `name : T` declares the definition of `name` right after it in the same
 block; `name : T = value` declares and defines at once. A declaration no
-definition follows is an error, and a definition's type is declared on a line
-of its own (`f x : Int = x` is an error). Lowercase names in the type that
+definition follows defines the name as its type's zero, as a record slot does
+([zero initialization](zero-initialization.md)): `x : Int` alone is `x = ([x :
+Int] []).x`, so `0`. A definition's type is declared on a line of its own
+(`f x : Int = x` is an error). Lowercase names in the type that
 nothing binds are its variables, the same name the same type throughout:
 
 ```apn
