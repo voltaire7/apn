@@ -29,7 +29,7 @@ for (const [source, expected] of [
 for (const op of ['+', '-', '*', '/', '%', '^']) for (const [a,b] of [['(.5 : Float32)','(.25 : Float64)'],['(.5 : Float64)','(.25 : Float32)']]) {
     Deno.test(`fixed precision mismatch: ${a} ${op} ${b}`, () => {
         try { result(`${a} ${op} ${b}`); } catch (e) {
-            if (!String(e).includes('explicit cast')) throw e;
+            if (!String(e).includes('cannot combine')) throw e;
             return;
         }
         throw new Error('expected mixed precision error');

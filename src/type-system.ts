@@ -91,13 +91,12 @@ export function implicitOperands(a: Numeric, b: Numeric): [Numeric, Numeric] {
 function floatingOperands(a: Numeric, b: Numeric): [Numeric, Numeric, string] | undefined {
     if (a.kind !== "float" || b.kind !== "float") return undefined;
     const fixed = (v: Numeric) => v.typeName === "Float32" || v.typeName === "Float64" ? v.typeName : undefined;
-    const left = fixed(a), right = fixed(b);
-    if (left && right && left !== right) throw new APNError("runtime", "mixed Float32 and Float64 arithmetic requires an explicit cast");
-    const target = left ?? right ?? "Float";
+    const target = fixed(a) ?? fixed(b) ?? "Float";
     return [castNumeric(target, a, true), castNumeric(target, b, true), target];
 }
 
 export function typedPower(a: Numeric, b: Numeric): Numeric {
+    mixed(a, b);
     const floats = floatingOperands(a, b);
     const left = floats?.[0] ?? a, right = floats?.[1] ?? b;
     const result = numericNative("expt", [left, right]) as Numeric;
@@ -114,18 +113,30 @@ function integerQuotient(result: Numeric): Numeric {
 export function sizedInteger(name: string | undefined): string | undefined {
     return name && name !== "Int" && /^U?Int(8|16|32|64|128)?$/.test(name) ? name : undefined;
 }
+// A fixed-width number type: a sized integer or a fixed-precision float
+// (Float32, Float64). Int and Float are flexible: they join any of them.
+export function fixedWidth(name: string | undefined): string | undefined {
+    return sizedInteger(name) ?? (name === "Float32" || name === "Float64" ? name : undefined);
+}
+// Two different fixed-width types do not mix: arithmetic on them is an
+// error until one is converted ((x : Int64)). The error's message and hint.
+export function mixedWidths(a: string | undefined, b: string | undefined): { message: string; hint: string } | undefined {
+    const [left, right] = [fixedWidth(a), fixedWidth(b)];
+    return left && right && left !== right ? { message: `cannot combine ${left} and ${right}`, hint: `convert one explicitly, as in \`(x : ${right})\`` } : undefined;
+}
 // As the APN model of the sized integers defines them: the same type keeps
 // it, a sized integer with an Int keeps the sized type, the result (not the
 // Int) being what must fit, and two different sized types do not mix. Other
 // numbers follow the numeric tower.
+function mixed(a: Numeric, b: Numeric): void {
+    const error = mixedWidths(a.typeName, b.typeName);
+    if (error) throw new APNError("runtime", error.message, { hint: error.hint });
+}
 export function typedArithmetic(op: string, a: Numeric, b: Numeric): Numeric {
+    mixed(a, b);
     const floats = floatingOperands(a, b);
     if (floats) return castNumeric(floats[2], arithmetic(op, floats[0], floats[1]), true);
-    const left = sizedInteger(a.typeName), right = sizedInteger(b.typeName);
-    if (left && right && left !== right) {
-        throw new APNError("runtime", `cannot combine ${left} and ${right}`, { hint: `convert one explicitly, as in \`(x : ${right})\`` });
-    }
-    const sized = left ?? right;
+    const sized = sizedInteger(a.typeName) ?? sizedInteger(b.typeName);
     if (sized) {
         const [l, r] = implicitOperands(a, b), result = arithmetic(op, l, r);
         if (a.kind !== "int" || b.kind !== "int") return result;

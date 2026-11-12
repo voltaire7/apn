@@ -1406,13 +1406,12 @@ not mutated. This is runtime precision selection, not backwards type inference.
 (.2 : Float) + (.1 : Float32) # 0.3, a Float32
 x = .2
 (.1 : Float32) + x            # 0.3, a Float32
-# Float32 .1 + Float64 .2     # error: explicit cast required
+# (.1 : Float32) + (.2 : Float64)  # error: cannot combine Float32 and Float64
 (.1 : Float32) + cast Float32 (.2 : Float64) # 0.3, a Float32
 ```
 
-Different fixed precisions require a cast even if a particular conversion would
-be lossless. The rule covers `+`, `-`, `*`, `/`, `%`, `^`, `expt`, and elementwise
-array arithmetic. Comparisons still compare numeric values without adopting an
+Different fixed precisions do not mix, even where a conversion would be
+lossless ([fixed-width types](#fixed-width-types)). Comparisons still compare numeric values without adopting an
 operand's precision. Flexible values are stored in binary64; this does not give
 exact decimal arithmetic or recover precision lost in an earlier computation.
 `Float` construction explicitly returns a value to flexible precision.
@@ -1422,10 +1421,19 @@ operations preserve the type and check integer overflow, and so does a sized
 integer with an `Int`, whose result (not the `Int`) must fit:
 `(2000000000 : Int32) - 3000000000` is the `Int32` `-1000000000`, and
 `(1233421412 : Int32) + 10^20` is an error, never a wrapped or widened number.
-Two different sized types do not mix: `(1 : Int32) + (2 : Int64)` is an error,
-and `(x : Int64)` converts one explicitly. A typed parameter is a value of its
-type, so the check sees it from the patterns alone:
-`f (x : Int32) (y : Int64) = x + y` is a static error. Another typed number keeps its type
+
+#### Fixed-width types
+
+The fixed-width types are the sized integers (`Int8` ... `UInt128`, `UInt`) and
+the fixed precisions (`Float32`, `Float64`); `Int` and `Float` are flexible and
+join any of them. Two different fixed-width types do not mix: `+`, `-`, `*`,
+`/`, `%`, `^`, `expt` and elementwise array arithmetic on them are an error
+(`(1 : Int32) + (2 : Int64)`, `(1 : Float32) + (2 : Float64)`,
+`(1 : Int32) + (2.5 : Float32)`), and `(x : Int64)` converts one explicitly. A
+typed parameter is a value of its type, so the check sees it from the patterns
+alone: `f (x : Int32) (y : Int64) = x + y` is a static error.
+
+Another typed number keeps its type
 with an untyped one where both convert to it (`(1 : Float32) / 10` is a
 `Float32`); otherwise arithmetic uses the numeric tower.
 Exact-to-inexact conversion must still be lossless. Integer `/` can produce a
