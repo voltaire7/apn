@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, OVERLOADED_FUNCTIONS, METHODS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -6800,8 +6800,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function defineClauses(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
         // An existing constructor destructures (Some v = Some 123), also one
         // imported, which the parser cannot see; as at runtime (evalDef).
-        if (/^[A-Z]/.test(name) && isConstructor(scope.get(name))) {
-            for (const c of clauses) infer({ t: "patDef", pattern: { p: "constr", tag: name, args: c.params }, value: c.body }, scope);
+        if (/^[A-Z]/.test(name) && (isConstructor(scope.get(name)) || listConstructor(name, scope) === "cons")) {
+            for (const c of clauses) infer({ t: "patDef", pattern: constructorPattern(name, c.params, listConstructor(name, scope) === "cons"), value: c.body }, scope);
             return;
         }
         // One whose length its index makes is known by that length, as at runtime.

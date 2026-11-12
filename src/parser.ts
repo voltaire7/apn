@@ -1609,18 +1609,16 @@ class Parser {
     isPatBinding(): boolean {
         if (!this.startsPatBinding()) return false;
         const t = this.peek();
-        // A built-in type name cannot be redefined, so Int x = 1 is a typed binding.
-        // A capitalized name not known as a constructor starts a definition,
-        // whatever its parameters (Vect Z a = []); one the parser cannot see
-        // (an imported Some) is decided when it runs (evalDef).
-        const unknown = t.k === "ident" && !declaredCtors.has(t.v) && !TYPE_NAMES.includes(t.v) && !(this.peek(1).k === "sym" && ((this.peek(1) as { v: string }).v === "." || isConstructorOperator((this.peek(1) as { v: string }).v)));
-        if (unknown) return false;
+        // A capitalized name starts a definition, whatever its parameters
+        // (Vect Z a = [], Int x = x + 1); one naming a constructor where it
+        // runs (Some x = m) is a pattern binding then (evalDef), which the
+        // parser cannot know.
+        const capitalized = t.k === "ident" && /^[A-Z]/.test(t.v) && !(this.peek(1).k === "sym" && ((this.peek(1) as { v: string }).v === "." || isConstructorOperator((this.peek(1) as { v: string }).v)));
+        if (capitalized) return false;
         const save = this.i;
         try {
             const p = this.parseConsPattern();
             if (p.p === "var") return false;
-            // A typed binding names one value: Int x = 1.
-            if (t.k === "ident" && TYPE_NAMES.includes(t.v) && !declaredCtors.has(t.v) && !(p.p === "constr" && p.args.length === 1)) return false;
             if (!this.isSym("=")) return false;
             // Name params = ... _ declares the constructor again: _ is no value
             // to take apart.
@@ -2505,11 +2503,11 @@ function joinClauses<T extends { t: string }>(statements: T[], definition: T & {
     else statements.push(definition);
 }
 
-// Constructors declared via capitalized bindings. This is what makes an Uppercase LHS with
-// args ambiguous: `Some v = ...` destructures only when `Some` was DECLARED a
-// constructor; otherwise `Vector3 x y z = [x = x, y = y, z = z]` stays a plain
-// (record-constructor) function def. Module-level so declarations persist
-// across REPL lines (each line is re-parsed standalone).
+// Constructors declared in the source, which decide how a pattern reads
+// ((x : T) of a type, of a constructor, a bare nullary name); whether
+// `Some v = ...` binds or defines is decided where it runs (evalDef).
+// Module-level so declarations persist across REPL lines (each line is
+// re-parsed standalone).
 let declaredCtors = new Set<string>();
 const nullaryCtors = new Set<string>();
 // Type names (built in or declared): in a pattern their arguments are types

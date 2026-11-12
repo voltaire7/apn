@@ -1359,7 +1359,7 @@ for (const source of ['x : Int = "a"', 'x : Int = 2.5', 'x : Int8 = 300',
 }
 // A built-in type's name is a name like any other: a program may rebind it, and
 // from then on Int means the program's Int (patterns, ascription, typeOf).
-for (const [source, output] of [['Int = 5\nInt + 1', '6'], ['Int x y = x + y\nInt 2 3', '5'],
+for (const [source, output] of [['Int = 5\nInt + 1', '6'], ['Int x y = x + y\nInt 2 3', '5'], ['Int x = x + 1\nInt 2', '3'],
     ['Int = Pos UInt | Neg UInt\ng (x : Int) = x\ng (Neg 2)', 'Neg 2'],
     ['Int = Pos UInt | Neg UInt\ntypeOf (Pos 1)', 'Int'], ['Int = Pos UInt | Neg UInt\nx = Pos 2 : Int\nx', 'Pos 2'],
     ['Bool = Yes | No\nh (b : Bool) = b\nh No', 'No']]) {

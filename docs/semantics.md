@@ -161,6 +161,11 @@ parentheses around a pattern follow the rule above: `f (Some x)`,
 `[(Some x), y]` and `(Some v) = m` are errors, and a name keeps them only to set
 an item (`xs (i) = v`).
 
+`Name args = value` defines `Name`, unless `Name` is a constructor where it
+runs, which makes it a pattern binding: `Some v = Some 5` binds `v`,
+`Cons x xs = [1,2]` binds `x` and `xs`, and `Int x = x + 1` defines a
+function `Int` (a built-in type's name is a name like any other).
+
 Lists print the same way: `print [1,2,[3]]` shows `[1,2,[3]]` and records show
 `[x = 1, y = 2]`. A list prints its items once its `,` is decided: when an item
 has a space, the list ends, or sixteen items are held, so an infinite one

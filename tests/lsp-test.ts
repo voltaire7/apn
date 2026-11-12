@@ -67,7 +67,9 @@ Deno.test("document parsing isolates declarations and restores REPL state", () =
     equal(parseDocument(source)[0].t, "type");
     try { parseDocument("EditorBroken a = | EditorBroken a\nfoo ="); } catch { /* intentional */ }
     equal(parseDocument("EditorBroken a = | EditorBroken a")[0].t, "type");
-    equal(parse("EditorRemembered x = EditorRemembered 1")[0].t, "patDef");
+    // A declared constructor's name in a typed pattern is a schema: (x : T).
+    const typed = parse("f (x : EditorRemembered) = x")[0] as { clauses: { params: { p: string }[] }[] };
+    equal(typed.clauses[0].params[0].p, "schema");
 });
 Deno.test("LSP diagnostics follow open/change/close and ignore stale versions", () => {
     const server = initialized();

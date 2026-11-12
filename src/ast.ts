@@ -318,6 +318,11 @@ export function rewriteInfixConstructors(node: unknown, tagOf: (op: string) => s
     for (const key of Object.keys(n)) delete n[key];
     Object.assign(n, { p: "constr", tag, args });
 }
+// The pattern Name args is when Name is a constructor where it runs (Some x =
+// m binds x): a list's cell when Name is the list's cons (Cons x xs = [1,2]).
+export function constructorPattern(name: string, args: Pattern[], cons: boolean): Pattern {
+    return cons && args.length === 2 ? { p: "cons", head: args[0], tail: args[1], op: name } : { p: "constr", tag: name, args };
+}
 // A constructor pattern whose constructor is the list's cons (the prelude's
 // Cons, by what the name is bound to: isCons) is that list cell, as h :: t
 // is; it keeps the name it was written with (see patternSource).

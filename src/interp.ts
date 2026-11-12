@@ -17,7 +17,7 @@ import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWit
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, listAlternatives, listClauses, listUnion, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, isUse } from "./ast.ts";
@@ -626,7 +626,7 @@ export class Interpreter {
             // clause is a binding of its own.
             if (this.isConstructorName(name)) {
                 let last: Value = { kind: "list", v: [] };
-                for (const clause of clauses) last = this.evalPatBinding({ pattern: { p: "constr", tag: name, args: clause.params }, value: clause.body });
+                for (const clause of clauses) last = this.evalPatBinding({ pattern: constructorPattern(name, clause.params, this.namesCons(name)), value: clause.body });
                 return last;
             }
             const arity = clauses[0].params.length;
@@ -5447,7 +5447,7 @@ export class Interpreter {
     // destructures).
     private isConstructorName(name: string): boolean {
         const bound = this.env.get(name);
-        return !!bound && ((bound.kind === "native" && !!bound.tag) || bound.kind === "variant");
+        return !!bound && ((bound.kind === "native" && !!bound.tag) || bound.kind === "variant" || this.namesCons(name));
     }
 
     // How many parameters the type a name is bound to takes: List a one,

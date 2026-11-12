@@ -473,7 +473,7 @@ for (const source of ["print (Int 5)", "print (Dynamic 1)", "print (Int $ 1.0)",
     failure(`a type is not a function: ${source}`, source, "is a type, not a function");
 }
 for (const source of ["f (Int x) = x\nprint (f 1)", "f ((Int) x) = x\nprint 1", "f (t x) = t\nprint 1",
-        "Int x = 1\nprint x", "g = (Int x) -> x\nprint (g 1)", "f (Vect n a xs) = n\nprint (f [1])"]) {
+        "g = (Int x) -> x\nprint (g 1)", "f (Vect n a xs) = n\nprint (f [1])"]) {
     failure(`a typed pattern writes its type after the value: ${source}`, source, "writes its type after the value");
 }
 example("types that construct, and typed patterns of any parameters", `
