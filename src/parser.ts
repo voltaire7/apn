@@ -1223,7 +1223,7 @@ class Parser {
                                 stmts.push(this.parsePatBinding());
                             } else {
                                 if (this.isTypeAlone()) {
-                                    stmts.push({ t: "typeDef", def: this.parseTypeAlone() });
+                                    throw this.typeAloneError();
                                 } else if (this.isConstructorDeclaration()) {
                                     const name = (this.peek() as { v: string }).v;
                                     this.declareInto(stmts, this.parseConstructorDeclaration(tb.pos, rulesBefore(stmts, name)), def => ({ t: "typeDef", def }));
@@ -1881,9 +1881,8 @@ class Parser {
             this.i = save;
         }
     }
-    // Lookahead: Name params : _ alone, a type declared without constructors
-    // (Option a : _), which constructors are then declared into. _ is its own
-    // type, so Option a : Option a is the same declaration.
+    // Lookahead: Name params : _ (or : Name params) alone, which declares
+    // nothing: a type is a constructor declared into Type (Opt a : Type = _).
     isTypeAlone(): boolean {
         const word = (j: number) => { const t = this.toks[j]; return t?.k === "ident" || t?.k === "sym" ? (t as { v: string }).v : undefined; };
         const head: string[] = [];
@@ -1899,15 +1898,10 @@ class Parser {
         const end = this.toks[j];
         return !end || ["newline", "dedent", "eof"].includes(end.k) || end.k === "sym" && end.v === ";";
     }
-    parseTypeAlone(): DataDef {
-        const name = (this.next() as { v: string }).v, parameters: string[] = [];
-        while (this.peek().k === "ident" && /^[a-z]/.test((this.peek() as { v: string }).v)) parameters.push((this.next() as { v: string }).v);
-        if (new Set(parameters).size !== parameters.length) throw new Error("Parser: type parameters must be distinct lowercase names");
-        this.expectSym(":");
-        // _, or the type itself written out (isTypeAlone checked it).
-        const written = (this.peek() as { v: string }).v === "_" ? 1 : 1 + parameters.length;
-        for (let n = 0; n < written; n++) this.next();
-        return { name, parameters, variants: [] };
+    typeAloneError(): APNError {
+        const at = this.peek(), head: string[] = [];
+        for (let j = this.i; this.toks[j]?.k === "ident"; j++) head.push((this.toks[j] as { v: string }).v);
+        return new APNError("parse", "a type is declared into Type", { pos: at.pos, hint: `${head.join(" ")} : Type = _` });
     }
     // Name fields : T = _ (isConstructorDeclaration() returned true).
     parseConstructorDeclaration(pos: number, rules: DefClause[] = []): DataDef {
@@ -2403,10 +2397,7 @@ class Parser {
             this.statementIndent = 0;
 
             if (this.skipFixityDeclaration()) continue;
-            if (this.isTypeAlone()) {
-                out.push({ t: "type", def: this.parseTypeAlone() });
-                continue;
-            }
+            if (this.isTypeAlone()) throw this.typeAloneError();
             if (this.isDeclaration()) {
                 out.push(this.parseDeclaration());
                 continue;
@@ -2513,6 +2504,17 @@ class Parser {
 // computed index makes it an indexed family's (Cons a (Vect k a) : Vect (S k)
 // a = _, whose result is that type). Without one, T is Name params itself.
 function constructorDeclaration(name: string, params: Pattern[], pos: number, body?: Expr, owner?: Expr, rules: DefClause[] = []): Extract<TopLevel, { t: "type" }> {
+    // Declared into Type, its applications are types: Opt a : Type = _ is the
+    // type Opt, its constructors declared into it (Some x : Opt x = _).
+    if (owner?.t === "var" && owner.name === "Type" && name !== "Type") {
+        if (body || rules.length) throw new APNError("parse", "a type declared into Type has no logic", { pos, hint: `${name} ... : Type = _` });
+        const parameters = params.map(p => {
+            if (p.p !== "var") throw new APNError("parse", "a type's parameters are names", { pos, hint: `${name} a : Type = _` });
+            return p.name;
+        });
+        if (new Set(parameters).size !== parameters.length) throw new APNError("parse", "a type's parameters are distinct names", { pos });
+        return { t: "type", def: { name, parameters, variants: [] } };
+    }
     if (rules.some(r => r.params.length !== params.length)) throw new APNError("parse", `every clause of ${name} takes ${params.length} parameters, as its declaration`, { pos });
     const parameters: string[] = [], names: string[] = [];
     const typeOf = (p: Pattern): Expr | undefined => p.p === "var" ? { t: "var", name: p.name }
@@ -2552,8 +2554,8 @@ function constructorDeclaration(name: string, params: Pattern[], pos: number, bo
 // result the constructor makes when that names a computed index. The
 // constructor's own type (Box x : Box x) is no other.
 function ownerType(tag: string, owner: Expr, pos: number): { name: string; parameters: string[]; result?: Expr } | undefined {
-    // : _ is its own type, as without it (Box x : _ = _ is Box x = _).
-    if (owner.t === "placeholder") return undefined;
+    // Without : T a constructor is its own type: : _ would say it twice.
+    if (owner.t === "placeholder") throw new APNError("parse", "a constructor is its own type without : T", { pos, hint: `${tag} ... = _, or ${tag} ... : Type = _ for a type` });
     const args: Expr[] = [];
     let head: Expr = owner;
     while (head.t === "app") { args.unshift(head.a); head = head.f; }

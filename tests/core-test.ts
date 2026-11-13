@@ -106,13 +106,13 @@ for (const checked of [true, false]) {
             + '[Add (Var "a") (Num 0), Add (Num 2) (Num 3), Add (Var "a") (Var "b"), typeOf (Add (Var "a") (Var "b"))]', '[Var "a", Num 5, Add (Var "a") (Var "b"), Expr]'],
         ["Frac n 0 = Frac 0 1\nFrac (n : Int) (d : Int) = _\n[Frac 1 2, Frac 3 0, Frac 1.0 2]", "[Frac 1 2, Frac 0 1, Frac 1 2]"],
         ["f = {\n    Lit (n : Int) : Term = _\n    Neg (Neg x) = x\n    Neg (x : Term) : Term = _\n    [Neg (Neg (Lit 3)), Neg (Lit 2)]\n}\nf", "[Lit 3, Neg (Lit 2)]"],
-        // A type alone, its constructors declared into it; with none it is empty.
-        ["Opt x : _\nSome a : Opt a = _\nNone : Opt a = _\n[typeOf (Some 1), typeOf None, Opt Int]", "[Opt Int, Opt x, Opt Int]"],
-        ["Void : _\n[isType Void 3, Void]", "[False,Void]"],
-        ["Opt a : Opt a\nSome x : Opt x = _\nVoid : Void\n[typeOf (Some 1), isType Void 3]", "[Opt Int, False]"],
-        // : _ is a constructor's own type; one shadows a built-in type.
+        // A type is a constructor declared into Type; its constructors are
+        // declared into it, and with none it is empty.
+        ["Opt x : Type = _\nSome a : Opt a = _\nNone : Opt a = _\n[typeOf (Some 1), typeOf None, Opt Int, typeOf (Opt Int)]", "[Opt Int, Opt x, Opt Int, Type]"],
+        ["Void : Type = _\n[isType Void 3, Void]", "[False,Void]"],
+        // Without : T a constructor is its own type; one shadows a built-in type.
         ["Type = _\n[Type, typeOf Type, isType Type Type, isType Type Int]", "[Type,Type,True,False]"],
-        ["Type : _ = _\nT : T = _\n[typeOf Type, typeOf T, isType Type Int]", "[Type,T,False]"],
+        ["Type : Type = _\nT : T = _\n[typeOf Type, typeOf T, isType Type Int]", "[Type,T,False]"],
         // A conversion instance takes a constructor's own type as written.
         [CTOR + "to (Box Int) (n : Int) = Box n\nf (b : Box Int) = b\n[(3 : Box Int), f 4]", "[Box 3, Box 4]"],
         [MAYBE + "[typeOf Nada, typeOf (Just Nada)]", "[Maybe x, Maybe (Maybe x)]"],
@@ -136,6 +136,9 @@ for (const checked of [true, false]) {
         [OPTION + "f t = Option t\nf 3", checked ? "cannot use Int where Type (a) is required" : "Option is a type, not a function"],
         ["Big = (n : Int) | n > 2\n(1 : Int & Big)", "is not in Int & Big"],
         ["Add x 0 = x\nAdd (x : Int) = _\n1", "every clause of Add takes 1 parameters, as its declaration"],
+        ["Opt a : _\n1", "a type is declared into Type"],
+        ["Box x : _ = _\n1", "a constructor is its own type without : T"],
+        ["Opt (a : Int) : Type = _\n1", "a type's parameters are names"],
         // A name keeps its arity: a type is given all its parameters.
         ["f (xs : List) = xs\nf [1]", "List takes 1 type parameter; a type is given all of them"],
         [MAYBE + "f (m : Maybe) = m\nf Nada", "Maybe takes 1 type parameter; a type is given all of them"],

@@ -302,7 +302,7 @@ function helpText(): string {
         `  Box x = _   (a constructor: Box 5 stands for itself; Rect (w : Float) (h : Float) = _ converts fields)`,
         `  UserId (id : Int) = _   (a distinct type: none of Int's operations; UserId x patterns unwrap)`,
         `  Circle (r : Float) : Shape = _   (a constructor of Shape; Shape = Circle Float | ... stands for it)`,
-        `  Handle a : _   (a type alone; constructors are declared into it)`,
+        `  Opt a : Type = _   (a type: a constructor declared into Type; constructors are declared into it)`,
         `  Add x (Num 0) = x, then Add x y = _   (rules before a constructor's declaration run first)`,
         `  Percent (x : Float) = x > 100 ? Percent 100.0 : _   (a constructor's logic; _ is the value itself)`,
         `  Box a = tag Box Box [a]   (a tagged value: its constructor, owner and fields)`,

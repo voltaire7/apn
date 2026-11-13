@@ -536,10 +536,11 @@ Within one source the type is declared where its first constructor is;
 declared elsewhere (an earlier REPL input, a module), the type there gains the
 constructor, so values made before keep the type as it was.
 
-`Name params : _` alone declares the type with no constructors yet, naming its
-parameters; constructors are then declared into it. With none it has no values
-(`Void : _`). As `_` is its own type, `Option a : Option a` is the same
-declaration (as `Box x : Box x = _` is `Box x = _`).
+A type is itself a constructor, declared into `Type`: `Opt a : Type = _` says
+`Opt a` stands for itself (`= _`) and is a type (`: Type`), so `Opt Int` is a
+type, and `Opt` takes a type (`Opt 3` is an error). It declares the type with
+no constructors yet, naming its parameters; constructors are then declared into
+it. With none it has no values (`Void : Type = _`).
 
 ```apn
 Circle (r : Float) : Shape = _   # Shape = Circle Float | Square Float
@@ -548,14 +549,16 @@ Some a : Option a = _            # Option a = Some a | None
 None : Option a = _
 Nil : Vect Z a = _               # Vect n a = Nil -> Vect Z a | ...
 Cons a (xs : Vect k a) : Vect (S k) a = _
-Handle a : _                     # a type, its constructors declared after
-Open (fd : Int) : Handle Int = _
+Opt a : Type = _                 # a type, its constructors declared after
+Some x : Opt x = _               # typeOf None is Opt a, named by the type
+None : Opt x = _
 ```
 
-`: _` is the constructor's own type, as without it, so `Type = _`,
-`Type : _ = _` and `Type : Type = _` are one declaration: a value `Type` whose
-type is itself. A constructor that is its own type shadows a type of that name,
-a built-in one too (as `docs/intrinsics.md` says a program's `Int` does).
+Without `: T` a constructor is its own type, so `Type = _` and
+`Type : Type = _` are one declaration: a value `Type` whose type is itself.
+(`Box x : _ = _` would say that twice, and is an error.) A constructor that is
+its own type shadows a type of that name, a built-in one too (as
+`docs/intrinsics.md` says a program's `Int` does).
 
 Written bare, `X = A | B` is a statement making constructors of `X`: all new
 names are declared, each with the fields written there. A constructor declared
