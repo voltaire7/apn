@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, extendedDeclaration, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -7435,10 +7435,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 : { k: "type", value: list(explicitDynamic) } });
             return;
         }
-        const def = unionKind(written, name => alternative(name, written.name, scope)) === "claim"
+        // Constructors declared into a type declared before join it (as at runtime).
+        const into = written.extends ? scope.get(written.name)?.declaration : undefined;
+        const def = into ? { ...extendedDeclaration(into, written), claims: true }
+            : !written.extends && unionKind(written, name => alternative(name, written.name, scope)) === "claim"
             ? claimedDeclaration(written, tag => scope.get(tag)!.declaration!.variants[0]) : written;
         // X = A | B of existing types is their union (see unionKind), as at runtime.
-        const kind = unionKind(def, name => alternative(name, def.name, scope));
+        const kind = def.extends ? "declaration" : unionKind(def, name => alternative(name, def.name, scope));
         if (kind !== "declaration") {
             if (kind !== "union") problem(kind);
             const clause = unionClause(def);
@@ -7450,7 +7453,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (indexed) indexedFamilies.set(d.name, { def: d, scope });
         invariance.set(d.name, invariantParameters(d));
         const result: Ty = { k: "variant", name: d.name, args: [...parameters.values()], ...indexed ? { indexed } : {} };
-        scope.set(d.name, { type: { k: "type", value: result } });
+        scope.set(d.name, { type: { k: "type", value: result }, declaration: d });
         const fieldsScope = new Map(scope);
         for (const [name, t] of parameters) {
             fieldsScope.set(name, { type: { k: "type", value: t }, mono: true });
@@ -7480,6 +7483,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             if (v.tag === d.name) t = { ...t, shared: true } as Ty;
             scope.set(v.tag, { type: t, declaration: d });
+        }
+        // A constructor's logic is a clause of its fields giving a value
+        // of its type (Percent (Float x) = x > 100 ? Percent 100.0 : _).
+        for (const v of d.variants) {
+            if (!v.logic) continue;
+            let made = resolve(infer({ t: "patternLambda", params: v.logic.params, body: v.logic.body }, scope));
+            let own = resolve(scope.get(v.tag)!.type);
+            while (made.k === "fn" && own.k === "fn") { made = resolve(made.output); own = resolve(own.output); }
+            unify(own, made, v.logic.body);
         }
         const positions = enumerationPositions(d);
         if (positions) define("to", positions, scope, positions[0].body);

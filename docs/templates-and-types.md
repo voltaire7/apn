@@ -526,6 +526,25 @@ Square (s : Float) = _
 Shape = Circle | Square       # typeOf (Circle 1) is Shape
 ```
 
+A constructor can name the type it makes: `Name fields : T = _` declares it
+into `T`, and is the form a union declaration stands for. Declarations naming
+one type make one type, each adding its constructor; `T`'s lowercase names are
+its parameters, and a computed index (`S k`) makes an indexed family, whose
+constructor makes that type. Without `: T` a constructor is its own type
+(`Box x = _` is `Box x : Box x = _`). A body with logic works as above.
+Within one source the type is declared where its first constructor is;
+declared elsewhere (an earlier REPL input, a module), the type there gains the
+constructor, so values made before keep their own type, as with claiming.
+
+```apn
+Circle (r : Float) : Shape = _   # Shape = Circle Float | Square Float
+Square (s : Float) : Shape = _
+Some a : Option a = _            # Option a = Some a | None
+None : Option a = _
+Nil : Vect Z a = _               # Vect n a = Nil -> Vect Z a | ...
+Cons a (xs : Vect k a) : Vect (S k) a = _
+```
+
 Written bare, `X = A | B` is a statement making constructors of `X`: all new
 names are declared, and constructors declared with `_` that no union owns yet
 are claimed, as above. Naming an existing type there is an error. The union

@@ -67,19 +67,39 @@ export type Pattern =
     | { p: "range"; lo: bigint; hi: bigint };
 
 // A variant's result is the type it makes when not the family's own (an
-// indexed family: Cons a (Vec k a) -> Vec (S k) a).
+// indexed family: Cons a (Vec k a) -> Vec (S k) a). Its logic, if any, is the
+// clause applying it runs (Percent (Float x) = x > 100 ? Percent 100.0 : _),
+// its _ already the raw value, intrinsics.tag owner Percent [x].
+export interface ConstructorLogic { params: Pattern[]; body: Expr; owner: { t: "var"; name: string } }
 // claims: a union claiming constructors declared with _ (see claimedDeclaration).
-export interface DataDef { name: string; parameters?: string[]; variants: DataVariant[]; claims?: boolean; }
-export type DataVariant = { tag: string; arity: number; fields?: Expr[]; result?: Expr };
+// extends: constructors declared into a type by name (Square (x : Float) :
+// Shape = _), added to it where it is already declared (see extendedDeclaration).
+export interface DataDef { name: string; parameters?: string[]; variants: DataVariant[]; claims?: boolean; extends?: boolean; }
+export type DataVariant = { tag: string; arity: number; fields?: Expr[]; result?: Expr; logic?: ConstructorLogic };
 
 // A range of a type repeats it ([Int..]); a type has no step or bound.
 export const TYPE_RANGE = "a range of a type repeats it, without a step or bound: [Int..]";
-// Whether an expression holds _ as a value.
+// Whether an expression holds _ as a value (a constructor's logic does).
 export function holdsPlaceholder(e: unknown): boolean {
     if (!e || typeof e !== "object") return false;
     if ((e as { t?: string }).t === "placeholder") return true;
     return Object.values(e).some(holdsPlaceholder);
 }
+// The expression with each _ replaced by the given one, in place (so its
+// nodes keep their source locations).
+export function fillPlaceholders(e: Expr, by: Expr): Expr {
+    if (e.t === "placeholder") return by;
+    const go = (x: Record<string, unknown>): void => {
+        for (const [key, child] of Object.entries(x)) {
+            if (!child || typeof child !== "object" || child === by) continue;
+            if ((child as { t?: string }).t === "placeholder") x[key] = by;
+            else go(child as Record<string, unknown>);
+        }
+    };
+    go(e as unknown as Record<string, unknown>);
+    return e;
+}
+
 // What X params = A | B is, by what its alternatives' names are bound to
 // where it runs: all new, it declares them as constructors; all existing
 // types, it is the union of them (unionClause). Anything else is an error,
@@ -169,20 +189,41 @@ export function listUnion(def: DataDef): boolean {
 // as an Int: Direction = North | East declares to Int North = 0 and
 // to Int East = 1 with it, so a value indexes and counts as that Int.
 export function enumerationPositions(def: DataDef): DefClause[] | undefined {
-    if (def.parameters?.length || def.variants.some(v => v.arity || v.result)) return undefined;
+    if (def.parameters?.length || def.variants.some(v => v.arity || v.result || v.logic)) return undefined;
     return def.variants.map((v, n) => ({
         params: [{ p: "constr", tag: "Int", args: [] }, { p: "constr", tag: v.tag, args: [] }],
         body: { t: "int", v: BigInt(n) },
     }));
 }
 // The declaration a union claiming constructors declared with _ makes: each
-// takes the fields its alternative gives (Some a), or its own (Some).
+// takes the fields its alternative gives (Some a), or its own (Some), and its
+// logic, whose raw values now belong to this type.
 export function claimedDeclaration(def: DataDef, own: (tag: string) => DataVariant): DataDef {
     const variants = def.variants.map(v => {
         const declared = own(v.tag);
-        return v.arity || !declared.arity ? v : { tag: declared.tag, arity: declared.arity, fields: declared.fields ?? [] };
+        if (declared.logic) declared.logic.owner.name = def.name;
+        return { ...v.arity || !declared.arity ? v : { tag: declared.tag, arity: declared.arity, fields: declared.fields ?? [] }, ...declared.logic ? { logic: declared.logic } : {} };
     });
     return { name: def.name, parameters: def.parameters, variants, claims: true };
+}
+// A type with constructors declared into it (Circle (x : Float) : Shape = _
+// after Shape's other constructors): its variants and the new ones, which
+// replace any of the same name; the new ones' type parameters are renamed to
+// the type's (Some x : Option x = _ after None : Option a = _).
+export function extendedDeclaration(existing: DataDef, added: DataDef): DataDef {
+    const ours = existing.parameters ?? [], theirs = added.parameters ?? [];
+    if (ours.length !== theirs.length) throw new APNError("parse", `${added.name} takes ${ours.length} type parameter${ours.length === 1 ? "" : "s"}, as declared`, { hint: `${added.variants[0].tag} ... : ${[added.name, ...ours].join(" ")} = _` });
+    const names = new Map(theirs.map((name, n) => [name, ours[n]]));
+    const rename = <T>(e: T): T => {
+        if (!e || typeof e !== "object") return e;
+        if (Array.isArray(e)) return e.map(rename) as T;
+        const node = e as Record<string, unknown>;
+        if (node.t === "var" && typeof node.name === "string" && names.has(node.name)) return { ...node, name: names.get(node.name) } as T;
+        return Object.fromEntries(Object.entries(node).map(([key, value]) => [key, key === "logic" ? value : rename(value)])) as T;
+    };
+    const variants = added.variants.map(rename);
+    const tags = new Set(variants.map(v => v.tag));
+    return { ...existing, variants: [...existing.variants.filter(v => !tags.has(v.tag)), ...variants] };
 }
 // Whether a definition's body is a union of types (see unionClause): a union
 // of list types declared with parameters (Pairs a = [] | a :: a :: Pairs a)

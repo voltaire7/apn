@@ -20,6 +20,8 @@ const CTOR = "Box x = _\nRect (w : Float) (h : Float) = _\nNothing = _\n";
 // A union of such constructors claims them: one type, as a declaration makes.
 const MAYBE = "Just x = _\nNada = _\nMaybe a = Just a | Nada\n";
 const SHAPE = "Circle (r : Float) = _\nSquare (s : Float) = _\nShape = Circle | Square\n";
+// Name fields : T = _ declares a constructor into T, as a union does.
+const INTO = "Circle (r : Float) : Shape = _\nSquare (s : Float) : Shape = _\nSome2 a : Opt a = _\nNone2 : Opt a = _\n";
 const OPTION = 'std <- import "std"; use std.option\n';
 // A union of existing types is a type of its own values: made of nothing new.
 const MIXED = "Mixed = (Int | String)\n";
@@ -82,6 +84,10 @@ for (const checked of [true, false]) {
         ["Low (x : Int) = x > 5 ? Low 5 : _\n[([l = Low 9] : [l : Low Int]), Low Int]", "[[l = Low 5], Low Int]"],
         ["Even (n : Int) = n % 2 == 0 ? _ : Even (n + 1)\n[Even 3, Even 4]", "[Even 4, Even 4]"],
         ["Circle (r : Float) = r < 0 ? Circle (0 - r) : _\nSquare (s : Float) = _\nShape = Circle | Square\n[Circle -2, typeOf (Circle 1)]", "[Circle 2.0, Shape]"],
+        [INTO + "area (Circle r) = r\narea (Square s) = s * s\n[typeOf (Circle 1), area (Square 2), typeOf (Some2 1), typeOf None2]", "[Shape, 4.0, Opt Int, Opt a]"],
+        ["Pos (x : Int) : Num = x < 0 ? Pos (0 - x) : _\n[Pos -2, typeOf (Pos 1)]", "[Pos 2, Num]"],
+        ["N : V Z a = _\nC a (xs : V k a) : V (S k) a = _\ntypeOf (C 1 (C 2 N))", "V 2 Int"],
+        ["f = {\n    Lo : Lvl = _\n    Hi : Lvl = _\n    [Lo, typeOf Hi]\n}\nf", "[Lo,Lvl]"],
     ] as const) Deno.test(`core (checked=${checked}): ${source}`, () => {
         const actual = run(source, checked);
         if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -94,6 +100,8 @@ for (const checked of [true, false]) {
         [CTOR + 'Rect "a" 2', checked ? "cannot use String where Float is required" : "Float expects a number"],
         [CTOR + "Box 5 + 1", checked ? "cannot combine Box Int and Int" : "cannot apply '+'"],
         ["Bad [x] = _\n1", "a constructor's field is a name, a typed name or a record of typed fields"],
+        [INTO + "Circle (d : Float) : Shape = _\n1", "Circle is already a constructor of Shape"],
+        ["Some a : Opt a = _\nNone : Opt = _\n1", "Opt takes 1 type parameter, as declared"],
         [MAYBE + '(Just "a" : Maybe Int)', checked ? "cannot use String where Int is required" : "Int expects a number"],
         ["Just x = _\nMaybe a = Just a | Nope\n1", "Maybe unions constructors declared with _, and Nope is not one"],
         [MIXED + "(2.5 : Mixed)", checked ? "cannot use Float where Int | String is required" : "Float is not one of Int | String"],
@@ -151,4 +159,13 @@ for (const checked of [true, false]) Deno.test(`a later union claims constructor
     let message = "";
     try { each("Mixed = Box | Int"); } catch (error) { message = (error as Error).message; }
     if (!message.includes("Mixed unions constructors declared with _, and Int is not one")) throw new Error(message);
+});
+
+// A constructor declared into a type from another input joins that type.
+for (const checked of [true, false]) Deno.test(`core (checked=${checked}): declared into a type across inputs`, () => {
+    const i = new Interpreter();
+    if (checked) i.enableChecking();
+    for (const source of ["Circle (r : Float) : Shape = _", "Square (s : Float) : Shape = _", "f (Circle r) = r\nf (Square s) = s"]) i.run(parseDocument(source));
+    const actual = i.renderString(i.run(parseDocument("[typeOf (Square 2), f (Circle 3), f (Square 4)]")));
+    if (actual !== "[Shape,3.0,4.0]") throw new Error(actual);
 });

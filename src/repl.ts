@@ -301,6 +301,7 @@ function helpText(): string {
         `  Positive = (n : Int) | n > 0   (a refinement: the Ints for which the condition holds)`,
         `  Box x = _   (a constructor: Box 5 stands for itself; Rect (w : Float) (h : Float) = _ converts fields)`,
         `  UserId (id : Int) = _   (a distinct type: none of Int's operations; UserId x patterns unwrap)`,
+        `  Circle (r : Float) : Shape = _   (a constructor of Shape; Shape = Circle Float | ... stands for it)`,
         `  Percent (x : Float) = x > 100 ? Percent 100.0 : _   (a constructor's logic; _ is the value itself)`,
         `  Box a = tag Box Box [a]   (a tagged value: its constructor, owner and fields)`,
         `  assert c x           x once c holds (a failure reports c and its location)`,

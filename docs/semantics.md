@@ -1140,7 +1140,9 @@ constructor pattern, a bare capitalized argument takes no fields of its own
 
 A capitalized definition whose body is `_` (`Box x = _`) declares a
 constructor, and one whose body holds `_` is a constructor with logic, its `_`
-the value itself; see [variants](templates-and-types.md#variants-parameters-and-distinct-wrappers).
+the value itself. `Name fields : T = _` declares it into the type `T`
+(`Circle (r : Float) : Shape = _`), which a union declaration stands for; see
+[variants](templates-and-types.md#variants-parameters-and-distinct-wrappers).
 That value is `tag Box Box [x]`: `tag owner ctor fields` (the prelude's name
 for `intrinsics.tag`) makes a value that remembers the constructor that made
 it, the type it belongs to and its fields, and does nothing else; patterns of
@@ -1148,7 +1150,7 @@ the constructor read the fields back:
 
 ```apn
 Box a = tag Box Box [a]
-Box 5                           # Box 5; typeOf (Box 5) is Box
+Box 5                           # Box 5; typeOf (Box 5) is Box Int
 unbox (Box x) = x               # unbox (Box 5) is 5
 tag Option Some [5] == Some 5   # True: a declared constructor's own value
 ```

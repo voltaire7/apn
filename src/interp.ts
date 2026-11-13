@@ -17,7 +17,7 @@ import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWit
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, type PatternHead, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, extendedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, type PatternHead, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, isUse } from "./ast.ts";
@@ -407,7 +407,13 @@ export class Interpreter {
         });
         if (listUnion(def)) { scope.setLocal(def.name, { kind: "type", name: "List" }); return undefined; }
         if (def.variants.some(v => v.result && (v.tag === "[]" || v.tag === "::"))) return this.evalDef(def.name, listClauses(def.variants));
-        const written = def, kind = unionKind(def, name => this.alternative(name, written.name));
+        // Constructors declared into a type declared before join it.
+        if (def.extends) {
+            const bound = this.env.get(def.name), type = bound && this.reference(bound);
+            const into = type?.kind === "type" && type.family && this.declarations.get(type.family);
+            if (into) def = { ...extendedDeclaration(into, def), claims: true };
+        }
+        const written = def, kind = def.extends ? "declaration" : unionKind(def, name => this.alternative(name, written.name));
         if (kind === "union") return this.evalDef(def.name, [unionClause(def)]);
         // Constructors declared with _ where the parser could not see
         // them (an earlier input, a module, a block) are claimed here.
@@ -429,8 +435,12 @@ export class Interpreter {
                 // Nullary constructors are themselves the value.
                 scope.setLocal(v.tag, { kind: "variant", tag: v.tag, v: [], family });
             } else {
+                // A constructor with logic runs it when applied; its _
+                // makes the raw value (see ConstructorLogic).
+                const logic = v.logic && { kind: "clauseFn" as const, name: v.tag, clauses: [{ params: v.logic.params, body: v.logic.body }], arity: v.arity, env: family.env, applied: [] };
                 scope.setLocal(v.tag, {
                     kind: "native", name: "__constr", arity: v.arity, applied: [], tag: v.tag, family,
+                    ...logic ? { invoke: (args: Value[]) => args.reduce<Value>((f, arg) => this.apply(f, arg), logic) } : {},
                 });
             }
         }
