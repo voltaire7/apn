@@ -116,7 +116,7 @@ for (const checked of [false, true]) for (const [source, expected] of [
 // checker chose: where it rules a clause out (f ARG ++ "!" then checks as a
 // String), the run skips it. Elements convert as they are used. A run without
 // checking infers the same types, so it means the same.
-const CHOICE = 'std <- import "std"; use std.option\nUserId (x : Int) = _\ng x = x\n';
+const CHOICE = 'std <- import "std"; use std.option\nUserId = | MkUserId Int\ng x = x\n';
 for (const [pattern, argument, chosen] of [
     ["(xs : List Int)", '["a"]', false],
     ["(xs : List Int)", '(map (x -> "s") [1])', false],
@@ -125,7 +125,7 @@ for (const [pattern, argument, chosen] of [
     ["(xs : List Int)", "[1,2.5]", true],
     ["(xs : List Int)", "[]", true],
     ["(xs : List Float)", "[1,2]", true],
-    ["(xs : List Float)", "[UserId 1]", false],
+    ["(xs : List Float)", "[MkUserId 1]", false],
     ["(x : Option Int)", '(Some "a")', false],
     ["(x : Option Int)", '(g (Some "a"))', false],
     ["(x : Option Int)", "None", true],

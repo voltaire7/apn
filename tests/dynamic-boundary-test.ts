@@ -91,7 +91,7 @@ for (const module of ['"std/function"']) {
 Deno.test("a checked import replaces a builtin function", () => {
     const i = new Interpreter();
     i.enableChecking();
-    const actual = i.renderString(i.run(parseDocument('std <- import "std"; use std.random\nstep (Generator (s -> [1,s])) 0')));
+    const actual = i.renderString(i.run(parseDocument('std <- import "std"; use std.random\nstep (MkGenerator (s -> [1,s])) 0')));
     if (actual !== "[1,0]") throw new Error(actual);
 });
 Deno.test("set on an explicit Dynamic target is checked at runtime", () => {

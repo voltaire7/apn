@@ -8,16 +8,16 @@ function result(source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['UserId (x : Int) = _\n[UserId, UserId 3, typeOf (UserId 3)]', '[UserId, UserId 3, UserId Int]'],
+    ['UserId = | MkUserId Int\n[UserId, MkUserId 3, typeOf (MkUserId 3)]', '[UserId, MkUserId 3, UserId]'],
     // A new type has only the operations its clauses define.
-    ['Distance (x : Float) = _\nDistance a + Distance b = Distance (a + b)\nDistance 2 + Distance 3', 'Distance 5.0'],
-    ['UserId (x : Int) = _\nf (x : t) = [t,x]\nf (UserId 3)', '[UserId Int, UserId 3]'],
-    ['UserId (x : Int) = _\nAlias = UserId\n[Alias == UserId, Alias 3 == UserId 3]', '[True,True]'],
-    ['UserId (x : Int) = _\nOrderId (x : Int) = _\n[UserId == OrderId, UserId 3 == OrderId 3, UserId 3 == 3]', '[False,False,False]'],
-    ['Money (x : Float) = _\nf (x : Float) = "Float"\nf (Money x) = "Money"\n[f 1.2, f (Money 1.2)]', '["Float","Money"]'],
-    ['UserId (x : Int) = _\nunpack (UserId n) = n\nunpack (UserId 123)', '123'],
-    ['UserId (x : Int) = _\nOrderId (x : Int) = _\nf (UserId n) = n\nf _ = 0\nf (OrderId 3)', '0'],
-    ['UserId (x : Int) = _\n([] : [v : UserId Int])', '[v = UserId 0]'],
+    ['Distance = | MkDistance Float\nMkDistance a + MkDistance b = MkDistance (a + b)\nMkDistance 2 + MkDistance 3', 'MkDistance 5.0'],
+    ['UserId = | MkUserId Int\nf (x : t) = [t,x]\nf (MkUserId 3)', '[UserId, MkUserId 3]'],
+    ['UserId = | MkUserId Int\nAlias = MkUserId\n[Alias == MkUserId, Alias 3 == MkUserId 3]', '[True,True]'],
+    ['UserId = | MkUserId Int\nOrderId = | MkOrderId Int\n[UserId == OrderId, MkUserId 3 == MkOrderId 3, MkUserId 3 == 3]', '[False,False,False]'],
+    ['Money = | MkMoney Float\nf (x : Float) = "Float"\nf (MkMoney x) = "Money"\n[f 1.2, f (MkMoney 1.2)]', '["Float","Money"]'],
+    ['UserId = | MkUserId Int\nunpack (MkUserId n) = n\nunpack (MkUserId 123)', '123'],
+    ['UserId = | MkUserId Int\nOrderId = | MkOrderId Int\nf (MkUserId n) = n\nf _ = 0\nf (MkOrderId 3)', '0'],
+    ['UserId = | MkUserId Int\n([] : [v : UserId])', '[v = MkUserId 0]'],
     ['v = [y = 2] : [x : Int]\nv', '[x = 0, y = 2]'],
     ['assert True "kept"', '"kept"'],
     ['std <- import "std"; use std.function\ncount = Mutable 0\nbracket 42 (_ -> set count 1) (x -> x + 1)\ncount', '1'],
@@ -28,14 +28,14 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const [source, error] of [
-    ['UserId (x : Int) = _\nUserId .2', 'lossy conversion'],
-    ['UserId (x : Int) = _\nOrderId (x : Int) = _\nUserId (OrderId 3)', 'Int expects a number'],
-    ['Money (x : Float) = _\nDistance (x : Float) = _\nMoney 1 + Distance 2', "cannot apply '+'"],
-    ['Distance (x : Int) = _\nDistance 2 + 3', "cannot apply '+'"],
-    ['Distance (x : Int) = _\n-Distance 2', 'negation expects numbers'],
-    ['Distance (x : Int) = _\nDistance 2 < Distance 3', 'cannot compare'],
-    ['Money (x : Float) = _\nsqrt (Money 4.0)', 'sqrt expects numbers'],
-    ['Distance (x : Int8) = _\nDistance 128', 'out of range'],
+    ['UserId = | MkUserId Int\nMkUserId .2', 'lossy conversion'],
+    ['UserId = | MkUserId Int\nOrderId = | MkOrderId Int\nMkUserId (MkOrderId 3)', 'Int expects a number'],
+    ['Money = | MkMoney Float\nDistance = | MkDistance Float\nMkMoney 1 + MkDistance 2', "cannot apply '+'"],
+    ['Distance = | MkDistance Int\nMkDistance 2 + 3', "cannot apply '+'"],
+    ['Distance = | MkDistance Int\n-MkDistance 2', 'negation expects numbers'],
+    ['Distance = | MkDistance Int\nMkDistance 2 < MkDistance 3', 'cannot compare'],
+    ['Money = | MkMoney Float\nsqrt (MkMoney 4.0)', 'sqrt expects numbers'],
+    ['Distance = | MkDistance Int8\nMkDistance 128', 'out of range'],
     ['assert (1 == 2) 0', 'assertion failed: (1 == 2)'],
     ['check = assert\ncheck False 0', 'assertion failed: False'],
     ['std <- import "std"; use std.function\nbracket 1 (_ -> []) (x -> y -> x)', 'must return data'],

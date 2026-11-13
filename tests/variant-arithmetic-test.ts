@@ -30,7 +30,7 @@ for (const source of [
     'Direction + 1',
     'West / North',
     // A new type has no arithmetic of its own.
-    'UserId (x : Int) = _\nUserId 1 + East',
+    'UserId = | MkUserId Int\nMkUserId 1 + East',
 ]) Deno.test(`variant arithmetic rejects: ${source}`, () => {
     try { result(source); } catch { return; }
     throw new Error('expected rejection');

@@ -439,18 +439,18 @@ print [not 0, !0]                         # => [True,True]
 
 # overloading: these clauses run first; anything else falls back to the
 # builtin +, as the inner (a + b) on two Ints does
-Cents = | Cents Int
-Cents a + Cents b = Cents (a + b)
-print (Cents 150 + Cents 75)              # => Cents 225
+Cents = | MkCents Int
+MkCents a + MkCents b = MkCents (a + b)
+print (MkCents 150 + MkCents 75)              # => MkCents 225
 print (1 + 2)                             # => 3
 # a function using + on its parameters takes either meaning
 addBoth x y = x + y
-print [addBoth (Cents 1) (Cents 2), addBoth 1 2]  # => [Cents 3, 3]
+print [addBoth (MkCents 1) (MkCents 2), addBoth 1 2]  # => [MkCents 3, 3]
 
 # the math functions overload the same way (sin, cos, sqrt, floor, max, ...)
-Dual = | Dual Float Float
-sin (Dual a b) = Dual (sin a) (b * cos a)
-print (sin (Dual 0.0 1.0))                # => Dual 0.0 1.0
+Dual = | MkDual Float Float
+sin (MkDual a b) = MkDual (sin a) (b * cos a)
+print (sin (MkDual 0.0 1.0))                # => MkDual 0.0 1.0
 print (sin 0.0)                           # => 0.0
 
 # a new operator with a fixity (possible, but not recommended)

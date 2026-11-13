@@ -1,4 +1,4 @@
-import { claimedDeclaration, countingOf, fillPlaceholders, holdsPlaceholder, patternNames, sourceLocations, unclaimedMix } from "./ast.ts";
+import { countingOf, holdsPlaceholder, patternNames, sourceLocations } from "./ast.ts";
 import { fieldSource, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -180,8 +180,6 @@ class Parser {
     toks: Token[];
     i = 0;
     seen: Token | null = null; // last token peeked/consumed — where a failure points
-    // Constructors declared with _ that no union has claimed yet (see claimed).
-    unclaimed = new Map<string, Extract<TopLevel, { t: "type" }>>();
 
     constructor(toks: Token[], private source: string, private file = "<repl>") { this.toks = toks; }
 
@@ -1225,11 +1223,9 @@ class Parser {
                                 stmts.push(this.parsePatBinding());
                             } else {
                                 if (this.isDef()) {
-                                    // Name params = _ declares a constructor, as at the top level.
                                     const d = this.parseBlockDef(), [clause] = d.clauses;
-                                    if (/^[A-Z]/.test(d.name) && d.clauses.length === 1 && holdsPlaceholder(clause.body)) {
-                                        stmts.push({ t: "typeDef", def: constructorDeclaration(d.name, clause.params, tb.pos, clause.body.t === "placeholder" ? undefined : clause.body).def });
-                                    } else joinClauses(stmts, d);
+                                    if (/^[A-Z]/.test(d.name) && holdsPlaceholder(clause.body)) throw sharedConstructor(d.name, clause, tb.pos);
+                                    joinClauses(stmts, d);
                                 }
                                 else stmts.push(this.tryItemAssign() ?? this.parseDelimitedExpr());
                             }
@@ -2305,19 +2301,9 @@ class Parser {
             this.skipNL();
             this.expectSym(")");
         } else variants = this.parseConstructors(name, [name, ...parameters].join(" "));
-        // A union of constructors declared with _ claims them: they
-        // become this type's, where the first of them was declared.
-        // The run and the checker claim those the parser cannot see.
-        const claimed = variants.map(v => out && this.unclaimed.get(v.tag));
-        if (out && claimed.some(Boolean)) {
-            const other = variants.find((_, n) => !claimed[n]);
-            if (other) throw new APNError("parse", unclaimedMix(name, other.tag), { pos: t.pos, hint: `declare it first: ${other.tag} = _, or ${other.tag} x = _ with a field` });
-            const at = Math.min(...claimed.map(c => out.indexOf(c!)));
-            const def = claimedDeclaration({ name, parameters, variants }, tag => claimed.find(c => c!.def.name === tag)!.def.variants[0]);
-            for (const c of claimed) { out.splice(out.indexOf(c!), 1); this.unclaimed.delete(c!.def.name); }
-            out.splice(at, 0, { t: "type", def });
-            return [];
-        }
+        // A constructor is named apart from its type: one name means one thing.
+        const shared = variants.find(v => v.tag === name);
+        if (shared) throw new APNError("parse", `the constructor ${name} shares its type's name`, { pos: t.pos, hint: `name it apart: ${name} = | Mk${name}${shared.arity ? " ..." : ""}` });
         // A union of list types (Pairs a = [] | a :: a :: Pairs a) is a union;
         // a family of lists, its type function's clauses (see listClauses).
         if (variants.some(v => v.tag === "[]" || v.tag === "::")) return [{ t: "type", def: { name, parameters, variants } }];
@@ -2393,13 +2379,8 @@ class Parser {
                 if (/^[A-Z]/.test(t.v)) {
                     if (this.isDef()) {
                         const declaration = this.parseDefStatement();
-                        const [clause] = declaration.clauses;
-                        if (holdsPlaceholder(clause.body)) {
-                            const logic = clause.body.t === "placeholder" ? undefined : clause.body;
-                            const made = constructorDeclaration(declaration.name, clause.params, t.pos, logic);
-                            this.unclaimed.set(declaration.name, made);
-                            out.push(made);
-                        } else out.push({ t: "def", ...declaration });
+                        if (holdsPlaceholder(declaration.clauses[0].body)) throw sharedConstructor(declaration.name, declaration.clauses[0], t.pos);
+                        out.push({ t: "def", ...declaration });
                         continue;
                     }
                     out.push({ t: "expr", value: this.parseExpr() });
@@ -2440,35 +2421,13 @@ class Parser {
     }
 }
 
-// Name params = _ declares a constructor: its applications stand for nothing
-// but themselves, so each is a value (Box 5), with one field per parameter. A
-// name holds anything (a type parameter); a typed name converts its field, as a
-// typed parameter does ((w : Float)), and a record of typed fields is a field
-// of that record's type ([x : Int, y : Int]). It is the declaration
-// Name a = | Name a is.
-function constructorDeclaration(name: string, params: Pattern[], pos: number, body?: Expr): Extract<TopLevel, { t: "type" }> {
-    const parameters: string[] = [], names: string[] = [];
-    const typeOf = (p: Pattern): Expr | undefined => p.p === "var" ? { t: "var", name: p.name }
-        : p.p === "int" ? { t: "int", v: p.v }
-        : p.p === "constr" ? p.args.reduce<Expr | undefined>((f, a) => { const x = typeOf(a); return f && x && { t: "app", f, a: x }; }, { t: "var", name: p.tag })
-        : undefined;
-    const fields = params.map(p => {
-        if (p.p === "var") { parameters.push(p.name); names.push(p.name); return typeOf(p)!; }
-        const [type, named] = p.p === "schema" ? [p.type, p.value] : p.p === "constr" && p.typed && p.args.length ? [typeOf({ ...p, args: p.args.slice(0, -1) }), p.args[p.args.length - 1]] : [];
-        if (!type || !named || named.p !== "var" && named.p !== "wildcard" && !(named.p === "recPat" && p.p === "schema" && p.type.t === "record")) {
-            throw new APNError("parse", "a constructor's field is a name, a typed name or a record of typed fields", { pos, hint: `${name} (x : Float) = _` });
-        }
-        if (named.p === "var") names.push(named.name);
-        else if (body) throw new APNError("parse", "a constructor with logic names each field, which its _ holds", { pos, hint: `${name} (x : Float) = ... _` });
-        return type;
-    });
-    if (new Set(names).size !== names.length) throw new APNError("parse", "a constructor's field names are distinct", { pos });
-    // Its logic's _ is the raw value: intrinsics.tag Name Name [fields].
-    const owner = { t: "var" as const, name };
-    const tag: Expr = { t: "recordAccess", rec: { t: "var", name: "intrinsics" }, field: "tag" };
-    const raw: Expr = { t: "app", f: { t: "app", f: { t: "app", f: tag, a: owner }, a: { t: "var", name } }, a: { t: "list", v: names.map(n => ({ t: "var", name: n })) } };
-    const logic = body && { params, body: fillPlaceholders(body, raw), owner };
-    return { t: "type", def: { name, parameters, variants: [{ tag: name, arity: fields.length, fields, ...logic ? { logic } : {} }] } };
+// Name params = _ (a constructor sharing its type's name) and a body holding
+// _ (a constructor with logic) are gone: a type's constructor is named apart
+// from it in a union, and logic is a refinement with a function.
+function sharedConstructor(name: string, clause: { params: Pattern[]; body: Expr }, pos: number): APNError {
+    return clause.body.t === "placeholder"
+        ? new APNError("parse", `a constructor is declared in its type's union, named apart from it`, { pos, hint: `${name} = | Mk${name}${clause.params.length ? " ..." : ""}` })
+        : new APNError("parse", `a constructor has no logic: name its values with a refinement`, { pos, hint: `${name} = (x : T) | condition, and a function making one` });
 }
 
 // A block's statement, joined to the definition before it when it continues

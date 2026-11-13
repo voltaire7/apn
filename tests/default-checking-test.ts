@@ -194,9 +194,9 @@ for (const [source, expected] of [
     ['[h 0 ++ "!", g 0 ++ "!"]', '["zero!","zero!"]'],
     ['xs = [1,"a"]; d (n : Int) = n + 1; d (s : String) = s ++ "!"; map d xs', '[2,"a!"]'],
     // A held value may be either: Pair 1 "a" or Pair true 'c' is Pair (Int | Bool) (String | Char).
-    ["Pair a b = | Pair a b; first (Pair x _) = x; to String (first (t > 0 ? Pair 1 \"a\" : Pair True 'c'))", '"1"'],
+    ["Pair a b = | MkPair a b; first (MkPair x _) = x\nto String (first (t > 0 ? MkPair 1 \"a\" : MkPair True 'c'))", '"1"'],
     ['inc (n : Int) = n + 1; dbl (n : Int) = n * 2; (t > 0 ? inc : dbl) 5', '6'],
-    ['Handler a = | Handler (a -> String)\napply (Handler f) x = f x\napply (Handler (s -> s ++ "!")) "x"', '"x!"'],
+    ['Handler a = | MkHandler (a -> String)\napply (MkHandler f) x = f x\napply (MkHandler (s -> s ++ "!")) "x"', '"x!"'],
     // The branches do not decide x where its other uses do: x > 0 keeps it a number.
     ['k x = x > 0 ? x : "neg"; [k 1 + 1, k -1]', '[2,"neg"]'],
     // A ternary is a match: a value known to take one alternative checks only it.
@@ -215,13 +215,13 @@ for (const source of [
     'xs = [1,"a",True]; d (n : Int) = n + 1; d (s : String) = s ++ "!"; map d xs',
     // A function a field holds takes one type, not either: Handler Int and
     // Handler String stay apart, and a choice of functions takes what all do.
-    'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\ninc (n : Int) = to String n\n' +
-        'bang (s : String) = s\napply (t > 0 ? Handler inc : Handler bang) 5',
+    'Handler a = | MkHandler (a -> String)\napply (MkHandler f) x = f x\ninc (n : Int) = to String n\n' +
+        'bang (s : String) = s\napply (t > 0 ? MkHandler inc : MkHandler bang) 5',
     'inc (n : Int) = n + 1; bang (s : String) = s; (t > 0 ? inc : bang) 5',
     // A lambda a field holds is checked where the field's type is decided,
     // however far the value travels first.
-    'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\napply (Handler (s -> s ++ "!")) 5',
-    'Handler a = | Handler (a -> String)\nh = Handler (s -> s ++ "!")\nHandler f = h\nf 5',
+    'Handler a = | MkHandler (a -> String)\napply (MkHandler f) x = f x\napply (MkHandler (s -> s ++ "!")) 5',
+    'Handler a = | MkHandler (a -> String)\nh = MkHandler (s -> s ++ "!")\nMkHandler f = h\nf 5',
     // A function matching its parameters is its alternatives as clauses.
     'd = x -> x ~ [0 -> 1]\nd 5',
     'add x y = [x,y] ~ [[0,b] -> b, [a,b] -> a + b]\nadd 0 "a" + 1',
@@ -1399,18 +1399,18 @@ for (const [source, expected] of [
     // A list indexed by a lambda's parameter.
     ['f (xs : List _) = map (n -> xs n) [0..1]\nf [5,6]', '[5,6]'],
     // An overloaded operator in a function whose operands are parameters.
-    ['Money = | Money Int\nMoney a + Money b = Money (a + b)\nf x y = x + y\nf (Money 1) (Money 2)', 'Money 3'],
-    ['Money = | Money Int\nMoney a + Money b = Money (a + b)\nf x y = x + y\nf 1 2', '3'],
+    ['Money = | MkMoney Int\nMkMoney a + MkMoney b = MkMoney (a + b)\nf x y = x + y\nf (MkMoney 1) (MkMoney 2)', 'MkMoney 3'],
+    ['Money = | MkMoney Int\nMkMoney a + MkMoney b = MkMoney (a + b)\nf x y = x + y\nf 1 2', '3'],
     // ... and one whose result is the parameter of a recursive call.
-    ['Q (a : Int) (b : Int) = _\nQ a b + Q c d = Q (a * d + c * b) (b * d)\nf k acc = k > 3 ? acc : f (k + 1) (acc + Q 1 2)\nf 1 (Q 0 1)', 'Q 12 8'],
-    ['Q a b = _\nQ a b + Q c d = Q (a * d + c * b) (b * d)\nf k acc = k > 3 ? acc : f (k + 1) (acc + Q 1 k)\nf 1 (Q 0 1)', 'Q 11 6'],
+    ['Q = | MkQ Int Int\nMkQ a b + MkQ c d = MkQ (a * d + c * b) (b * d)\nf k acc = k > 3 ? acc : f (k + 1) (acc + MkQ 1 2)\nf 1 (MkQ 0 1)', 'MkQ 12 8'],
+    ['Q a b = | MkQ a b\nMkQ a b + MkQ c d = MkQ (a * d + c * b) (b * d)\nf k acc = k > 3 ? acc : f (k + 1) (acc + MkQ 1 k)\nf 1 (MkQ 0 1)', 'MkQ 11 6'],
     // The checker knows what indexing gives: a list's item, a record's field,
     // or what clauses for get give.
     ['f 20 = "x"\nf n = 5\nxs = [10,20,30]\nr = [a = 20]\nf (xs 1) ++ f (xs -2) ++ f (r "a") ++ f r.a', '"xxxx"'],
-    ['P (x : Float) (y : Float) = _\nget (P x y) "x" = x\nget (P x y) "y" = y\nf 2.0 = "two"\nf n = 5\np = P 1 2\nf p.y ++ f (p "x" + 1)', '"twotwo"'],
+    ['P = | MkP Float Float\nget (MkP x y) "x" = x\nget (MkP x y) "y" = y\nf 2.0 = "two"\nf n = 5\np = MkP 1 2\nf p.y ++ f (p "x" + 1)', '"twotwo"'],
     // Clauses for a math function overload it, as for an operator.
-    ['Dual = | Dual Float Float\nsin (Dual a b) = Dual (sin a) (b * cos a)\nsin (Dual 0.0 1.0)', 'Dual 0.0 1.0'],
-    ['Dual = | Dual Float Float\nsin (Dual a b) = Dual (sin a) (b * cos a)\nsin 0.0', '0.0'],
+    ['Dual = | MkDual Float Float\nsin (MkDual a b) = MkDual (sin a) (b * cos a)\nsin (MkDual 0.0 1.0)', 'MkDual 0.0 1.0'],
+    ['Dual = | MkDual Float Float\nsin (MkDual a b) = MkDual (sin a) (b * cos a)\nsin 0.0', '0.0'],
     // Floats divide to a Float; a value of either of two types converts.
     ['x = 1.0 / 4.0\nr = [v = 0.5]\n{ r.v = x; r }', '[v = 0.25]'],
     ['b = True\n((b ? 1 : 2.5) : Float)', '1.0'],
@@ -1423,7 +1423,7 @@ for (const [source, expected] of [
     ['[2 ^ 53 + 1 > 9007199254740992.0, 0.5 < 1, 0.1 + 0.2 > 0.3]', '[True,True,True]'],
     // A cell holding a p5 object takes another, as itself.
     ['std <- import "std"; use std.p5\nc = Mutable (loadImage "a.png")\nset c (loadImage "b.png")\ntypeOf c', 'Mutable'],
-    ['std <- import "std"; use std.glsl\nglsl (vec [Glsl "a", 1] * sin (Glsl "t"))', '"(vec2(a, 1.0) * sin(t))"'],
+    ['std <- import "std"; use std.glsl\nglsl (vec [MkGlsl "a", 1] * sin (MkGlsl "t"))', '"(vec2(a, 1.0) * sin(t))"'],
 ]) {
     Deno.test(`p5.js-example typing: ${source}`, () => {
         const actual = run(session(), source);
@@ -1461,7 +1461,7 @@ for (const [source, output] of [
     // while a typed pattern takes a plain value it holds, binding that value.
     [I32 + 'a = 100 : I32\n[typeOf a, typeOf (a + 1), (a : Int) + 1, a == 100]', '[I32,I32,101,True]'],
     [I32 + 'h (x : I32) = typeOf x\nh x = "other"\n[h 5, h (5 : I32), h 1.5, h 3000000000]', '[Int,Int,"other","other"]'],
-    [POSITIVE + 'Box (x : Positive) = _\nBox 2', 'Box 2'],
+    [POSITIVE + 'Box = | MkBox Positive\nMkBox 2', 'MkBox 2'],
     ['Scalar = (n : UInt) | n <= 1114111 && (n < 55296 || n > 57343)\nc (x : Scalar) = x\nc 65', '65'],
 ]) {
     Deno.test(`a refinement type: ${JSON.stringify(source)}`, () => {
@@ -1473,7 +1473,7 @@ for (const [source, message] of [
     [POSITIVE + 'x = -3 : Positive', '-3 is not in Positive'], [POSITIVE + 'f (x : Positive) = x\nf -3', '-3 is not in Positive'],
     [POSITIVE + 'f (x : Positive) = x\nh y = f y\nh 0', '0 is not in Positive'],
     [POSITIVE + 'g [(a : Positive), b] = a\ng [-1,2]', '-1 is not in Positive'],
-    [POSITIVE + 'k = 0 - 2\nBox (x : Positive) = _\nBox k', '-2 is not in Positive'],
+    [POSITIVE + 'k = 0 - 2\nBox = | MkBox Positive\nMkBox k', '-2 is not in Positive'],
     [I32 + 'a = 2000000000 : I32\na + a', '4000000000 is not in I32'], [I32 + 'x = 3000000000 : I32', '3000000000 is not in I32'],
 ]) {
     Deno.test(`a refinement type rejects: ${JSON.stringify(source)}`, () => {
@@ -1485,8 +1485,8 @@ for (const [source, message] of [
 // An instance's own use of its method is itself where its patterns take the
 // arguments, and the method otherwise, as the run dispatches.
 for (const [source, output] of [
-    ['Money (m : Int) = _\nto String (Money m) = to String m\n[to String (Money 5), to String 7]', '["5","7"]'],
-    ['Pair (a : Int) (b : Int) = _\nto String (Pair a b) = to String a ++ "," ++ to String b\nto String (Pair 1 2)', '"1,2"'],
+    ['Money = | MkMoney Int\nto String (MkMoney m) = to String m\n[to String (MkMoney 5), to String 7]', '["5","7"]'],
+    ['Pair = | MkPair Int Int\nto String (MkPair a b) = to String a ++ "," ++ to String b\nto String (MkPair 1 2)', '"1,2"'],
     ['Tree = Leaf Int | Node Tree Tree\nmap f (Leaf x) = Leaf (f x)\nmap f (Node l r) = Node (map f l) (map f r)\nmap (+ 1) (Node (Leaf 1) (Leaf 2))',
         'Node (Leaf 2) (Leaf 3)'],
 ]) Deno.test(`an instance calls its method: ${JSON.stringify(source)}`, () => {

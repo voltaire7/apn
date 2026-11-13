@@ -98,7 +98,7 @@ for (const source of [
     "f (x : Int) y = x",
     "Option a = Some a | None\ng = Some x -> x",
     "Option a = Some a | None\nSome v = Some 1",
-    "Money = | Money Int\nMoney a + Money b = Money (a + b)",
+    "Money = | MkMoney Int\nMkMoney a + MkMoney b = MkMoney (a + b)",
 ]) Deno.test(`parenthesized parameter: ${JSON.stringify(source)}`, () => { parse(source); });
 
 // Every constructor pattern takes its fields, so f Some x = ... (the function

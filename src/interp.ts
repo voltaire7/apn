@@ -17,7 +17,7 @@ import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWit
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, recordGivenFields, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, type PatternHead, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, type PatternHead, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, isUse } from "./ast.ts";
@@ -407,34 +407,26 @@ export class Interpreter {
         });
         if (listUnion(def)) { scope.setLocal(def.name, { kind: "type", name: "List" }); return undefined; }
         if (def.variants.some(v => v.result && (v.tag === "[]" || v.tag === "::"))) return this.evalDef(def.name, listClauses(def.variants));
-        const written = def, kind = unionKind(def, name => this.alternative(name, written.name));
+        const kind = unionKind(def, name => this.alternative(name, def.name));
         if (kind === "union") return this.evalDef(def.name, [unionClause(def)]);
-        // Constructors declared with _ where the parser could not see
-        // them (an earlier input, a module, a block) are claimed here.
-        if (kind === "claim") def = claimedDeclaration(def, tag => this.declarations.get(this.constructorFamily(tag)!)!.variants[0]);
-        else if (kind !== "declaration") throw new APNError("runtime", kind);
+        if (kind !== "declaration") throw new APNError("runtime", kind);
         // A type is declared for its whole scope, as a new name is.
         for (const name of [def.name, ...def.variants.map(v => v.tag)]) {
             const previous = this.scopeBinding(name);
-            if (previous && ((previous.kind === "native" && previous.tag) || previous.kind === "variant") && previous.family?.name !== def.name && !def.claims) {
+            if (previous && ((previous.kind === "native" && previous.tag) || previous.kind === "variant") && previous.family?.name !== def.name) {
                 throw new APNError("runtime", `cannot redeclare value constructor ${name}; it belongs to ${previous.family?.name}`);
             }
         }
         const results = new Map(def.variants.flatMap(v => v.result ? [[v.tag, v.result] as [string, Expr]] : []));
         const family = { name: def.name, parameters: def.parameters ?? [], fields: new Map(def.variants.map(v => [v.tag, v.fields ?? []])), env: new Env(this.env), ...results.size ? { results } : {} };
         scope.setLocal(def.name, { kind: "type", name: def.name, family });
-        this.declarations.set(family, def);
         for (const v of def.variants) {
             if (v.arity === 0) {
                 // Nullary constructors are themselves the value.
                 scope.setLocal(v.tag, { kind: "variant", tag: v.tag, v: [], family });
             } else {
-                // A constructor with logic runs it when applied; its _
-                // makes the raw value (see ConstructorLogic).
-                const logic = v.logic && { kind: "clauseFn" as const, name: v.tag, clauses: [{ params: v.logic.params, body: v.logic.body }], arity: v.arity, env: family.env, applied: [] };
                 scope.setLocal(v.tag, {
                     kind: "native", name: "__constr", arity: v.arity, applied: [], tag: v.tag, family,
-                    ...logic ? { invoke: (args: Value[]) => args.reduce<Value>((f, arg) => this.apply(f, arg), logic) } : {},
                 });
             }
         }
@@ -5590,18 +5582,9 @@ export class Interpreter {
         if (!value) return "new";
         if (value.kind === "native" && value.tag || value.kind === "variant") {
             if (value.family?.name === declared) return "new";
-            // Declared alone with _ (Just x = _): no union owns it yet.
-            const own = value.family && this.declarations.get(value.family);
-            if (own && own.variants.length === 1 && own.name === name && !own.claims) return "unclaimed";
             return this.sharedType(value) ? "type" : "constructor";
         }
         return this.isTypeValue(value) ? "type" : "new";
-    }
-    // Each family's declaration, which a union claiming its constructor reads.
-    private declarations = new WeakMap<VariantFamily, DataDef>();
-    private constructorFamily(name: string): VariantFamily | undefined {
-        const bound = this.env.get(name), value = bound && this.reference(bound);
-        return value && (value.kind === "native" || value.kind === "variant") ? value.family : undefined;
     }
 
     // tag owner ctor fields: a value that remembers the constructor that made

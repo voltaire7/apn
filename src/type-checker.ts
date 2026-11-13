@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -1898,9 +1898,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             let made = resolve(entry.type);
             while (made.k === "fn") made = resolve(made.output);
             if (made.k === "variant" && made.name === declared) return "new";
-            // Declared alone with _ (Just x = _): no union owns it yet.
-            const own = entry.declaration;
-            if (own && own.variants.length === 1 && own.name === name && !own.claims) return "unclaimed";
             // One sharing its type's name is that type (see sharedType).
             return made.k === "variant" && made.name === name ? "type" : "constructor";
         }
@@ -6326,7 +6323,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (p.p === "constr" && TYPE_NAMES.includes(p.tag)) return low === -1000 && high === -1000;
         const n = naturalArgument(p, argument);
         if (n !== undefined) return p.p === "constr" && (p.tag === "Z" ? n !== 0n : n <= 0n);
-        if (p.p === "constr") return argument.tag !== undefined && argument.tag !== p.tag;
+        // A typed pattern names a type, not a constructor: (s : Shape) takes Circle 1.
+        if (p.p === "constr") return !p.typed && argument.tag !== undefined && argument.tag !== p.tag;
         if (p.p === "list") return listLength(argument, p.v.length) === false || p.v.some((q, n) => itemFails(q, argument, n));
         if (p.p === "cons") return listLength(argument, 0) === true || itemFails(p.head, argument, 0);
         return false;
@@ -7443,8 +7441,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 : { k: "type", value: list(explicitDynamic) } });
             return;
         }
-        const def = unionKind(written, name => alternative(name, written.name, scope)) === "claim"
-            ? claimedDeclaration(written, tag => scope.get(tag)!.declaration!.variants[0]) : written;
+        const def = written;
         // X = A | B of existing types is their union (see unionKind), as at runtime.
         const kind = unionKind(def, name => alternative(name, def.name, scope));
         if (kind !== "declaration") {
@@ -7488,15 +7485,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             if (v.tag === d.name) t = { ...t, shared: true } as Ty;
             scope.set(v.tag, { type: t, declaration: d });
-        }
-        // A constructor's logic is a clause of its fields giving a value
-        // of its type (Percent (Float x) = x > 100 ? Percent 100.0 : _).
-        for (const v of d.variants) {
-            if (!v.logic) continue;
-            let made = resolve(infer({ t: "patternLambda", params: v.logic.params, body: v.logic.body }, scope));
-            let own = resolve(scope.get(v.tag)!.type);
-            while (made.k === "fn" && own.k === "fn") { made = resolve(made.output); own = resolve(own.output); }
-            unify(own, made, v.logic.body);
         }
         const positions = enumerationPositions(d);
         if (positions) define("to", positions, scope, positions[0].body);

@@ -72,7 +72,7 @@ Deno.test("Mandelbrot escapes count iterations", () => {
     if (value(i, "counts") !== "[100,34,3]") throw new Error(value(i, "counts"));
 });
 Deno.test("a p5.strands shader's hook is written as GLSL", () => {
-    const i = load("filter-shader-p5-strands", '\ncode = glsl (displace [texCoord = Glsl "uv", canvasContent = Glsl "tex"])\n');
+    const i = load("filter-shader-p5-strands", '\ncode = glsl (displace [texCoord = MkGlsl "uv", canvasContent = MkGlsl "tex"])\n');
     const zoom = (n: string) => `TEXTURE(tex, (((uv - 0.5) / ${n}) + 0.5))`;
     const expected = `"vec4(TEXTURE(tex, uv).r, ${zoom("1.05")}.g, ${zoom("1.1")}.b, TEXTURE(tex, uv).a)"`;
     if (value(i, "code") !== expected) throw new Error(value(i, "code"));

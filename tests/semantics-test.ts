@@ -215,9 +215,9 @@ print ([1..] ~ [[x] -> 0, x::xs -> x])
 `, ["8", "1", "1", "1"]);
 
 example("variant fields are lazy", `
-Pair a b = | Pair a b
-getFirst (Pair a b) = a
-print (getFirst (Pair 7 missing))
+Pair a b = | MkPair a b
+getFirst (MkPair a b) = a
+print (getFirst (MkPair 7 missing))
 `, ["7"]);
 
 example("foldr can return without traversing an infinite tail", `
@@ -357,11 +357,11 @@ example("sharing a finite list between siblings is not a rendering cycle",
 
 example("type declarations construct and match variants", `
 Switch = Enabled | Disabled
-Wrapped a = | Wrapped a
-unwrap (Wrapped x) = x
+Wrapped a = | MkWrapped a
+unwrap (MkWrapped x) = x
 choose Enabled = 1
 choose Disabled = 0
-print (unwrap (Wrapped 42))
+print (unwrap (MkWrapped 42))
 print (choose Disabled)
 print (choose Enabled)
 `, ["42", "0", "1"]);
@@ -373,8 +373,8 @@ Deno.test("data no longer introduces a type declaration", () => {
 
 example("type and data are ordinary identifiers", 'type = 20; data = 22; print (type + data)', ["42"]);
 example("single constructor declaration preserves destructuring", `
-Parcel a = | Parcel a
-Parcel contents = Parcel 42
+Parcel a = | MkParcel a
+MkParcel contents = MkParcel 42
 print contents
 `, ["42"]);
 failure("constructor alternatives require a name", 'InvalidAlternatives = OneAlternative |', "expected a constructor: a capitalized name, [] or x :: rest");
@@ -387,9 +387,9 @@ readMulti (MultiSome x) = x
 readMulti MultiNone = 0
 print (readMulti (MultiSome 42))
 print (readMulti MultiNone)
-SingleBar a = | SingleBar a
-print (SingleBar 7)
-`, ["42", "0", "SingleBar 7"]);
+SingleBar a = | MkSingleBar a
+print (MkSingleBar 7)
+`, ["42", "0", "MkSingleBar 7"]);
 
 
 failure("a backticked name is a name, not infix", "1 `add` 2", "cannot apply a number");
@@ -700,7 +700,7 @@ failure("a file's statement that binds nothing is an action, as a block's",
 failure("a file that ran an action ends in one, as a do-block does",
     "print 1\n5", "its value would be dropped");
 example("a block declares types as a file does",
-    "f n = {\n    Color = Red | Green\n    n > 0 ? Red : Green\n}\nBox a = _\nb = {\n    Pair a b = _\n    Pair 1 2\n}\nprint [f 1, f 0]\nprint b", ["[Red,Green]", "Pair 1 2"]);
+    "f n = {\n    Color = Red | Green\n    n > 0 ? Red : Green\n}\nBox a = | MkBox a\nb = {\n    Pair a b = | MkPair a b\n    MkPair 1 2\n}\nprint [f 1, f 0]\nprint b", ["[Red,Green]", "MkPair 1 2"]);
 failure("a block's types are its own",
     "f = {\n    Color = Red | Green\n    Red\n}\nprint Red", "unbound variable 'Red'");
 

@@ -114,9 +114,9 @@ Fahrenheit = | F Float
 to Celsius (F f) = C ((f - 32) * 5 / 9)
 to Celsius (F 212)              # C 100.0
 
-Point x y = _
-to String (Point x y) = to String x ++ "@" ++ to String y
-print [Point 1 2, Point 3 4]    # [1@2,3@4]: printing uses the instance
+Point x y = | MkPoint x y
+to String (MkPoint x y) = to String x ++ "@" ++ to String y
+print [MkPoint 1 2, MkPoint 3 4] # [1@2,3@4]: printing uses the instance
 ```
 
 ## Absence and errors — `option`
@@ -488,8 +488,8 @@ Option a =
     | None
 ```
 
-`Box x = _` declares a single constructor, also when its name is already in
-scope.
+`Box x = | MkBox x` declares a single constructor, named apart from its type,
+also when its name is already in scope.
 
 ## Creative coding — `p5`, `glsl`
 

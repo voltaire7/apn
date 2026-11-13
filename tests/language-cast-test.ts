@@ -55,7 +55,7 @@ for (const [source, error] of [
     ['f (x : Int) = x\nf (.2 : Float)', 'no clause'],
     ['func (x : Int) = print Int\nfunc .2', 'no clause'],
     ['((x : Int) -> x) .2', 'no clause'],
-    ['Count (x : Int) = _\nf (Count x) = x\nf .2', 'no clause'],
+    ['Count = | MkCount Int\nf (MkCount x) = x\nf .2', 'no clause'],
     ['(128 : Int8)', 'out of range'],
     ['cast Int8 (128 : Int)', 'out of range'],
     ['cast UInt (-1 : Int)', 'negative integer'],
