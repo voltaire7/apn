@@ -68,7 +68,8 @@ export type Pattern =
 
 // A variant's result is the type it makes when not the family's own (an
 // indexed family: Cons a (Vec k a) -> Vec (S k) a).
-export interface DataDef { name: string; parameters?: string[]; variants: DataVariant[]; }
+// claims: a union claiming constructors declared with _ (see claimedDeclaration).
+export interface DataDef { name: string; parameters?: string[]; variants: DataVariant[]; claims?: boolean; }
 export type DataVariant = { tag: string; arity: number; fields?: Expr[]; result?: Expr };
 
 // A range of a type repeats it ([Int..]); a type has no step or bound.
@@ -83,12 +84,18 @@ export function holdsPlaceholder(e: unknown): boolean {
 // where it runs: all new, it declares them as constructors; all existing
 // types, it is the union of them (unionClause). Anything else is an error,
 // worded once here for the runtime and the checker.
-export type Alternative = "new" | "type" | "constructor";
-export function unionKind(def: DataDef, kind: (name: string) => Alternative): "declaration" | "union" | string {
+// unclaimed: a constructor declared with _ that no union owns yet.
+export type Alternative = "new" | "type" | "constructor" | "unclaimed";
+export function unionKind(def: DataDef, kind: (name: string) => Alternative): "declaration" | "union" | "claim" | string {
+    if (def.claims) return "declaration";
     // A list's own alternatives are list types (Pairs a = [] | a :: a :: Pairs a);
     // in a family of lists, where each says its index, they are its clauses.
     const kinds = def.variants.map(v => v.tag === "[]" || v.tag === "::" ? v.result ? "new" : "type" : kind(v.tag));
     if (kinds.every(k => k === "new")) return "declaration";
+    // The first union listing constructors declared with _ owns them.
+    const unclaimed = kinds.filter(k => k === "unclaimed").length;
+    if (unclaimed === kinds.length) return "claim";
+    if (unclaimed) return unclaimedMix(def.name, def.variants.find((_, n) => kinds[n] !== "unclaimed")!.tag);
     // One type is no union: a leading | declares a constructor (Box a = | Box a).
     // Types joined without parentheses declare nothing: their union is an
     // expression, X = (A | B); only a union of list types is written bare.
@@ -102,10 +109,14 @@ export function unionKind(def: DataDef, kind: (name: string) => Alternative): "d
     const [type, fresh] = [def.variants.find((_, n) => kinds[n] === "type")!, def.variants.find((_, n) => kinds[n] === "new")!];
     return `${def.name} mixes a type (${type.tag}) and a new constructor (${fresh.tag}): its alternatives are all types (a union) or all new (a declaration)`;
 }
+export function unclaimedMix(name: string, other: string): string {
+    return `${name} unions constructors declared with _, and ${other} is not one`;
+}
 // Nil and Cons a (X a) in a union, by what their names are bound to (the
 // empty list and the list's cons, as the prelude names them), are the list's
 // own alternatives, as [] and a :: X a are: List a = Nil | Cons a (List a).
 export function listAlternatives(def: DataDef, bound: (tag: string) => "nil" | "cons" | undefined): DataDef {
+    if (def.claims) return def;
     let changed = false;
     const variants = def.variants.map(v => {
         const kind = v.tag === "[]" || v.tag === "::" ? undefined : bound(v.tag);
@@ -163,6 +174,15 @@ export function enumerationPositions(def: DataDef): DefClause[] | undefined {
         params: [{ p: "constr", tag: "Int", args: [] }, { p: "constr", tag: v.tag, args: [] }],
         body: { t: "int", v: BigInt(n) },
     }));
+}
+// The declaration a union claiming constructors declared with _ makes: each
+// takes the fields its alternative gives (Some a), or its own (Some).
+export function claimedDeclaration(def: DataDef, own: (tag: string) => DataVariant): DataDef {
+    const variants = def.variants.map(v => {
+        const declared = own(v.tag);
+        return v.arity || !declared.arity ? v : { tag: declared.tag, arity: declared.arity, fields: declared.fields ?? [] };
+    });
+    return { name: def.name, parameters: def.parameters, variants, claims: true };
 }
 // Whether a definition's body is a union of types (see unionClause): a union
 // of list types declared with parameters (Pairs a = [] | a :: a :: Pairs a)

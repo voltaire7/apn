@@ -34,15 +34,15 @@ for (const [name, source, expected] of [
     ["prelude fixities", "print (1 + 2 * 3)\nprint (2 ^ 3 ^ 2)\nprint (10 - 3 - 2)\nprint (1 :: 2 :: [3])\nprint (-2 ^ 2)", ["7", "512", "5", "[1,2,3]", "-4"]],
     ["cons stays lazy", "ones = 1::ones\nprint (take 3 ones)", ["[1,1,1]"]],
     ["&& and || short-circuit", "print (False && head [])\nprint (True || head [])", ["False", "True"]],
-    ["an overload falls back to the builtin", "Money = | MkMoney Int\nMkMoney a + MkMoney b = MkMoney (a + b)\nprint (MkMoney 3 + MkMoney 4)\nprint (1 + 2)\nprint (\"a\" + \"b\")",
-        ["MkMoney 7", "3", "ab"]],
+    ["an overload falls back to the builtin", "Money = | Money Int\nMoney a + Money b = Money (a + b)\nprint (Money 3 + Money 4)\nprint (1 + 2)\nprint (\"a\" + \"b\")",
+        ["Money 7", "3", "ab"]],
     ["a literal clause falls back to the builtin for other arguments", "1 + 1 = 3\nprint (1 + 1)\nprint (1 + 2)\nprint (2 + 2)", ["3", "3", "4"]],
     // Clauses for a type travel with its values: code elsewhere (foldl's +)
     // takes them, in a block's type too; a block's other clauses shadow.
-    ["clauses for a type travel with it", "Money = | MkMoney Int\nMkMoney a + MkMoney b = MkMoney (a + b)\nprint (foldl (+) (MkMoney 0) [MkMoney 1, MkMoney 2])\n" +
-        "f n = {\n    Box = | MkBox Int\n    MkBox a + MkBox b = MkBox (a + b)\n    foldl (+) (MkBox n) [MkBox 1]\n}\nprint (f 2)\n" +
+    ["clauses for a type travel with it", "Money = | Money Int\nMoney a + Money b = Money (a + b)\nprint (foldl (+) (Money 0) [Money 1, Money 2])\n" +
+        "f n = {\n    Box (v : Int) = _\n    Box a + Box b = Box (a + b)\n    foldl (+) (Box n) [Box 1]\n}\nprint (f 2)\n" +
         "g n = {\n    x + y = x * y\n    n + 3\n}\nprint [g 2, 2 + 3]",
-        ["MkMoney 3", "MkBox 3", "[6,5]"]],
+        ["Money 3", "Box 3", "[6,5]"]],
     ["a new operator with a fixity", "infixr 5 +|+\nxs +|+ ys = xs ++ [0] ++ ys\nprint ([1] +|+ [2] +|+ [3])", ["[1,0,2,0,3]"]],
     ["an undeclared operator is infixl 9", "a <-> b = a - b\nprint (10 <-> 3 <-> 2)\nprint (2 * 5 <-> 1)", ["5", "8"]],
     ["an operator bound to a function", "(<||>) = max\nprint (3 <||> 7)\nprint ((<||>) 9 1)", ["7", "9"]],
@@ -50,18 +50,18 @@ for (const [name, source, expected] of [
     ["a local infix definition", "f x = {\n    a <+> b = a * 10 + b\n    x <+> 1 <+> 2\n}\nprint (f 5)", ["512"]],
     ["$ is an operator", "print (head $ tail [1,2,3])\nprint ((+ 1) \\ (* 2) $ 3)", ["2", "7"]],
     // Applying a value that is not a function is get, which clauses extend.
-    ["clauses for get index a type", "Grid = | MkGrid (List Int)\nget (MkGrid cells) [(r : Int), (c : Int)] = cells (3 * r + c)\n" +
-        "g = MkGrid [1,2,3,4,5,6,7,8,9]\nprint (g [1,2])\nprint (map g [[0,0],[2,2]])\nprint ([10,20] 1)\nprint (get [5,6] 0)",
+    ["clauses for get index a type", "Grid (cells : List Int) = _\nget (Grid cells) [(r : Int), (c : Int)] = cells (3 * r + c)\n" +
+        "g = Grid [1,2,3,4,5,6,7,8,9]\nprint (g [1,2])\nprint (map g [[0,0],[2,2]])\nprint ([10,20] 1)\nprint (get [5,6] 0)",
         ["6", "[1,9]", "20", "5"]],
     // xs i = x binds xs to with xs i x, which clauses extend too; v.x is get v "x".
-    ["clauses for with assign to a type", "Grid = | MkGrid (List Int)\nget (MkGrid cells) [(r : Int), (c : Int)] = cells (3 * r + c)\n" +
-        "with (MkGrid cells) [(r : Int), (c : Int)] (x : Int) = MkGrid (with cells (3 * r + c) x)\n" +
-        "g = MkGrid [1,2,3,4,5,6,7,8,9]\nold = g\ng [1,2] = 60\nprint [g [1,2], old [1,2]]\nxs = [1,2]\nxs 0 = 5\nprint [xs, with xs 1 7]",
+    ["clauses for with assign to a type", "Grid (cells : List Int) = _\nget (Grid cells) [(r : Int), (c : Int)] = cells (3 * r + c)\n" +
+        "with (Grid cells) [(r : Int), (c : Int)] (x : Int) = Grid (with cells (3 * r + c) x)\n" +
+        "g = Grid [1,2,3,4,5,6,7,8,9]\nold = g\ng [1,2] = 60\nprint [g [1,2], old [1,2]]\nxs = [1,2]\nxs 0 = 5\nprint [xs, with xs 1 7]",
         ["[60,6]", "[[5,2],[5,7]]"]],
-    ["clauses for get and with give a type fields", "Point = | MkPoint Float Float\nget (MkPoint x y) \"x\" = x\nget (MkPoint x y) \"y\" = y\n" +
-        "with (MkPoint x y) \"x\" (v : Float) = MkPoint v y\nwith (MkPoint x y) \"y\" (v : Float) = MkPoint x v\n" +
-        "p = MkPoint 1 2\nprint (p.x + p.y)\np.x = 5\na = [p = p]\na.p.y = 3\nprint a",
-        ["3.0", "[p = MkPoint 5.0 3.0]"]],
+    ["clauses for get and with give a type fields", "Point (x : Float) (y : Float) = _\nget (Point x y) \"x\" = x\nget (Point x y) \"y\" = y\n" +
+        "with (Point x y) \"x\" (v : Float) = Point v y\nwith (Point x y) \"y\" (v : Float) = Point x v\n" +
+        "p = Point 1 2\nprint (p.x + p.y)\np.x = 5\na = [p = p]\na.p.y = 3\nprint a",
+        ["3.0", "[p = Point 5.0 3.0]"]],
     // Clauses taking another number of arguments define a new function.
     ["an overload takes as many arguments", "log b x = b\nprint (log 2 8)\nget k = k\nprint (get 3)\nprint ([4,5] 1)", ["2", "3", "5"]],
 ] as const) Deno.test(`operators: ${name}`, () => {
@@ -77,7 +77,7 @@ for (const [source, message, kind] of [
     ["print (1 <%%> 2)", "unbound operator '<%%>'", "type"],
     ["print (1+-2)", "unbound operator '+-'", "type"],
     ["print (get (x -> x) 1)", "get takes a value, not a function", "type"],
-    ["Grid = | MkGrid (List Int)\nprint (MkGrid [1] 0)", "cannot apply Grid", "type"],
+    ["Grid (cells : List Int) = _\nprint (Grid [1] 0)", "cannot apply Grid", "type"],
 ] as const) Deno.test(`operators reject: ${source}`, () => fails(source, message, kind));
 
 // An operator written infix, as (op) or as its intrinsic is checked the same
@@ -92,7 +92,7 @@ for (const [spellings, text] of [
 ] as const) for (const source of spellings) Deno.test(`one typing for each spelling: ${JSON.stringify(source)}`, () => fails(source, text, "type"));
 for (const [source, expected] of [
     ["print (not 0)", ["True"]],
-    ["Cents = | MkCents Int\nMkCents a + MkCents b = MkCents (a + b)\nprint ((+) (MkCents 1) (MkCents 2))\nprint (zipWith (+) [1] [2])", ["MkCents 3", "[3]"]],
+    ["Cents = | Cents Int\nCents a + Cents b = Cents (a + b)\nprint ((+) (Cents 1) (Cents 2))\nprint (zipWith (+) [1] [2])", ["Cents 3", "[3]"]],
     ["print (+)\nprint ((+) 1)\nprobe [(+)]", ["(+)", "(1 +)", "[(+)]"]],
 ] as const) Deno.test(`operators as functions: ${JSON.stringify(source)}`, () => {
     const actual = run(source);

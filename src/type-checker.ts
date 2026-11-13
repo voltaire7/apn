@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -1896,6 +1896,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             let made = resolve(entry.type);
             while (made.k === "fn") made = resolve(made.output);
             if (made.k === "variant" && made.name === declared) return "new";
+            // Declared alone with _ (Just x = _): no union owns it yet.
+            const own = entry.declaration;
+            if (own && own.variants.length === 1 && own.name === name && !own.claims) return "unclaimed";
             // One sharing its type's name is that type (see sharedType).
             return made.k === "variant" && made.name === name ? "type" : "constructor";
         }
@@ -7432,7 +7435,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 : { k: "type", value: list(explicitDynamic) } });
             return;
         }
-        const def = written;
+        const def = unionKind(written, name => alternative(name, written.name, scope)) === "claim"
+            ? claimedDeclaration(written, tag => scope.get(tag)!.declaration!.variants[0]) : written;
         // X = A | B of existing types is their union (see unionKind), as at runtime.
         const kind = unionKind(def, name => alternative(name, def.name, scope));
         if (kind !== "declaration") {

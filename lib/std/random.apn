@@ -4,27 +4,27 @@
 std <- import "std"
 use std.task
 # A seed is a 32-bit Int: initialSeed n makes one from any Int.
-Generator a = | MkGenerator (Int -> [a,Int])
+Generator a = | Generator (Int -> [a,Int])
 initialSeed n = modulo n 4294967296
 # The next seed (a linear congruential step); values use its high bits.
 next s = modulo (s * 1664525 + 1013904223) 4294967296
-step (MkGenerator f) seed = f seed
+step (Generator f) seed = f seed
 # Generators are monads: map f g, g >>= f (Elm's andThen), return x (Elm's
 # constant); map2 and the like come from the prelude.
-map f (MkGenerator g) = MkGenerator (seed -> {
+map f (Generator g) = Generator (seed -> {
     [value,rest] = g seed
     [f value, rest]
 })
-MkGenerator g >>= f = MkGenerator (seed -> {
+Generator g >>= f = Generator (seed -> {
     [value,rest] = g seed
     step (f value) rest
 })
-return x = MkGenerator (seed -> [x,seed])
-int lo hi = MkGenerator (seed -> {
+return x = Generator (seed -> [x,seed])
+int lo hi = Generator (seed -> {
     s = next seed
     [lo + quotient (s * (hi - lo + 1)) 4294967296, s]
 })
-float lo hi = MkGenerator (seed -> {
+float lo hi = Generator (seed -> {
     s = next seed
     [lo + (hi - lo) * inexact (s / 4294967296), s]
 })

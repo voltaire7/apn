@@ -65,7 +65,7 @@ Deno.test("a document parses alone: no declaration carries between parses", () =
     const param = (source: string) => (parse(source)[0] as { clauses: { params: { p: string }[] }[] }).clauses[0].params[0].p;
     const before = param("f (x : EditorRemembered 2) = x");
     parse("EditorRemembered n = Vect n Int");
-    parse("EditorBox a = | MkEditorBox a");
+    parse("EditorBox a = | EditorBox a");
     equal(param("f (x : EditorRemembered 2) = x"), before);
     equal(param("f (x : EditorBox) = x"), "constr");
 });

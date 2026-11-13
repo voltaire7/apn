@@ -12,7 +12,7 @@ for (const [source, expected] of [
     ['[isType Int Int, isType Bool Bool, isType Type Int]', '[False,False,True]'],
     ['[typeOf Int, typeOf (1 : Int), typeOf (1 : Float), typeOf (1 : Int32)]', '[Type,Int,Float,Int32]'],
     ['(identity : Int -> Float) <- return (x -> x)\n[(Int : Type), ([Int] : Type), ([x : Float] : Type), typeOf identity]', '[Int, [Int], [x : Float], Int -> Float]'],
-    ['Count = | MkCount Int\n[Count, MkCount 3]', '[Count, MkCount 3]'],
+    ['Count (x : Int) = _\n[Count, Count 3]', '[Count, Count 3]'],
     ['f (t : Type) = 123 : t\nf Int', '123'],
     ['f (x : t) = [t,x]\nf (7 : Int32)', '[Int32,7]'],
     ['[Int]', '[Int]'],
@@ -29,7 +29,7 @@ for (const [source, expected] of [
     ['([] : [x : Float, label = "origin", count = 7])', '[x = 0.0, label = "origin", count = 7]'],
     ['([extra = 3] : [x : Int, y : Int])', '[x = 0, y = 0, extra = 3]'],
     // A declaration no definition follows is its type's zero, as a slot is.
-    ['x : Int\ny : [a : Float]\nU = | MkU Int\nu : U\n[x,y,u]', '[0, [a = 0.0], MkU 0]'],
+    ['x : Int\ny : [a : Float]\nU (v : Int) = _\nu : U Int\n[x,y,u]', '[0, [a = 0.0], U 0]'],
     ['x = 3\nx : String\nx', '""'],
     ['g n = {\n    y : Int\n    n + y\n}\ng 1', '1'],
     ['([] : [nested : [x : Float], xs : [Int]])', '[nested = [x = 0.0], xs = [0]]'],
@@ -115,7 +115,7 @@ for (const [source, expected] of [
     ['xs = [Int]\nxs 0 = 1\nxs', '[1]'],
     ['xs = [Int,Float]\nxs -1 = 2\nxs', '[Int,2.0]'],
     ['xs = [Int]\ni = 0\nxs (i + 0) = 1\nxs', '[1]'],
-    ['UserId = | MkUserId Int\nv = [id : UserId]\nv.id = MkUserId 3\nv', '[id = MkUserId 3]'],
+    ['UserId (x : Int) = _\nv = [id : UserId Int]\nv.id = UserId 3\nv', '[id = UserId 3]'],
     ['(identity : Int -> Int) <- return (x -> x); v = [f = typeOf identity]\nv.f = (+ 1)\nv.f 2', '3'],
 ] as const) Deno.test(`assignment gives a type field a default: ${source}`, () => {
     const actual = result(source);

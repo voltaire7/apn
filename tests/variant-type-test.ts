@@ -12,7 +12,7 @@ for (const [source, expected] of [
     ['Option x = Some x | None\n[None ~ [(x : Option _) -> 1, _ -> 0], 2 ~ [(x : Option _) -> 1, _ -> 0]]', '[1,0]'],
     ['Option x = Some x | None\n[\n    (Some 1 : Option), cast Option None, isType Option (Some missing)\n    isType Option 1, typeOf (Some 1)\n]', '[Some 1, None, True, False, Option Int]'],
     ['Option x = Some x | None\nf (Some x) = x\nf (Some 123)', '123'],
-    ['Box x = | MkBox x\nf (MkBox x) = x\nf (MkBox 123)', '123'],
+    ['Box x = | Box x\nf (Box x) = x\nf (Box 123)', '123'],
     // A type applied to its parameters is a type; one more pattern, a value of it.
     ['Option x = Some x | None\nf (Option t) = t\nf (Option Int)', 'Int'],
     ['Option x = Some x | None\nf (x : Option t) = [t,x]\nf (Some "a")', '[String, Some "a"]'],
@@ -49,20 +49,20 @@ Deno.test("user's original pattern dispatch prints the payload", () => {
 for (const checked of [false, true]) Deno.test(`a shared-name constructor applied to types is the type (checked=${checked})`, () => {
     const interpreter = new Interpreter();
     if (checked) interpreter.enableChecking();
-    const shown = interpreter.renderString(interpreter.run(parseDocument('Box a = | MkBox a\nWrap a = | MkWrap (MkBox a)\nMkWrap (MkBox 1)')));
-    if (shown !== "MkWrap (MkBox 1)") throw new Error(shown);
+    const shown = interpreter.renderString(interpreter.run(parseDocument('Box a = | Box a\nWrap a = | Wrap (Box a)\nWrap (Box 1)')));
+    if (shown !== "Wrap (Box 1)") throw new Error(shown);
 });
 Deno.test("a type named apart from its constructor describes a field", () => {
-    const source = 'Box a = | MkBox a\nWrap a = | MkWrap (Box a)\nMkWrap (MkBox 1)';
-    if (result(source) !== "MkWrap (MkBox 1)") throw new Error(result(source));
+    const source = 'Box a = | MkBox a\nWrap a = | Wrap (Box a)\nWrap (MkBox 1)';
+    if (result(source) !== "Wrap (MkBox 1)") throw new Error(result(source));
 });
 // A constructor applied to a type for each field is the type of the values
 // it makes: after a declaration's or an ascription's ':', checked and run alike.
 for (const [source, expected] of [
-    ['Point = | MkPoint Int Int\nr : Point = MkPoint 1 2\nr', 'MkPoint 1 2'],
-    ['Point = | MkPoint Int Int\nx : Point\nx = MkPoint 1 2\nx', 'MkPoint 1 2'],
-    ['Box a = | MkBox a\nq : Box Int = MkBox 4\n[q, typeOf q]', '[MkBox 4, Box Int]'],
-    ['Point = | MkPoint Int Int\nps : List Point = [MkPoint 1 2]\nps', '[MkPoint 1 2]'],
+    ['Point = | Point Int Int\nr : Point Int Int = Point 1 2\nr', 'Point 1 2'],
+    ['Point = | Point Int Int\nx : Point Int Int\nx = Point 1 2\nx', 'Point 1 2'],
+    ['Box a = | Box a\nq : Box Int = Box 4\n[q, typeOf q]', '[Box 4, Box Int]'],
+    ['Point = | Point Int Int\nps : List (Point Int Int) = [Point 1 2]\nps', '[Point 1 2]'],
 ] as const) for (const checked of [true, false]) Deno.test(`a constructor names its type (checked=${checked}): ${source}`, () => {
     const interpreter = new Interpreter();
     if (checked) interpreter.enableChecking();
@@ -89,17 +89,17 @@ for (const checked of [true, false]) Deno.test(`a union of types is written in p
 // field to its name; a constructor takes one as a field, converting a list.
 for (const [source, expected] of [
     ['len3 [x : Int, y : Int, z : Int] = x + y + z\n[len3 [1,2,3], len3 [x = 1, y = 2, z = 4]]', '[6,7]'],
-    ['Vector3 = | MkVector3 [x : Int, y : Int, z : Int]\nv = MkVector3 [1,2,3]\nsx (MkVector3 [x = a]) = a\n[v, sx v, typeOf v]', '[MkVector3 [x = 1, y = 2, z = 3], 1, Vector3]'],
+    ['Vector3 [x : Int, y : Int, z : Int] = _\nv = Vector3 [1,2,3]\nsx (Vector3 [x = a]) = a\n[v, sx v, typeOf v]', '[Vector3 [x = 1, y = 2, z = 3], 1, Vector3 [x : Int, y : Int, z : Int]]'],
 ] as const) for (const checked of [true, false]) Deno.test(`a record pattern of types (checked=${checked}): ${source}`, () => {
     const interpreter = new Interpreter();
     if (checked) interpreter.enableChecking();
     const actual = interpreter.renderString(interpreter.run(parseDocument(source)));
     if (actual !== expected) throw new Error(actual);
 });
-// typeOf widens each part to its type; a type applied to types is a type.
+// typeOf widens each part to its type: a Box holding a type is a Box Type.
 Deno.test("typeOf widens each part of a value", () => {
     const interpreter = new Interpreter();
     interpreter.enableChecking();
-    const actual = interpreter.renderString(interpreter.run(parseDocument('Box a = | MkBox a\n[typeOf Int, typeOf (MkBox 3), typeOf (Box Int), isType Type (Box Int)]')));
-    if (actual !== "[Type, Box Int, Type, True]") throw new Error(actual);
+    const actual = interpreter.renderString(interpreter.run(parseDocument('Box a = | Box a\n[typeOf Int, typeOf (Box 3), typeOf (Box Int), isType Type (Box Int)]')));
+    if (actual !== "[Type, Box Int, Box Type, True]") throw new Error(actual);
 });

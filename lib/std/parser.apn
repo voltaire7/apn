@@ -8,8 +8,8 @@
 # program using both imports one qualified (parser <- import "std/parser").
 std <- import "std"
 use std.[option,sequence]
-Parser a = | MkParser (input -> Result [a,input] String)
-_parserRun (MkParser p) input = p input
+Parser a = | Parser (input -> Result [a,input] String)
+_parserRun (Parser p) input = p input
 _parserInput text = isType String text ? to (List Char) text : text
 
 # Ok of the value a parser reads from all of the input, or Err.
@@ -20,18 +20,18 @@ parse parser text = _parserRun parser (_parserInput text) ~ [
 ]
 _parserShown x = isType Char x ? "'" ++ from (List Char) [x] ++ "'" : to String x
 
-map f (MkParser p) = MkParser (input -> p input ~ [
+map f (Parser p) = Parser (input -> p input ~ [
     Ok [value,rest] -> Ok [f value, rest]
     Err message -> Err message
 ])
-MkParser p >>= f = MkParser (input -> p input ~ [
+Parser p >>= f = Parser (input -> p input ~ [
     Ok [value,rest] -> _parserRun (f value) rest
     Err message -> Err message
 ])
-return x = MkParser (input -> Ok [x,input])
+return x = Parser (input -> Ok [x,input])
 
 # One item, if test accepts it.
-satisfy what test = MkParser (input -> input ~ [
+satisfy what test = Parser (input -> input ~ [
     x :: rest | test x -> Ok [x,rest]
     x :: _ -> Err ("expected " ++ what ++ ", got " ++ _parserShown x)
     [] -> Err ("expected " ++ what ++ ", got the end")
@@ -48,22 +48,22 @@ _parserString text (c :: cs) = {
 digit = oneOf "0123456789"
 letter = satisfy "a letter" (c -> c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z')
 space = oneOf " \t\n\r"
-end = MkParser (input -> null input ? Ok [[],input]
+end = Parser (input -> null input ? Ok [[],input]
     : Err ("expected the end, got " ++ _parserShown (head input)))
 
 # p, or q if p fails.
 infixr 3 <|>
-MkParser p <|> q = MkParser (input -> p input ~ [
+Parser p <|> q = Parser (input -> p input ~ [
     Ok result -> Ok result
     Err _ -> _parserRun q input
 ])
 # p read as many times as it can (some: at least once).
 # They read in a loop, in constant stack, so long input parses.
-many p = MkParser (input -> {
+many p = Parser (input -> {
     read = _parserMany p input []
     Ok [read.items,read.rest]
 })
-some p = MkParser (input -> _parserRun p input ~ [
+some p = Parser (input -> _parserRun p input ~ [
     Ok [x,rest] -> {
         read = _parserMany p rest [x]
         Ok [read.items,read.rest]

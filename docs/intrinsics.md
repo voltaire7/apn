@@ -92,8 +92,8 @@ different names do not mix (`(1 : Int8) + (2 : Int16)` is an error).
 ## Inexact numbers
 
 ```apn
-Float = | MkFloat [sign : Bool, exponent : Int, significand : UInt]
-Complex = | MkComplex [re : Float, im : Float]
+Float = | Float [sign : Bool, exponent : Int, significand : UInt]
+Complex = | Complex [re : Float, im : Float]
 ```
 
 A `Float` is an IEEE 754 binary64 number: its arithmetic rounds each result to
@@ -121,8 +121,8 @@ surrogate:
 
 ```apn
 Scalar = (n : UInt) | n <= 1114111 && (n < 55296 || n > 57343)
-Char = | MkChar Scalar
-String = | MkString (List Char)  # text: to (List Char) and from (List Char) convert
+Char = | Char Scalar
+String = | String (List Char)  # text: to (List Char) and from (List Char) convert
 ```
 
 ## Records, functions and types
@@ -139,10 +139,10 @@ String = | MkString (List Char)  # text: to (List Char) and from (List Char) con
 ## Effects and references
 
 ```apn
-IO a = | MkIO (World -> [a,World])
-Mutable a = | MkMutable Ref
-Pointer = | MkPointer UInt
-HashMap k v = | MkHashMap (List [k,v])
+IO a = | IO (World -> [a,World])
+Mutable a = | Mutable Ref
+Pointer = | Pointer UInt
+HashMap k v = | HashMap (List [k,v])
 ```
 
 An action is a function from the state of the world to a result and the next

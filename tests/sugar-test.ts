@@ -12,7 +12,7 @@ function result(source: string, checked: boolean): string {
 for (const [sugar, expansion] of [
     ["1 + 2", "(+) 1 2"],
     ['1 + "a"', '(+) 1 "a"'],
-    ["V = | MkV Int\nMkV a + MkV b = MkV (a + b)\nMkV 1 + MkV 2", "V = | MkV Int\nMkV a + MkV b = MkV (a + b)\n(+) (MkV 1) (MkV 2)"],
+    ["V = | V Int\nV a + V b = V (a + b)\nV 1 + V 2", "V = | V Int\nV a + V b = V (a + b)\n(+) (V 1) (V 2)"],
     ["head (1 :: missing)", "head ((::) 1 missing)"],
     // A list is its items consed onto [], with what :: means there, in
     // values and patterns alike.
@@ -48,7 +48,7 @@ for (const [sugar, expansion] of [
     ['3 > 2 ? "y" : "n"', '(3 > 2 : Bool) "y" "n"'],
     ["b = True\n((b ? 1 : 2.5) : Float)", "b = True\n((b : Bool) 1 2.5 : Float)"],
     ['r = [x = 1]\nr.x', 'r = [x = 1]\nget r "x"'],
-    ['P = | MkP Int Int\nget (MkP a b) "x" = a\np = MkP 1 2\np.x', 'P = | MkP Int Int\nget (MkP a b) "x" = a\np = MkP 1 2\nget p "x"'],
+    ['P = | P Int Int\nget (P a b) "x" = a\np = P 1 2\np.x', 'P = | P Int Int\nget (P a b) "x" = a\np = P 1 2\nget p "x"'],
     ["xs = [1,2,3]\nxs 1 = 9\nxs", "xs = [1,2,3]\nxs = with xs 1 9\nxs"],
     ['r = [x = 1]\nr.x = 5\nr', 'r = [x = 1]\nr = with r "x" 5\nr'],
     ["f x = x + 1\nf 2", "f = x -> x + 1\nf 2"],

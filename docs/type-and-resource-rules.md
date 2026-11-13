@@ -31,38 +31,37 @@ refinement of a scalar named so (`Positive = (n : Int) | n > 0`) is a named
 subtype too, whose values also hold its condition (see
 [refinement types](semantics.md#refinement-types)).
 
-A union makes a distinct type instead (see
+A constructor makes a distinct type instead (see
 [variants](templates-and-types.md#variants-parameters-and-distinct-wrappers)),
-when a value must not pass for its contents: `UserId = | MkUserId Int`
-declares the type `UserId` and its constructor `MkUserId`, whose one field is
-an `Int`. It has none of an `Int`'s operations, only those its clauses and
-instances define: a `to Int` instance lets it stand wherever an `Int` is needed
-(a typed parameter, a builtin, arithmetic with a plain number), as `to` does
-for any type.
+when a value must not pass for its contents: `UserId (id : Int) = _` declares
+`UserId`, whose one field is an `Int`. It has none of an `Int`'s operations,
+only those its clauses and instances define: a `to Int` instance lets it stand
+wherever an `Int` is needed (a typed parameter, a builtin, arithmetic with a
+plain number), as `to` does for any type.
 
 ```apn
-UserId = | MkUserId Int
-OrderId = | MkOrderId Int
+UserId (id : Int) = _
+OrderId (id : Int) = _
 
-MkUserId 123                # MkUserId 123
-MkUserId 3 == MkUserId 3    # True: every value has equality and printing
-extract (MkUserId value) = value
-extract (MkUserId 123)      # 123
-MkUserId 2 + 1              # error: + cannot combine UserId and Int
-MkUserId a + MkUserId b = MkUserId (a + b)
-MkUserId 2 + MkUserId 1     # MkUserId 3
+UserId 123                  # UserId 123
+UserId 3 == UserId 3        # True: every value has equality and printing
+extract (UserId value) = value
+extract (UserId 123)        # 123
+UserId 2 + 1                # error: + cannot combine UserId and Int
+UserId a + UserId b = UserId (a + b)
+UserId 2 + UserId 1         # UserId 3
 ```
 
-A `UserId` is not an `Int`: `(x : Int)` patterns, builtins (`sqrt`) and
-`(MkUserId 3 : Int)` reject it, and it equals no plain number (`MkUserId 3 == 3`
-is false). Its constructor's pattern, `(MkUserId x)`, takes it apart and binds
-the `Int` to `x`; that pattern accepts only a `UserId`. Applying `MkUserId`
-makes one from an `Int`, checking the value as `Int` would (`MkUserId .2` is a
-lossy conversion); nothing else converts to one (`MkUserId (MkOrderId 3)` and
-assigning `3` to a `UserId` slot are errors). Its type is `UserId` wherever a
-type is expected: an omitted record slot (`([] : [id : UserId])` is
-`[id = MkUserId 0]`), another constructor's field (`Order = | MkOrder UserId
-Int`), `isType UserId`, `List UserId`.
+A `UserId` is not an `Int`: `(x : Int)` patterns, builtins (`sqrt`) and `Int (UserId
+3)` reject it, and it equals no plain number (`UserId 3 == 3` is false). Its own
+pattern, `(UserId x)`, takes it apart and binds the `Int` to `x`; that pattern
+accepts only a `UserId`. Applying `UserId` makes one from an `Int`, checking the
+value as `Int` would (`UserId .2` is a lossy conversion); nothing else converts
+to one (`UserId (OrderId 3)` and assigning `3` to a `UserId` slot are errors).
+Given its field's type it is its own type where a type is expected: an omitted
+record slot (`([] : [id : UserId Int])` is `[id = UserId 0]`), another constructor's
+field (`Order (u : UserId Int) (n : Int) = _`), `isType (UserId Int)`,
+`List (UserId Int)`.
 
 ## Variant list indexes
 

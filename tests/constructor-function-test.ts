@@ -27,12 +27,12 @@ for (const checked of [true, false]) {
         // (e : T), to T e and a typed pattern (x : T) are one operation:
         // e if it is a T, else what a to T instance makes of it.
         ["Compass = North | East\nto Int East = 1\nx = East : Int\ni (n : Int) = n\n[x, i East, to Int East]", "[1,1,1]"],
-        ["Box = | MkBox Int\nto Box (n : Int) = MkBox n\ng (b : Box) = b\ny = 3 : Box\n[y, g 3, to Box 3]", "[MkBox 3, MkBox 3, MkBox 3]"],
+        ["Box (v : Int) = _\nto (Box Int) (n : Int) = Box n\ng (b : Box Int) = b\ny = 3 : Box Int\n[y, g 3, to (Box Int) 3]", "[Box 3, Box 3, Box 3]"],
         // Truth is truthy's: (x : Bool) takes only a Bool.
         ['[truthy 5, 5 ? "y" : "n", !0, (True : Bool)]', '[True,"y",True,True]'],
         // A type of its own is a constructor; a to instance lets it stand
         // where an Int is needed.
-        ['Count = | MkCount Int\nto Int (MkCount n) = n\nf (c : Count) = "count"\nf (n : Int) = "int"\ng (n : Int) = n * 2\n[f (MkCount 1), f 1, g (MkCount 3), MkCount 1 + 2]', '["count","int",6,3]'],
+        ['Count (n : Int) = _\nto Int (Count n) = n\nf (c : Count Int) = "count"\nf (n : Int) = "int"\ng (n : Int) = n * 2\n[f (Count 1), f 1, g (Count 3), Count 1 + 2]', '["count","int",6,3]'],
         ["Box a = a\n[Box 1, Box Int]", "[1,Int]"],
         ["Twice w h = [w,h]\nTwice 1 2", "[1,2]"],
         ["V n = Vect (n + 0) Int\n([1,2,3] : V 3)", "[1,2,3]"],
@@ -69,7 +69,7 @@ for (const checked of [true, false]) {
         ["UserId := Int\n1", "APN defines with =, not :="],
         ["x = 5 : Bool\nx", checked ? "cannot use Int where Bool is required" : "Int is not a Bool"],
         ["y : Bool = Int\ny", checked ? "where Bool is required" : "is not a Bool"],
-        ["Box = | MkBox Int\ng (b : Box) = b\ng 3", checked ? "cannot use Int where Box is required" : "no clause"],
+        ["Box (v : Int) = _\ng (b : Box Int) = b\ng 3", checked ? "cannot use Int where Box is required" : "no clause"],
     ] as const) Deno.test(`capitalized definitions reject (checked=${checked}): ${source}`, () => {
         const actual = failure(source, checked);
         if (!actual.includes(message)) throw new Error(actual);

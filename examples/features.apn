@@ -167,16 +167,16 @@ print (2 * [x = 1, y = 2])               # => [x = 2, y = 4]
 
 # Clauses for a type, beside its declaration, join a function wherever its
 # values go (foldl's + takes them); other arguments reach the rest.
-Cents = | MkCents Int
-MkCents a + MkCents b = MkCents (a + b)
-print [foldl (+) (MkCents 0) [MkCents 150, MkCents 75], 1 + 2]  # => [MkCents 225, 3]
+Cents (c : Int) = _
+Cents a + Cents b = Cents (a + b)
+print [foldl (+) (Cents 0) [Cents 150, Cents 75], 1 + 2]  # => [Cents 225, 3]
 
-# Values that keep a condition are a refinement's, and a function makes one:
-# the name stays on what arithmetic gives, each result checked.
-Mod7 = (n : Int) | 0 <= n && n < 7
-mod7 n = modulo n 7 : Mod7
-print [mod7 12, mod7 5 + 1, mod7 -3]     # => [5,6,4]
-# mod7 5 + 4                             # error: 9 is not in Mod7
+# A constructor's body holding _ is its logic: it runs whenever one is made,
+# and _ is the value itself. A to instance lets other types join an operator.
+Mod7 (n : Int) = 0 <= n && n < 7 ? _ : Mod7 (modulo n 7)
+Mod7 a + Mod7 b = Mod7 (a + b)
+to (Mod7 Int) (n : Int) = Mod7 n
+print [Mod7 12, Mod7 5 + 4, Mod7 -3]     # => [Mod7 5, Mod7 2, Mod7 4]
 
 # ---------------------------------------------------------
 # Lists
@@ -244,11 +244,11 @@ print (map area [Circle 1, Rect 2 3])    # => [3.0,6.0]
 print [safeDiv 1 2, safeDiv 1 0]         # => [Some 1/2, None]
 print (withDefault 0 (safeDiv 1 0))      # => 0
 
-# A type of its own, which does not mix with others, is a union of
-# constructors, each named apart from it; a name for a type keeps its values.
-UserId = | MkUserId Int
-Age = Int
-print [MkUserId 7, isType UserId 7, typeOf (7 : Age)] # => [MkUserId 7, False, Age]
+# A name given _ stands for itself: it declares a new type, one constructor
+# with typed fields, which does not mix with others. A constructor is a
+# function that does not evaluate: given types, it is the type of its values.
+UserId (id : Int) = _
+print [UserId 7, isType (UserId Int) 7]  # => [UserId 7, False]
 
 # Types may depend on values: Vect n a is a list of n elements of type a.
 # A declaration types the clauses after it, and the checker proves each

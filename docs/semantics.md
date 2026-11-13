@@ -351,14 +351,14 @@ conversion to `T` makes of it, and an error if none does. The conversions are
 `to T`'s: the built-in ones between numbers, lossless (`1.0 : Int` is the Int
 `1`; `1.5 : Int` is a lossy-conversion error; `123 : Int32` is an `Int32`), and
 those a program's `to` instances declare (`to Int East = 1` makes `East : Int`
-`1`, and `to Box (n : Int) = MkBox n` makes `3 : Box` `MkBox 3`). `to T e` is the
+`1`, and `to Box (n : Int) = Box n` makes `3 : Box` `Box 3`). `to T e` is the
 same operation as a function. Nothing else converts: `5 : Bool` is an error,
 as `5 : String` is (a condition's truth is `truthy 5`). It is written outermost on a definition's right side
 (`x = 123 : Int32`) or in parentheses (`(5 : Int32) + 1`); a ternary ascribed
 is parenthesized, `(c ? a : b) : T`, and `x = c ? a : b : T` is an error.
 `(p : T)` in a pattern matches what `e : T` makes of the value, then `p`, and
 fails where it fails: `f (n : Int) = n + 1` takes `1.0` as `1`, `(b : Box)`
-takes `3` as `MkBox 3`, and `(x : t)` binds the value's type `t`.
+takes `3` as `Box 3`, and `(x : t)` binds the value's type `t`.
 
 A type is given a value only by ascription: `Int 5`, `Int $ x` and a type
 passed where a function goes (`f t = t 1`) are errors, `5 : Int` ascribes and
@@ -482,7 +482,7 @@ version before it, as the lambda does.
 
 A file is a block, run once: its top level follows every rule a block's
 statements do, and a block may hold everything a file does, a type
-declaration (`Color = Red | Green`, `Box a = | MkBox a`) among them, declared for the
+declaration (`Color = Red | Green`, `Box a = _`) among them, declared for the
 block only. So a statement that binds nothing is an action (or another
 monadic value), and once one ran, the last is too: `print 1` then `5` is the
 error a block reports, since the 5 would be dropped (see
@@ -573,9 +573,9 @@ clauses [travel with the type](#functions-travel-with-types), tried first, and
 arguments no clause matches keep the operator's meaning:
 
 ```apn
-Money = | MkMoney Int
+Money (m : Int) = _
 Money a + Money b = Money (a + b)   # the inner + is +, these clauses included
-MkMoney 3 + MkMoney 4                   # MkMoney 7
+Money 3 + Money 4                       # Money 7
 1 + 2                                   # 3
 ```
 
@@ -586,9 +586,9 @@ If both could convert into each other's type, the operator is ambiguous and an
 error; if neither can, it fails as before:
 
 ```apn
-to Money (n : Int) = MkMoney n
-MkMoney 3 + 4                           # MkMoney 7: 4 is to Money 4 first
-4 + MkMoney 3                           # MkMoney 7
+to Money (n : Int) = Money n
+Money 3 + 4                             # Money 7: 4 is to Money 4 first
+4 + Money 3                             # Money 7
 ```
 
 The other way round, a value of a type the program defines converts through
@@ -599,10 +599,10 @@ only when no pattern of its own type does. An enumeration has these
 instances by declaration ([variant list indexes](type-and-resource-rules.md#variant-list-indexes)):
 
 ```apn
-Level = | MkLevel Int
-to Int (MkLevel n) = n
-[10,20,30] (MkLevel 2)                  # 30
-MkLevel 2 * 5                           # 10
+Level (n : Int) = _
+to Int (Level n) = n
+[10,20,30] (Level 2)                    # 30
+Level 2 * 5                             # 10
 ```
 
 Every other function works the same way, `get` and `with` ([indexing](#records))
@@ -699,10 +699,10 @@ On a value that is not a record, `v.x` is `get v "x"` and `v.x = y` is
 `with v "x" y`:
 
 ```apn
-Grid = | MkGrid (List Int)
-get (MkGrid cells) [(r : Int), (c : Int)] = cells (3 * r + c)
-with (MkGrid cells) [(r : Int), (c : Int)] (x : Int) = MkGrid (with cells (3 * r + c) x)
-g = MkGrid [1,2,3,4,5,6,7,8,9]
+Grid (cells : List Int) = _
+get (Grid cells) [(r : Int), (c : Int)] = cells (3 * r + c)
+with (Grid cells) [(r : Int), (c : Int)] (x : Int) = Grid (with cells (3 * r + c) x)
+g = Grid [1,2,3,4,5,6,7,8,9]
 g [1,2] = 60
 g [1,2]                                 # 60
 ```
@@ -798,8 +798,8 @@ function of its own).
 A type takes part in functions defined elsewhere as in Julia: clauses for a
 visible function, written for a type the same scope declares, join that
 function itself. They are for the type when a parameter's pattern names it or
-one of its constructors (`MkMoney a + MkMoney b`, `map f (Some x)`, `to String
-(Node l v r)`, `get (MkGrid cells) [r, c]`), or, for a method overloaded on its
+one of its constructors (`Money a + Money b`, `map f (Some x)`, `to String
+(Node l v r)`, `get (Grid cells) [r, c]`), or, for a method overloaded on its
 result, when the body makes one (`return = Some`, `return x = Parser ...`).
 Wherever a value of the type goes, code calling the function takes them first:
 a library's `sum` adds `Money`, a do-block's `>>=` runs a `Parser`, `print`
@@ -1138,18 +1138,19 @@ already demanded argument. Variant construction defers its fields. In a
 constructor pattern, a bare capitalized argument takes no fields of its own
 (`R low None high`); one with fields is parenthesized (`R (Some x) y`).
 
-A union declares its constructors, each named apart from its type
-(`Box a = | MkBox a`; see [variants](templates-and-types.md#variants-parameters-and-distinct-wrappers)).
-The value one makes is `tag Box MkBox [x]`: `tag owner ctor fields` (the
-prelude's name for `intrinsics.tag`) makes a value that remembers the
-constructor that made it, the type it belongs to and its fields, and does
-nothing else; patterns of the constructor read the fields back:
+A capitalized definition whose body is `_` (`Box x = _`) declares a
+constructor, and one whose body holds `_` is a constructor with logic, its `_`
+the value itself; see [variants](templates-and-types.md#variants-parameters-and-distinct-wrappers).
+That value is `tag Box Box [x]`: `tag owner ctor fields` (the prelude's name
+for `intrinsics.tag`) makes a value that remembers the constructor that made
+it, the type it belongs to and its fields, and does nothing else; patterns of
+the constructor read the fields back:
 
 ```apn
-Box a = | MkBox a
-tag Box MkBox [5] == MkBox 5    # True: a declared constructor's own value
-unbox (MkBox x) = x             # unbox (MkBox 5) is 5
-tag Option Some [5] == Some 5   # True
+Box a = tag Box Box [a]
+Box 5                           # Box 5; typeOf (Box 5) is Box
+unbox (Box x) = x               # unbox (Box 5) is 5
+tag Option Some [5] == Some 5   # True: a declared constructor's own value
 ```
 
 A type in a pattern takes its parameters, then a value. Applied to exactly its
@@ -1464,7 +1465,7 @@ impose a specific width on them.
 
 `typeOf value` returns a type descriptor: the smallest type the value is in, each
 part widened to its type. `typeOf 5` is `Int` and `typeOf Int` is `Type`, a type
-being a value too; with `Box a = | MkBox a`, `typeOf (MkBox 3)` is `Box Int` and
+being a value too; with `Box a = | Box a`, `typeOf (Box 3)` is `Box Int` and
 `typeOf (Box Int)` is `Box Type`, a `Box` holding a type, which is in `Type` as
 well because `Box Int` names one (`isType Type (Box Int)` is true; `Box Type`
 is the smaller). `isType Type value` tests membership

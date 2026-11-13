@@ -504,16 +504,23 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
   instance's own patterns meeting the value again. An enumeration's positions
   are `to Int` clauses (`enumerationPositions`) the runtime and the checker
   define with its declaration.
-- One name means one thing: the parser rejects a constructor sharing its
-  type's name and the old `Name params = _` form, logic included
-  (`sharedConstructor`), so a type's constructors come only from a union.
+- `Name params = _` is parser sugar (`constructorDeclaration`): the same
+  `type` declaration `Name a = | Name a` makes, its fields from the
+  parameters, so runtime and checker treat both alike; it declares again where
+  the name is a constructor already (`isPatBinding`). A later union of
+  such constructors (`Parser.unclaimed`) replaces their declarations with the
+  one declaration of the union's type, where the first of them stood; runtime
+  and checker claim those the parser cannot see (`unionKind`'s `claim`, from
+  each family's recorded declaration: `Interpreter.declarations`, the checker
+  entry's `declaration`), all through `claimedDeclaration`.
 - A constructor applied to a type for each field reads as the type of the
   values it makes where a type is expected: at runtime through `sharedType`
   (its type's own name with its parameters is that type applied; any other,
   `constructedType`, a refinement of its type whose `made` is the constructor
   as written, which `to` instances key on), in the checker through `sharedType`
   and `namesItsType`, the `constructs` mark letting a constructor take type
-  arguments. Typed patterns of a constructor are rewritten where they run
+  arguments. A constructor with logic skips it given types (`apply`'s
+  `__constr`). Typed patterns of a constructor are rewritten where they run
   (`rewriteTypedPatterns`: a schema, or with a type variable an as-pattern).
 - `X = A | B` written bare stays a `type` statement; runtime and checker decide
   whether it declares or claims by what its names are bound to (`unionKind`,
@@ -523,6 +530,11 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
   checker reads as `intrinsics.union [A, B]` while `|` is the prelude's; the
   parser keeps those parentheses (`parseDefBody`). Either way the union is a
   `type` value with `choices` at runtime and a `union` type in the checker.
+- A constructor's logic (`ConstructorLogic`) is parsed with its `_` filled
+  by `intrinsics.tag Owner Name [fields]` (`constructorDeclaration`); a union
+  claiming it renames the owner. At runtime the constructor's native runs it
+  as a clause (`invoke`), as does a slot default (`zeroValue`); the checker
+  unifies its result with the constructor's.
 - Promotion (`Interpreter.promote` when a binop's builtin meets a defined
   type; the checker's `promotedOperands` where a user's operator clauses
   reject the operands) finds a `to` instance with `instance`/`instanceFor` and

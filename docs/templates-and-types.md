@@ -426,10 +426,11 @@ an `Int`.
 ## Constructor functions
 
 A capitalized definition computes: applied, it gives what its body gives, a
-type (`Sized n = Vect n Int`: `Sized 2` is `Vect 2 Int`) or any value. A type
-it names is a [named subtype](type-and-resource-rules.md#distinct-types)
-(`Count = Int`: `5 : Count` is a `Count`). Constructors are declared in a
-union instead (see [variants](#variants-parameters-and-distinct-wrappers)).
+type (`Sized n = Vect n Int`: `Sized 2` is `Vect 2 Int`) or any value. A scalar
+type it names is kept as a
+[named subtype](type-and-resource-rules.md#distinct-types) (`Count = Int`:
+`5 : Count` is a `Count`). A body of `_` makes a constructor instead (see
+[variants](#variants-parameters-and-distinct-wrappers)).
 
 One that gives any other type (a type or a schema, not a constructor) gives,
 applied to all its parameters, a type that remembers how it was written:
@@ -455,9 +456,10 @@ size [1,2,3,4]              # no clause: nothing remembers an n for a plain list
 kind (Pairs n a) = n        # kind (Pairs 3 Int) is 3
 ```
 
-A capitalized left side whose name is a constructor (`Some`, or `MkRect` once
-declared) is a pattern, so `MkRect w h = r` takes `r` apart; any other is a
-definition, whatever its parameters. Adjacent clauses of one name are one definition:
+A capitalized left side whose name is a constructor (`Some`, or `Rect` once
+declared) is a pattern, so `Rect w h = r` takes `r` apart, except with the body
+`_`, which declares it again; any other is a definition, whatever its
+parameters. Adjacent clauses of one name are one definition:
 
 ```apn
 Pairs Z a = []
@@ -470,37 +472,63 @@ to it.
 
 ## Variants, parameters, and distinct wrappers
 
-A type of its own is a union of constructors, each named apart from the type
-(`Name = | MkName fields`): one name means one thing, the type where a type is
-expected and its constructor nowhere, so a constructor sharing its type's name
-is an error, as is the old `Name params = _` form. A constructor's application
-stands for nothing but itself, so it is a value, with one field per type after
-it. A type parameter holds anything; a concrete field converts as a typed
-parameter does, and a record of typed fields is a field of that record's type
-(a pattern of it binds the fields' names in any parameter:
+A capitalized definition whose body is `_` declares a constructor: its
+application stands for nothing but itself, so it is a value, with one field per
+parameter. A name holds anything (a type parameter); a typed name converts its
+field as a typed parameter does, and so does a record of typed fields, a pattern
+of that record's type whose fields bind their names (in any parameter:
 `len3 [x : Int, y : Int, z : Int] = x + y + z`, then `len3 [1,2,3]` is 6). A
 lowercase definition's `_` stays unfinished.
 
 ```apn
-Box a = | MkBox a
-Rect = | MkRect Float Float   # MkRect 3 4 is MkRect 3.0 4.0
-Vector3 = | MkVector3 [x : Int, y : Int, z : Int]
-unbox (MkBox x) = x           # unbox (MkBox 5) is 5
+Box x = _                     # the same as Box a = | Box a
+Rect (w : Float) (h : Float) = _ # Rect 3 4 is Rect 3.0 4.0
+Vector3 [x : Int, y : Int, z : Int] = _ # Vector3 [1,2,3] is Vector3 [x = 1, y = 2, z = 3]
+Nothing = _                   # a constructor without fields
+unbox (Box x) = x             # unbox (Box 5) is 5
 ```
 
-A constructor has no logic. Values that must keep a condition are a
-[refinement](semantics.md#refinement-types)'s, which a named subtype keeps
-through arithmetic, each result checked, and a function makes one:
+A body that holds `_` declares the constructor the same way and is its logic:
+applying the constructor runs it, and its `_` is the value itself, the fields
+as the parameters bound them (`tag Percent Percent [x]`). So the logic decides what every value of the type is:
+it can normalize a value, fail, or build another one, and a pattern reads back
+only what it stored.
 
 ```apn
-Percent = (x : Float) | x <= 100
-percent x = min x 100 : Percent
-percent 150                   # 100.0, a Percent
-percent 90 + 20               # error: 110.0 is not in Percent
+Percent (x : Float) = x > 100 ? Percent 100.0 : _
+Percent 150                   # Percent 100.0
+Percent a + Percent b = Percent (a + b)
+Percent 90 + Percent 20       # Percent 100.0: the clause calls Percent, so its logic runs
+Span (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _
 ```
 
-Written bare, `X = A | B` is a statement making constructors of `X`, all of
-them new names. Naming an existing type there is an error. The union
+Every way of making one from values runs it, a record slot's default too
+(`([] : [s : Span Int Int])` runs it on `Span 0 0`); given types (`Span Int Int`),
+it is the type of its values and runs nothing. The checker checks that it gives the constructor's
+type. Its fields are named, since `_` holds them.
+
+A union of constructors declared with `_` claims them: they become one type's,
+exactly as a declaration of that type with those constructors makes it. So the
+first union listing a constructor owns it, and `typeOf`, typed patterns and
+monads (`return = Just`) key on that type. An alternative may restate a
+constructor's fields (`Just a`, tying them to the type's parameters); a bare
+one keeps the constructor's own. Within one source the union's declaration
+stands where its first constructor did; constructors declared elsewhere (an
+earlier REPL input, a module) are claimed where the union runs, so values made
+before it keep their own type.
+
+```apn
+Just x = _
+Nada = _
+Maybe a = Just a | Nada       # the same as Maybe a = Just a | Nada declaring both
+Circle (r : Float) = _
+Square (s : Float) = _
+Shape = Circle | Square       # typeOf (Circle 1) is Shape
+```
+
+Written bare, `X = A | B` is a statement making constructors of `X`: all new
+names are declared, and constructors declared with `_` that no union owns yet
+are claimed, as above. Naming an existing type there is an error. The union
 of existing types is the expression `A | B`, the prelude's `|`
 (`a | b = intrinsics.union [a,b]`), so it is written in parentheses:
 `X = (A | B)` defines `X` as that type, which makes nothing: a value of any of
@@ -572,20 +600,25 @@ Existing value constructor names on the left destructure and cannot be
 redefined (see [constructor functions](#constructor-functions)).
 An unspecialized parent pattern `(value : Option _)` still binds the whole variant.
 A constructor pattern `(Some value)` extracts its field. A constructor is a
-function that does not evaluate. Applied to values it makes one (`MkBox 5`);
-applied to a type for each field it is a value (`Some Int`) that reads as the
-type of the values it makes from such fields where a type is expected, as a
-lambda reads as a function type: `Some Int` is the `Some` values holding an
-`Int`, a part of `Option Int`, so `isType (Some Int) (Some 1)` holds. Bare, a
-constructor taking fields is a function, so `(f : Some)` takes an `a -> Some a`.
-The type itself is written by its own name: `f (b : Box Int) = ...` takes a
-`Box Int` whole, `kind (b : Box t) = t` binds its parameter, and
-`unbox (MkBox x) = x`, with as many arguments as `MkBox` has fields, takes it
-apart.
+function that does not evaluate. Applied to values it makes one (`Box 5`);
+applied to a type for each field it is a value (`Box Int`, a `Box` holding
+`Int`) that reads as the type of the values it makes from such fields where a
+type is expected, as a lambda reads as a function type: after a declaration's
+or an ascription's `:` (`p : Point Int Int = Point 1 2`, `q : Box Int = Box 4`,
+`ps : List (Point Int Int)`), a field's type (`Wrap (b : Box Int) = _`), a
+record slot (`([] : [b : Box Int])` is `[b = Box 0]`), `isType (Box Int) (Box 1)`, a
+type's argument, a `to` instance (`to (Money Float) (x : Float) = Money x`).
+`Some Int` is the `Some` values holding an `Int`, a part of `Option Int`. A
+constructor with logic runs it only on values: `Mod7 Int` is a type. Bare, a
+constructor taking fields is a function, so `(f : Some)` takes an `a -> Some
+a`. So `f (b : Box Int) = ...` takes a `Box Int` whole, `kind (b : Box t) = t`
+binds its field's type, and `unbox (Box x) = x`, with as many arguments as
+`Box` has fields, takes it apart.
 
-A type of its own with one constructor is a distinct wrapper
-(`UserId = | MkUserId Int`), and a name for a type a named subtype
-(`Count = Int`); see [named and distinct types](type-and-resource-rules.md#distinct-types).
+Nominal wrappers are single-constructor types (`UserId (id : Int) = _`); see
+[distinct types](type-and-resource-rules.md#distinct-types). No automatic
+cross-type conversion or zero-cost representation is implied. Class/instance syntax and static type
+inference are not part of this change.
 
 Record-template patterns also accept positional lists with exactly as many
 items as the template has fields: `f (Vector3 v) = v` accepts `f [1,2,3]`
