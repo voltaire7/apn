@@ -743,8 +743,8 @@ renamed ones too (`v.[x : T = a] = r`), and `T` is any type expression.
 A record `++` a record of fields is the same update: `r ++ [f = v, g = w]` is
 `{ r.f = v; r.g = w; r }` in every way, as Elm's `{ r | f = v, g = w }`, a type
 given fields too (`Vector3 ++ [x : Int]` is `Vector3.x = Int`); `r ++ []` is
-`r`. A record applies only to a key (`r "x"`, `r 0`): applied to fields it is
-an error. A record's value is made by ascription instead (`[x = 1] : Vector3`;
+`r`. A record applied to fields is that update too (`r [f = v]`, or all of
+them in order, `r [10,20]`). A record's value is made by ascription instead (`[x = 1] : Vector3`;
 see [zero initialization](zero-initialization.md)). Code joins code as before
 (`[x = 1] ++ [x + 1]`, the right not a record).
 

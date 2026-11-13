@@ -7,7 +7,7 @@ import { IMPORT_ONE, standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
-import { APNError, didYouMean, formatFileReadError, recordGivenFields, typeApplied, withArticle } from "./errors.ts";
+import { APNError, didYouMean, formatFileReadError, typeApplied, withArticle } from "./errors.ts";
 import { bindingItem, DEFAULT_FIXITY, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
 import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
@@ -3330,16 +3330,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 return union([...f.fields.values()]);
             }
-            // Ascribed to a type (e : T), fields make its value.
+            // Given fields, a record is updated exactly as by field assignment
+            // (model [name = n]; Vector3 [x : Int] is Vector3.x = Int), as at
+            // runtime; ascribed to a type (e : T), the value it makes.
             // Fields given by name, or all of them in order (r [10] is r [x = 10]).
             const given: Array<[string, Ty, Expr]> | undefined = a.k === "record" ? [...a.fields].map(([key, type]) => [key, type, fieldExpr(e, key)])
                 : a.k === "list" && a.items?.length === f.fields.size ? [...f.fields.keys()].map((key, n) => [key, a.items![n], e.t === "list" ? e.v[n] ?? e : e])
                 : undefined;
-            // Applied to fields, a record is no update (as at runtime).
-            if (!ascribed && (a.k === "record" || a.k === "list")) {
-                const { message, hint } = recordGivenFields();
-                return problem(message, e, hint);
-            }
+            if (!ascribed) return given ? assignFields(f, given, e) : f;
             // A record holding a type, given values (not types, unless for a
             // Type field), builds one; any other is updated exactly as by field
             // assignment (model [name = n]; Vector3 [x : Int] is Vector3.x = Int).

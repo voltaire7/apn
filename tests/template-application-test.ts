@@ -116,10 +116,6 @@ for (const [source, error] of [
     ['Bad = | Int', 'built-in type'],
     ['Bad = One | One', 'duplicate value constructor'],
     ['xs = [missing]\nxs 0 = 1', 'unbound variable'],
-    // A record applies to a key only: a copy with fields is r ++ [x = v].
-    ['model = [name = "a"]\nmodel [name = "b"]', 'a record is applied to a key, not to fields'],
-    ['[x = 1] [y = 2]', 'a record is applied to a key, not to fields'],
-    ['V = [x : Float]\nV [1]', 'a record is applied to a key, not to fields'],
 
 ] as const) Deno.test(`templates reject: ${source}`, () => {
     try { result(source); } catch (e) {
@@ -142,10 +138,12 @@ for (const assignment of ['v.x = .2 : Float', 'v "x" = .2 : Float', 'v.[x,y] = [
 // given types. Checked and not, the same.
 for (const [application, block, expected] of [
     ['model = [name = "a", n = 1]\nmodel ++ [name = "b"]', 'model = [name = "a", n = 1]\n{ model.name = "b"; model }', '[name = "b", n = 1]'],
+    ['model = [name = "a", n = 1]\nmodel [name = "b"]', 'model = [name = "a", n = 1]\n{ model.name = "b"; model }', '[name = "b", n = 1]'],
+    ['[x = 1.1] [10]', '{ r = [x = 1.1]; r.x = 10; r }', '[x = 10.0]'],
     ['r = [f = (* 2)]\n(r ++ [f = (+ 1)]).f 1', 'r = [f = (* 2)]\n{ r.f = (+ 1); r }.f 1', '2'],
     ['Vector3 = [x : Float, y : Float, z : Float]\nVector3 ++ [x : Int]', 'Vector3 = [x : Float, y : Float, z : Float]\n{ Vector3.x = Int; Vector3 }', '[x : Int, y : Float, z : Float]'],
     ['Vector3 = [x : Float, y : Float, z : Float]\nV2 = Vector3 ++ [z : Int]\n([x = 1, z = 2] : V2)', 'Vector3 = [x : Float, y : Float, z : Float]\nV2 = { Vector3.z = Int; Vector3 }\n([x = 1, z = 2] : V2)', '[x = 1.0, y = 0.0, z = 2]'],
-] as const) Deno.test(`++ is field assignment: ${application}`, () => {
+] as const) Deno.test(`++ and application are field assignment: ${application}`, () => {
     for (const checked of [false, true]) {
         const run = (source: string) => {
             const i = new Interpreter();
