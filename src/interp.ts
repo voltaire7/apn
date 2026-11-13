@@ -953,7 +953,11 @@ export class Interpreter {
         if (this.converting.has(v)) return undefined;
         this.converting.add(v);
         const target = this.reference(type);
-        try { return this.instance("to", [target.kind === "type" && target.made ? target.made : type, v]); } finally { this.converting.delete(v); }
+        // An instance takes a constructor's type as written: to (Money Float),
+        // to (Box Int) for its type's own constructor applied to its parameters.
+        const written = target.kind !== "type" ? type : target.made ? target.made
+            : target.family && target.arguments?.length && target.family.fields?.has(target.name) ? { kind: "variant" as const, tag: target.name, family: target.family, v: target.arguments } : type;
+        try { return this.instance("to", [written, v]); } finally { this.converting.delete(v); }
     }
     private converting = new Set<Value>();
 
@@ -2133,8 +2137,10 @@ export class Interpreter {
         if (a.kind === "type" || a.kind === "functionType" || b.kind === "type" || b.kind === "functionType") {
             const x = this.asType(a), y = this.asType(b);
             if (!x || !y) return false;
-            // A bare constructor names a kind of type: typeOf [1] == List.
-            const bare = (t: Value) => t.kind === "type" && !t.arguments?.length && !t.description && !t.variable && !t.choices;
+            // A type taking no parameters names a kind of type (typeOf (x -> x)
+            // == Function); one taking some is not a type of values until
+            // given them (typeOf [1] == List Int, not List).
+            const bare = (t: Value) => t.kind === "type" && !t.arguments?.length && !t.description && !t.variable && !t.choices && !this.typeArity(t);
             const kind = (t: Value) => t.kind === "functionType" ? "Function" : t.kind === "type" ? t.name : undefined;
             if ((bare(x) || bare(y)) && x.kind !== "list" && y.kind !== "list") {
                 if (x.kind === "type" && y.kind === "type" && x.family && y.family) return x.family === y.family;
@@ -4350,11 +4356,13 @@ export class Interpreter {
         if (t.kind === "native" && t.tag) return { kind: "constructor", fields: t.arity - t.applied.length };
         if (t.kind === "variant") return t.v.length ? { kind: "schema" } : { kind: "constructor", fields: 0 };
         if (t.kind === "closure" || t.kind === "functionType") return { kind: "schema" };
-        if (t.kind !== "type") return undefined;
-        const given = t.arguments?.length ?? 0;
+        return t.kind === "type" ? { kind: "type", arity: this.typeArity(t) } : undefined;
+    }
+    // How many parameters a type still takes (List 1, List Int 0).
+    private typeArity(t: Extract<Value, { kind: "type" }>): number {
         const takes = t.alias ? t.alias.parameters.length : t.family ? t.family.parameters?.length ?? 0
             : this.counted(t) ? 2 : !t.family && (t.name === "List" || t.name === "IO") ? 1 : 0;
-        return { kind: "type", arity: Math.max(0, takes - given) };
+        return Math.max(0, takes - (t.arguments?.length ?? 0));
     }
     // Whether a name is bound to the list's cons (the prelude's Cons).
     private namesCons(name: string): boolean {

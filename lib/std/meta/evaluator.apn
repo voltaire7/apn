@@ -5,7 +5,7 @@
 # ["$",f,x] and ["{}",...], whose ["=",left,right] statements bind recursively.
 # Environments are persistent maps of lazy values.
 meCons x xs = x :: xs
-meEval scope expression = typeOf expression == List
+meEval scope expression = isList expression
     ? meNode scope (head expression) (tail expression)
     : (typeOf expression == typeOf "text"
     ? meLeaf scope expression
@@ -56,7 +56,7 @@ meLast scope statements = null (tail statements)
         ? lookup (meName (head statements 1)) scope
         : meEval scope (head statements))
     : meLast scope (tail statements)
-meBinding statement = typeOf statement == List ? head statement == "=" : False
+meBinding statement = isList statement ? head statement == "=" : False
 meName left = typeOf left == typeOf "text" ? left : head left
 meValue left right = typeOf left == typeOf "text" ? right : ["->", tail left, right]
 meBindings statements scope = null statements
@@ -79,7 +79,7 @@ meZipTemplate functions values = null functions
         (meZipTemplate (tail functions) (tail values)))
 meTemplateInput value = typeOf value == typeOf "text" ? to (List Char) value : value
 meTemplate functions values = meZipTemplate functions values
-meTemplateSlot function argument = typeOf function == List
+meTemplateSlot function argument = isList function
     ? meTemplate function (meTemplateInput argument)
     : meApply function argument
 # A closure takes its parameters one at a time.

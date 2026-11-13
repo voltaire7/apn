@@ -154,6 +154,8 @@ with = intrinsics.with
 # A list is empty or an element on a list: endless lists, whose unfoldings
 # never end, are lists too ([Int..] is Cons Int [Int..]).
 List a = Nil | Cons a (List a)
+# Whether a value is a list, of any elements, demanding only its first cell.
+isList value = value ~ [[] -> True, _ :: _ -> True, _ -> False]
 [] >>= f = []
 (x :: rest) >>= f = f x ++ (rest >>= f)
 # The length-indexed list, the same values: Nil has length zero, and Cons x xs

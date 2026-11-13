@@ -478,7 +478,7 @@ for (const source of ["f (Int x) = x\nprint (f 1)", "f ((Int) x) = x\nprint 1", 
 example("types that construct, and typed patterns of any parameters", `
 m = HashMap [["a",1]]
 c = Mutable 0
-f (xs : List) = length xs
+f (xs : List _) = length xs
 g { x : Int } = x + 1
 print [m "a", f [1,2], g 2, (2.0 : Int), to Int 3.0]`, ["[1,2,3,2,3]"]);
 example("cons parameters parse", `

@@ -351,13 +351,13 @@ conversion to `T` makes of it, and an error if none does. The conversions are
 `to T`'s: the built-in ones between numbers, lossless (`1.0 : Int` is the Int
 `1`; `1.5 : Int` is a lossy-conversion error; `123 : Int32` is an `Int32`), and
 those a program's `to` instances declare (`to Int East = 1` makes `East : Int`
-`1`, and `to Box (n : Int) = Box n` makes `3 : Box` `Box 3`). `to T e` is the
+`1`, and `to (Box Int) (n : Int) = Box n` makes `3 : Box Int` `Box 3`). `to T e` is the
 same operation as a function. Nothing else converts: `5 : Bool` is an error,
 as `5 : String` is (a condition's truth is `truthy 5`). It is written outermost on a definition's right side
 (`x = 123 : Int32`) or in parentheses (`(5 : Int32) + 1`); a ternary ascribed
 is parenthesized, `(c ? a : b) : T`, and `x = c ? a : b : T` is an error.
 `(p : T)` in a pattern matches what `e : T` makes of the value, then `p`, and
-fails where it fails: `f (n : Int) = n + 1` takes `1.0` as `1`, `(b : Box)`
+fails where it fails: `f (n : Int) = n + 1` takes `1.0` as `1`, `(b : Box Int)`
 takes `3` as `Box 3`, and `(x : t)` binds the value's type `t`.
 
 A type is given a value only by ascription: `Int 5`, `Int $ x` and a type
@@ -366,8 +366,9 @@ passed where a function goes (`f t = t 1`) are errors, `5 : Int` ascribes and
 `Option Int`, a computed `Sized 2`), and `HashMap`, `Mutable` and `Pointer`,
 types that are their own constructors, build their values (`HashMap [...]`,
 `Mutable 0`). A typed pattern writes its type after the value: `(Int x)`,
-`((T) p)` and `(t x)` are errors whose hint is `(x : Int)`. A type's missing
-parameters are any (`(xs : List)` is `(xs : List _)`).
+`((T) p)` and `(t x)` are errors whose hint is `(x : Int)`. A type is given
+every parameter it takes, `_` for any (`(xs : List _)`): unapplied it is a
+function, so `(xs : List)` is an error, as is any name used with another arity.
 
 ### Code
 
@@ -1800,9 +1801,10 @@ still evaluates it enough to obtain its outer value. Existing nullary action sem
 so `typeOf` describes its result.
 
 A described type compares equal to the type it describes: `[Int,Int] == typeOf
-[1,2]` and `(a -> a) == typeOf (x -> x)` are true. Compared with a bare
-constructor it keeps its broad identity: `typeOf [1] == List` and
-`typeOf f == Function` are true. A counted list type is the positional type it
+[1,2]` and `(a -> a) == typeOf (x -> x)` are true. A type taking
+parameters is no type of values until given them: `typeOf [1] == List` is
+false, `isList [1]` asks whether a value is a list, and `typeOf f == Function`
+is true. A counted list type is the positional type it
 makes: `Vect 3 Int == [Int,Int,Int]` is true. A description is not an enforced
 schema; use a typed pattern or contract when you need validation.
 

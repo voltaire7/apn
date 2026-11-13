@@ -581,7 +581,7 @@ value's narrowest type: its fields decide the parameters they name, demanding
 them (`typeOf (Some 123)` is `Option Int`, `typeOf (Box [1])` is `Box [Int]`),
 and one nothing decides is a type variable (`typeOf None` is `Option a`).
 Explicit specialization retains its arguments: `typeOf (None : Option Int)` is
-`Option Int`. Against a bare type it still compares by name: `typeOf (Some 1) == Option`. Different type arguments produce
+`Option Int`, which is not `Option` (a function of a type). Different type arguments produce
 different type descriptions. Payload conversions are deferred until used.
 Concrete fields such as `Int` in `MkUserId Int` are enforced on construction,
 also lazily. They convert as a typed parameter does, and the static check

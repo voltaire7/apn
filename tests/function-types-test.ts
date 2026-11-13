@@ -40,7 +40,7 @@ for (const [name, source, expected] of [
     ["a type variable applied to several types", 'std <- import "std"; use std.option\nboth (m : (a -> b) -> f a e -> f b e) r = m (* 2) r\nprint [both map (Ok 3), both map (Err "no")]\nprint (typeOf both)\nk (h : a -> List (f a e)) = h\nprint (k (x -> [Ok x]) 1)\nprint (isType ((f a e) -> f a e) (x -> x))\nprint (isType ((e : f a) -> f a e) (x -> x))\nprint (isType (f a e -> f a e) (x -> x))',
         ['[Ok 6, Err "no"]', "((a -> b) -> f a c -> f b c) -> f a c -> f b c", "[Ok 1]", "True", "True", "True"]],
     ["a list's type is exact: [Int] is one Int; any number of them is List Int", "print (List Int == typeOf [1,2,3])\nprint ([Int] == typeOf [1])\nprint (typeOf [1,\"a\"])\nprint (typeOf [1] == List)\nprint (isType (List Int) [1,2,3])\nprint [Vect 3 Int == [Int,Int,Int], [Int,Int] == Vect 2 Int, Vect 2 Int == [Int]]",
-        ["False", "True", "[Int,String]", "True", "True", "[True,True,False]"]],
+        ["False", "True", "[Int,String]", "False", "True", "[True,True,False]"]],
     ["a name bound to a type is that type; any other is a variable", "a = 100\nprint ((a -> a) == typeOf (x -> x))\nt = Int\nprint ((t -> t) == typeOf ((x : Int) -> x))\nprint ((t -> t) == typeOf (x -> x))",
         ["True", "True", "False"]],
     ["dotted application converts through the type", "print ((a -> a).(+ 1) 41)\nprint ((Int -> Int).(* 2) 21)", ["42", "42"]],

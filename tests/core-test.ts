@@ -74,14 +74,16 @@ for (const checked of [true, false]) {
         // and one nothing decides is a type variable.
         [OPTION + CTOR + "Pair a b = _\n[typeOf (Box 5), typeOf (Pair 1 \"x\"), typeOf (Some (Some 1)), typeOf None, typeOf (Ok 2)]",
             "[Box Int, Pair Int String, Option (Option Int), Option a, Result Int e]"],
-        [OPTION + "Node a = Leaf | Branch a (Node a)\nxs = Branch 1 xs\n[typeOf (Branch 1 Leaf), typeOf xs, typeOf (Some 1) == Option]",
-            "[Node Int, Node Int, True]"],
+        [OPTION + "Node a = Leaf | Branch a (Node a)\nxs = Branch 1 xs\n[typeOf (Branch 1 Leaf), typeOf xs, typeOf (Some 1) == Option, typeOf (Some 1) == Option Int]",
+            "[Node Int, Node Int, False, True]"],
         [PERCENT + "[Percent 150, Percent 50, typeOf (Percent 1)]", "[Percent 100.0, Percent 50.0, Percent Float]"],
         [PERCENT + "Percent a + Percent b = Percent (a + b)\nPercent 90 + Percent 20", "Percent 100.0"],
         [PERCENT + "g (Percent v) = v\n[g (Percent 150), g (tag Percent Percent [150.0])]", "[100.0,150.0]"],
         [PERCENT + "map Percent [1,200]", "[Percent 1.0, Percent 100.0]"],
         ["Low (x : Int) = x > 5 ? Low 5 : _\n[([l = Low 9] : [l : Low Int]), Low Int]", "[[l = Low 5], Low Int]"],
         ["Even (n : Int) = n % 2 == 0 ? _ : Even (n + 1)\n[Even 3, Even 4]", "[Even 4, Even 4]"],
+        // A conversion instance takes a constructor's own type as written.
+        [CTOR + "to (Box Int) (n : Int) = Box n\nf (b : Box Int) = b\n[(3 : Box Int), f 4]", "[Box 3, Box 4]"],
         [MAYBE + "[typeOf Nada, typeOf (Just Nada)]", "[Maybe x, Maybe (Maybe x)]"],
         ["Pos (x : Int) : Num = x < 0 ? Pos (0 - x) : _\n[Pos -2, typeOf (Pos 1)]", "[Pos 2, Num]"],
         ["N : V Z a = _\nC a (xs : V k a) : V (S k) a = _\ntypeOf (C 1 (C 2 N))", "V 2 Int"],
@@ -98,6 +100,9 @@ for (const checked of [true, false]) {
         [CTOR + 'Rect "a" 2', checked ? "cannot use String where Float is required" : "Float expects a number"],
         [CTOR + "Box 5 + 1", checked ? "cannot combine Box Int and Int" : "cannot apply '+'"],
         ["Bad [x] = _\n1", "a constructor's field is a name, a typed name or a record of typed fields"],
+        // A name keeps its arity: a type is given all its parameters.
+        ["f (xs : List) = xs\nf [1]", "List takes 1 type parameter; a type is given all of them"],
+        [MAYBE + "f (m : Maybe) = m\nf Nada", "Maybe takes 1 type parameter; a type is given all of them"],
         [SHAPE + "Circle (d : Float) : Shape = _\n1", "Circle is already a constructor of Shape"],
         ["Some a : Opt a = _\nNone : Opt = _\n1", "Opt takes 1 type parameter, as declared"],
         [MAYBE + '(Just "a" : Maybe Int)', checked ? "cannot use String where Int is required" : "Int expects a number"],

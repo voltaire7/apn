@@ -364,8 +364,8 @@ export function rewriteInfixConstructors(node: unknown, tagOf: (op: string) => s
 // or another value read as a type (a function type: Handler = a -> Int).
 export type PatternHead = { kind: "type"; arity: number } | { kind: "constructor"; fields: number } | { kind: "schema" };
 // (p : T args), written as the typed pattern {T args p, typed}, by what T is
-// where it runs (head). A type given fewer arguments than it takes gets _ for
-// the rest ((xs : List) is (xs : List _)). A constructor is a function that
+// where it runs (head). A type is given every argument it takes ((xs : List
+// _), not (xs : List): unapplied, it is a function). A constructor is a function that
 // does not evaluate: given a type for each field it is the values it makes,
 // (b : Box Int) the pattern b.(Box (_ : Int)) and (x : None) x.None; given
 // fewer, the function type of the rest, (x : Some) is (x : a -> Some a).
@@ -381,7 +381,11 @@ export function rewriteTypedPatterns(node: unknown, head: (tag: string) => Patte
     const given = args.slice(0, -1), value = args[args.length - 1], written = { ...n } as Pattern;
     const replace = (pattern: Pattern) => { for (const key of Object.keys(n)) delete n[key]; Object.assign(n, pattern, { written }); };
     if (kind.kind === "type") {
-        if (given.length < kind.arity) n.args = [...given, ...Array.from({ length: kind.arity - given.length }, (): Pattern => ({ p: "wildcard" })), value];
+        if (given.length < kind.arity) {
+            const written = (q: Pattern): string => q.p === "var" ? q.name : q.p === "int" ? String(q.v) : q.p === "constr" && !q.args.length ? q.tag : "_";
+            const all = [tag, ...given.map(written), ...Array.from({ length: kind.arity - given.length }, () => "_")].join(" ");
+            throw new APNError("type", `${tag} takes ${kind.arity + given.length} type parameter${kind.arity + given.length === 1 ? "" : "s"}; a type is given all of them`, { hint: `(x : ${all})` });
+        }
         return;
     }
     if (kind.kind === "schema") {

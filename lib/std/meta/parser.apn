@@ -231,6 +231,6 @@ mpParse source = mpProgram (mpSkip (mpLex source)) []
 # Syntax is finite. Finish reading before execution so parser thunks do not
 # accumulate underneath evaluator frames; object-language values stay lazy.
 mpVisit pending = null pending ? []
-    : (typeOf (head pending) == List ? head pending ++ tail pending
+    : (isList (head pending) ? head pending ++ tail pending
     : tail pending)
 mpForce value = seq (head (filter null (iterate mpVisit [value]))) []

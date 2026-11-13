@@ -45,7 +45,8 @@ for (const [source, expected] of [
     ['Option a = Some a | None; f (Some x) = x; f None = 0; typeOf f', 'Option Int -> Int'],
     ['f x = f x; typeOf f', 'a -> b'],
     ['typeOf (typeOf [1])', 'Type'],
-    ['[typeOf [1] == List, isType (typeOf [1]) ["hi"]]', '[True,True]'],
+    // A type taking parameters is none of values until given them.
+    ['[typeOf [1] == List, isList [1], isType (typeOf [1]) ["hi"]]', '[False,True,True]'],
     ['f x = x; [typeOf f == Function, isType (typeOf f) (x -> 1)]', '[True,True]'],
     ['count = Mutable 0; action x = set count 1; t <- return (typeOf action); count', '0'],
     ['count = Mutable 0; t <- return (typeOf [set count 1]); count', '0'],

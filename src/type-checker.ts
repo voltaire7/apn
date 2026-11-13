@@ -2285,8 +2285,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     let made: Ty = t;
                     const fields: Ty[] = [];
                     for (; made.k === "fn"; made = resolve(made.output)) fields.push(resolve(made.input));
-                    if (fields.length === p.args.length && fields.every(f => !(f.k === "atom" && f.name === "Type") && f.k !== "var")) {
-                        unify(expected, { k: "type", value: made }, e);
+                    // A field of a type parameter takes the type given (to (Box Int)).
+                    if (fields.length === p.args.length && fields.every(f => !(f.k === "atom" && f.name === "Type"))) {
+                        fields.forEach((f, n) => { if (f.k === "var") unify(f, typeExpr({ t: "var", name: (p.args[n] as { tag: string }).tag }, scope), e); });
+                        unify(expected, { k: "type", value: resolve(made) }, e);
                         return;
                     }
                 }
