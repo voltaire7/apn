@@ -60,7 +60,7 @@ export type Value =
     | { kind: "variant"; tag: string; v: Value[]; family?: VariantFamily; arguments?: Value[] }
     // A partly applied closure keeps its whole parameter list and the arguments
     // applied so far, for showing it: (a b -> a + b) 1.
-    | { kind: "closure"; params: string[]; body: Expr; env?: Env; mutableValue?: Value; whole?: string[]; applied?: Value[] }
+    | { kind: "closure"; params: string[]; body: Expr; env?: Env; mutableValue?: Value; whole?: string[]; applied?: Value[]; names?: string }
     | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string; family?: VariantFamily; invoke?: (args: Value[]) => Value }
     // fallback: an overloaded operator's previous meaning, applied when no clause matches.
     | { kind: "clauseFn"; name: string; clauses: DefClause[]; arity: number; env: Env; applied: Value[]; fallback?: Value }
@@ -75,7 +75,7 @@ export type Value =
     // or bind built from one): realized in a monad by an annotation, a >>=
     // with a concrete value, or as IO when run.
     | { kind: "pending"; step: PendingStep }
-    | { kind: "thunk"; body: Expr; env?: Env; value?: Value; busy?: boolean };
+    | { kind: "thunk"; body: Expr; env?: Env; value?: Value; busy?: boolean; names?: string };
 
 // Numbers are accepted only for bounded host counters such as array lengths.
 export function mkInt(v: bigint | number): Value {

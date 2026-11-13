@@ -263,6 +263,29 @@ dynamicNumber = 41 : Dynamic
 print ((dynamicNumber : Int) + 1)        # => 42
 
 # ---------------------------------------------------------
+# Sets and terms
+# ---------------------------------------------------------
+# Every value is a set: a type its values, a number those below it, a list
+# its (position, item) pairs. <= is inclusion, & intersection, | union.
+print [Int <= Number, [1] <= [1,2], [1,2] & [1,3], 3 | 5]  # => [True,True,[1],5]
+
+# Every definition is left : T = body, T the type of the left side. A type is
+# a constructor declared into Type, and constructors declare into it.
+double (n : Int) : Int = n + n
+Answer a : Type = _
+Yes x : Answer x = _
+No : Answer x = _
+print [double 4, typeOf (Yes 1)]         # => [8, Answer Int]
+
+# A body of _ makes data, whatever the name: it stands for itself. Clauses
+# before it are its rules, and patterns take its terms apart.
+sine 0 = 0
+sine x = _
+cosine x = _
+d (sine x) = cosine x
+print [sine 0, sine 2, d (sine 2)]       # => [0, sine 2, cosine 2]
+
+# ---------------------------------------------------------
 # Effects
 # ---------------------------------------------------------
 # An effect is a value, an IO action, and naming one does not run it. A

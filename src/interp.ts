@@ -17,7 +17,7 @@ import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWit
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, type HeadKind, resolveHeads, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, type PatternHead, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, type HeadKind, resolveHeads, declaresNames, withinScope, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, type PatternHead, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, isUse } from "./ast.ts";
@@ -250,6 +250,29 @@ export class Interpreter {
         if (PRELUDE_TYPES.has(name)) return bound === this.preludeBindings.get(name);
         return bound.kind === "type" && bound.name === name && !bound.family;
     }
+    private namedTypes = new WeakMap<Value, Value>();
+    // A definition names the type it gives, whatever its name's case: a scalar
+    // type names a subtype (Money = Float: a Float wherever one is accepted,
+    // keeping its name, and (x : Money) takes a Money or a Float it converts);
+    // so does a refinement of one (Int32 = (n : Int) | ...), its values the
+    // refinement's; another type remembers it (see remembered). A list or
+    // record of types is named where written as one (Point = [x : Float]), not
+    // computed (ts = t :: ts), whose values are data first.
+    private namedValue(name: string, value: Value, body: Expr): Value {
+        while (body.t === "block" && body.stmts.length === 1) body = body.stmts[0];
+        // Written as types: names of types, types applied, lists and records of them.
+        const writtenType = (e: Expr): boolean => e.t === "var" ? /^[A-Z]/.test(e.name) : e.t === "placeholder" ? true
+            : e.t === "app" ? writtenType(e.f) : e.t === "list" ? e.v.every(writtenType) : e.t === "record" ? e.v.every(([, x]) => writtenType(x))
+            : e.t === "block" && e.stmts.length === 1 ? writtenType(e.stmts[0]) : false;
+        if (value.kind !== "type" && !((body.t === "record" || body.t === "list") && writtenType(body))) return value;
+        if (value.kind === "type" && SCALAR_NAMES.has(value.name) && !value.family && !value.alias && !value.arguments?.length && !value.variable) {
+            return { kind: "type", name, family: { name, base: value } };
+        }
+        if (value.kind === "type" && value.refine && this.scalarRefinement(value)) {
+            return { kind: "type", name, family: { name, base: { ...value, name } } };
+        }
+        return this.remembered(name, [], value);
+    }
     // Whether a refinement's base is a scalar type (through refinements and
     // named subtypes): naming one names a subtype.
     private scalarRefinement(t: Value): boolean {
@@ -471,10 +494,7 @@ export class Interpreter {
             for (const [index, written] of program.entries()) {
                 if (this.runDepth === 1 && !this.dynamicDepth) this.running = { program, index };
                 const tl = written;
-                rewriteListConstructors(tl, tag => this.namesCons(tag));
-                knownTypeArguments(tl, tag => this.computedType(tag));
-                resolveHeads(tl, name => this.headKind(name));
-                rewriteTypedPatterns(tl, tag => this.patternHead(tag));
+                this.readPatterns(tl);
                 if (tl.t === "type") {
                     last = this.declare(tl.def, this.env.root()) ?? last;
                     continue;
@@ -676,19 +696,7 @@ export class Interpreter {
                         // = names the value. A lambda is a value: applied, it runs
                         // (Sized 2 is Vect 2 Int); where a type is expected, it
                         // reads as a function type.
-                        const value = this.reference(this.eval(clauses[0].body));
-                        // A scalar type names a subtype: Money = Float. A Money is
-                        // a Float wherever one is accepted, but keeps its name,
-                        // and (x : Money) takes a Money or a Float it converts.
-                        if (value.kind === "type" && SCALAR_NAMES.has(value.name) && !value.family && !value.alias && !value.arguments?.length && !value.variable) {
-                            return { kind: "type", name, family: { name, base: value } };
-                        }
-                        // So does a refinement of one (Int32 = (n : Int) | ...), its
-                        // values those of the refinement.
-                        if (value.kind === "type" && value.refine && this.scalarRefinement(value)) {
-                            return { kind: "type", name, family: { name, base: { ...value, name } } };
-                        }
-                        return this.remembered(name, [], value);
+                        return this.namedValue(name, this.reference(this.eval(clauses[0].body)), clauses[0].body);
                     } finally { this.env = caller; }
                 });
             scope.setLocal(name, alias);
@@ -757,7 +765,7 @@ export class Interpreter {
         // (xs = map f xs), a new name itself.
         if (value.t === "block" || value.t === "app" || value.t === "pipe") {
             const child = new Env(this.env);
-            const clo: Value = { kind: "closure", params: [], body: value, env: child };
+            const clo: Value = { kind: "closure", params: [], body: value, env: child, names: name };
             if (this.env.get(name) === undefined) child.setLocal(name, clo);
             this.bindNames([[name, clo]]);
             return clo;
@@ -767,7 +775,8 @@ export class Interpreter {
         // arguments; lazy container components retain their own thunks.
         // A rebinding's right side reads the version before it (count = count + 1);
         // a new name's reads itself (ones = 1 :: ones).
-        const thunk: Value = { kind: "thunk", body: value, env: this.env, value: undefined };
+        // A type it gives is named, as by any definition (see namedValue).
+        const thunk: Value = { kind: "thunk", body: value, env: this.env, value: undefined, names: name };
         if (this.env.get(name) === undefined) this.env.root().setLocal(name, thunk);
         else this.bindNames([[name, thunk]]);
         return thunk;
@@ -1339,7 +1348,16 @@ export class Interpreter {
         v = this.force(v);
         while ((v.kind === "closure" && v.params.length === 0) || (v.kind === "native" && v.arity === 0)) {
             checkInterrupt();
+            // A definition's type is named (see namedValue), once: each use
+            // is the same type.
+            const definition = v.kind === "closure" && v.names ? v : undefined;
+            const known = definition && this.namedTypes.get(definition);
+            if (known) { v = known; break; }
             v = this.force(this.callBlockFn(v, tailLoad));
+            if (definition) {
+                v = this.namedValue(definition.names!, this.reference(v), definition.body);
+                if (v.kind === "type") this.namedTypes.set(definition, v);
+            }
         }
         if (original.kind === "thunk" || original.kind === "deferred") original.value = v;
         return v;
@@ -1472,6 +1490,7 @@ export class Interpreter {
         try {
             for (let i = start; i < e.stmts.length; i++) {
                 const s = e.stmts[i];
+                if (declaresNames(e)) this.readPatterns(s);
                 if (i === start && first) {
                     const result = this.runIO(first);
                     if (s.t === "patDef") this.bindResult(s, result);
@@ -1596,7 +1615,7 @@ export class Interpreter {
                         const argument: Value = e.a.t === "placeholder" && this.takesTypes(head) ? { kind: "type", name: "$any" } : { kind: "thunk", body: e.a, env: this.env };
                         // e : T: a type applied to a value, as a member of it. A
                         // constructor named as its type is the type there (Point, Box Int).
-                        const ascribed = e.ascribed ? this.force(head) : undefined;
+                        const ascribed = e.ascribed ? this.reference(head) : undefined;
                         const type = ascribed && (this.sharedType(ascribed) ?? ascribed);
                         if (type?.kind === "type") { r = this.typeValue(type, argument); break; }
                         // A record or list of types makes its value ([] : [v : Int]).
@@ -1818,8 +1837,10 @@ export class Interpreter {
                         this.env = child;
                         try {
                             r = { kind: "list", v: [] };
+                            const scoped = declaresNames(e);
                             for (let si = 0; si < e.stmts.length; si++) {
                                 const s = e.stmts[si];
+                                if (scoped) this.readPatterns(s);
                                 // A binding last is followed by {}: { x = 1 } is (x -> {}) 1, [].
                                 if (s.t === "stmDef") { this.evalDef(s.name, s.clauses); r = mkList([]); continue; }
                                 if (s.t === "typeDef") { this.declare(s.def, this.env); r = mkList([]); continue; }
@@ -2575,6 +2596,13 @@ export class Interpreter {
                 thunk.value = v;
                 if (thunk.kind === "thunk") thunk.env = undefined;
                 else thunk.compute = thunk.describes = undefined;
+            }
+            // Inner thunks first: a definition's (names) names what it gives
+            // (its value already set, so naming one that holds itself, x =
+            // x :: 1, meets it), and those forced through it see the name.
+            for (const thunk of [...pending].reverse()) {
+                if (thunk.kind === "thunk" && thunk.names) v = this.namedValue(thunk.names, this.reference(v), thunk.body);
+                thunk.value = v;
             }
             return v;
         } finally {
@@ -3376,6 +3404,7 @@ export class Interpreter {
             try {
                 for (let i = from; i < e.stmts.length; i++) {
                     const s = e.stmts[i], last = i === e.stmts.length - 1;
+                    if (declaresNames(e)) this.readPatterns(s);
                     if (s.t === "stmDef") { this.evalDef(s.name, s.clauses); continue; }
                     if (s.t === "typeDef") { this.declare(s.def, this.env); continue; }
                     if (s.t === "patDef" && !s.eager) { this.evalPatBinding(s); continue; }
@@ -4375,13 +4404,26 @@ export class Interpreter {
         const f = this.reference(this.force(head));
         return f.kind === "type" || f.kind === "native" && !!f.tag;
     }
-    // What a lowercase name applied in a pattern is here (see resolveHeads).
+    // What a name applied in a pattern is here (see resolveHeads).
     private headKind(name: string): HeadKind {
         const bound = this.env.get(name);
         if (bound === undefined) return "free";
         const value = this.reference(bound);
-        return value.kind === "native" && value.tag || value.kind === "variant" ? "data" : "other";
+        return value.kind === "native" && value.tag ? { data: value.tag } : value.kind === "variant" ? { data: value.tag } : "other";
     }
+    // A statement's patterns read by what their names are bound to here: at
+    // the top level, and in a block declaring names, as each statement runs.
+    private readPatterns(s: unknown): void {
+        if (this.patternsRead.has(s as object)) return;
+        this.patternsRead.add(s as object);
+        withinScope(s, () => {
+            rewriteListConstructors(s, tag => this.namesCons(tag));
+            knownTypeArguments(s, tag => this.computedType(tag));
+            resolveHeads(s, name => this.headKind(name));
+            rewriteTypedPatterns(s, tag => this.patternHead(tag));
+        });
+    }
+    private patternsRead = new WeakSet<object>();
     // How many parameters a type still takes (List 1, List Int 0).
     private typeArity(t: Extract<Value, { kind: "type" }>): number {
         const takes = t.alias ? t.alias.parameters.length : t.family ? t.family.parameters?.length ?? 0

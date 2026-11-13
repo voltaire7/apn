@@ -369,13 +369,35 @@ export function rewriteInfixConstructors(node: unknown, tagOf: (op: string) => s
     for (const key of Object.keys(n)) delete n[key];
     Object.assign(n, { p: "constr", tag, args });
 }
+// Whether a block declares names: its statements' patterns are read in its
+// scope, as it runs (see withinScope).
+export function declaresNames(e: unknown): boolean {
+    const b = e as { t?: string; stmts?: Expr[] };
+    return b.t === "block" && !!b.stmts?.some(s => s.t === "stmDef" || s.t === "typeDef" || s.t === "patDef");
+}
+// Runs passes over a statement's patterns, but not into the blocks within it
+// that declare names: each reads its own when it runs, in its scope.
+export function withinScope(node: unknown, passes: () => void): void {
+    const hidden: Array<[{ stmts: Expr[] }, Expr[]]> = [];
+    const seen = new Set<object>();
+    const hide = (x: unknown): void => {
+        if (!x || typeof x !== "object" || seen.has(x)) return;
+        seen.add(x);
+        if (Array.isArray(x)) { x.forEach(hide); return; }
+        if (declaresNames(x)) { const b = x as { stmts: Expr[] }; hidden.push([b, b.stmts]); b.stmts = []; return; }
+        Object.values(x).forEach(hide);
+    };
+    hide(node);
+    try { passes(); } finally { for (const [block, stmts] of hidden) block.stmts = stmts; }
+}
 // A head no value matches: a pattern calling a function.
 export function headError(name: string): APNError {
     return new APNError("runtime", `${name} is a function, not data: a pattern cannot call it`, { hint: `declare data with _: ${name} x = _` });
 }
 // A lowercase name applied in a pattern, (sin x), is a head: it means what it
 // is bound to where it runs (resolveHeads), as a capitalized one does.
-export type HeadKind = "data" | "free" | "other";
+// data: the constructor's own tag (NewBox = Box matches Box terms).
+export type HeadKind = { data: string } | "free" | "other";
 // Data (sin x = _) matches its terms; a name bound to nothing is the typed run
 // it was written as ((t1 1 t2): a type taken apart; (t x) the old spelling of
 // (x : t), an error); bound to anything else it stays a head, which no value
@@ -385,9 +407,11 @@ export function resolveHeads(node: unknown, kind: (name: string) => HeadKind): v
     if (Array.isArray(node)) { node.forEach(x => resolveHeads(x, kind)); return; }
     const n = node as Record<string, unknown>;
     for (const value of Object.values(n)) if (value && typeof value === "object") resolveHeads(value, kind);
-    if (n.p !== "constr" || !n.head) return;
+    if (n.p !== "constr" || n.typed) return;
     const tag = n.tag as string, args = n.args as Pattern[], k = kind(tag);
-    if (k === "data") { delete n.head; return; }
+    // A name bound to a constructor matches its terms (NewBox = Box: Box ones).
+    if (typeof k === "object") { n.tag = k.data; delete n.head; return; }
+    if (!n.head) return;
     if (k !== "free") return;
     const piece = (q: Pattern): Expr | undefined => q.p === "var" ? { t: "var", name: q.name } : q.p === "int" ? { t: "int", v: q.v }
         : q.p === "float" ? { t: "float", v: q.v } : q.p === "string" ? { t: "string", v: q.v } : q.p === "char" ? { t: "char", v: q.v } : undefined;

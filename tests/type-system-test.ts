@@ -71,7 +71,7 @@ for (const [source, expected] of [
     ['f (x : Int32) = x + 1\nf 2', '3'],
     ['same (x : Number) (x : Number) = True\nsame a b = False\n[same 1 1, same 1 2]', '[True,False]'],
     ['map (to Int \\ truncate) [1.5,2.5]', '[1,2]'],
-    ['f = Int32\nx = 5 : f; [x, typeOf x]', '[5,Int32]'],
+    ['f = Int32\nx = 5 : f; [x, typeOf x]', '[5,f]'],
     ['x = 9223372036854775807 : Int64; [x, typeOf x]', '[9223372036854775807,Int64]'],
     ['x = 340282366920938463463374607431768211455 : UInt128; [x, typeOf x]', '[340282366920938463463374607431768211455,UInt128]'],
 ]) {

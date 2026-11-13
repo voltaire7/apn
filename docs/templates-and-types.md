@@ -427,7 +427,7 @@ an `Int`.
 
 A capitalized definition computes: applied, it gives what its body gives, a
 type (`Sized n = Vect n Int`: `Sized 2` is `Vect 2 Int`) or any value. A scalar
-type it names is kept as a
+type any definition names, whatever its case (`count = Int` too), is kept as a
 [named subtype](type-and-resource-rules.md#distinct-types) (`Count = Int`:
 `5 : Count` is a `Count`). A body of `_` makes a constructor instead (see
 [variants](#variants-parameters-and-distinct-wrappers)).
@@ -486,6 +486,9 @@ matches its terms, a type takes type values apart (`(Vect n a)`), and a name
 bound to nothing binds (`(t1 1 t2)` given `Vect 1 Int` binds `t1` to `Vect`). A
 pattern cannot call a function (`(pos 0)` with `pos x = x + 1` is an error),
 except as the index of an item assignment (`xs (pos 0) = 9` with `xs` a list).
+A name for a constructor is that constructor (`NewBox = Box`: `(NewBox x)`
+matches `Box 1`). Names are read where the pattern is: in a block, with what the
+block declares before it.
 
 ```apn
 sin 0 = 0
@@ -563,6 +566,8 @@ Some a : Option a = _            # Option a = Some a | None
 None : Option a = _
 Nil : Vect Z a = _               # Vect n a = Nil -> Vect Z a | ...
 Cons a (xs : Vect k a) : Vect (S k) a = _
+NewBox = Box                     # a name for a constructor is it: (NewBox x)
+                                 # matches Box terms
 Opt a : Type = _                 # a type, its constructors declared after
 Some x : Opt x = _               # typeOf None is Opt a, named by the type
 None : Opt x = _

@@ -95,10 +95,10 @@ Spacing is part of the syntax (a parse error otherwise):
   bracket, so `[[1,2],[3]]` but `[[1 + 1], [3]]`, and `[1, 2]` or `[1 + 1,2]` is
   an error. This covers list items and patterns, record fields, bare
   selections (`v.[x,y]`), ranges (`[1,3..9]`), `match` clause lists and import
-  lists. A bracket that is the whole left side of `=` pairs its items with the
-  right's, so both sides count as one: `[a, b] = [f 1, 2]` and
-  `[f x, g y] = [x, y]`, but `[a,b] = [1,2]` (a parameter's pattern,
-  `f [x,y] = [x + 1, y]`, is not paired). Lambda parameters, which start a spaced lambda, always take one space:
+  lists. A bracket just before `=` or `->` pairs its items with the bracket just
+  after it, so both sides count as one: `[a, b] = [f 1, 2]`,
+  `[f x, g y] = [x, y]`, `f [x, y] = [x + x, y + y]` and
+  `[x, y] -> [x + x, y + y]`, but `[a,b] = [1,2]`. Lambda parameters, which start a spaced lambda, always take one space:
   `x, y -> x + y`, `(x : Int), y -> x`.
 - A `,` separates two items on one line. A newline already separates items,
   so a `,` ending a line is an error, as is a trailing one (`[1,2,]`); a
@@ -1897,8 +1897,8 @@ f (x : Positive) = x                  # f -3 matches no clause
 typeOf ((3 : Positive) + 1)           # Positive
 ```
 
-A capitalized name for a refinement of a scalar type, defined without
-parameters, names a subtype, as `Count = Int` does
+A name for a refinement of a scalar type, defined without parameters,
+whatever its case, names a subtype, as `Count = Int` does
 ([named types](type-and-resource-rules.md#distinct-types)), and the sized
 integers are exactly this (`Int32`, see [intrinsics](intrinsics.md)):
 `(3 : Positive)` is a `Positive` (`typeOf` says so), it keeps its name through

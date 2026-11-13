@@ -1,11 +1,11 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, extendedDeclaration, headError, resolveHeads, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, extendedDeclaration, headError, resolveHeads, declaresNames, withinScope, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
 import { IMPORT_ONE, standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
-import { castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
+import { castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, numericWithin, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
 import { APNError, didYouMean, formatFileReadError, typeApplied, withArticle } from "./errors.ts";
 import { bindingItem, DEFAULT_FIXITY, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
@@ -35,7 +35,7 @@ function pendingTy(t: Ty): Ty { return { k: "variant", name: PENDING, args: [t] 
 function isPending(t: Ty): boolean { return t.k === "variant" && t.name === PENDING && t.args.length === 1; }
 // The methods, by the names the prelude binds them to (return, >>=, ...).
 const METHOD_NAMES = new Set(METHOD_INTRINSICS.values());
-// The scalar types; a capitalized name for one names a subtype (Count = Int).
+// The scalar types; a name for one names a subtype (Count = Int).
 const NAMED_BASES = new Set([...NUMERIC_TYPES.filter(t => !["Number", "Real", "Integer", "Exact", "Inexact"].includes(t)), "String", "Bool", "Char"]);
 
 type Index = { constant: bigint; terms: Map<string, bigint> };
@@ -152,6 +152,8 @@ interface Entry {
     // A constructor whose rules give values of other types (sin 0 = 0 before
     // sin x = _): what applying it gives, its type or one of theirs.
     widened?: Ty;
+    // A constructor's own tag, kept by a name bound to it (NewBox = Box).
+    ownTag?: string;
     rules?: { params: Pattern[] }[];
     // A type's or constructor's declaration, which a constructor declared
     // into it extends (also in a later check: a REPL input, a module).
@@ -1887,7 +1889,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             throw error;
         } finally { choosing--; requirements.length = saved; }
     }
-    // A capitalized name for a scalar type names a subtype (Money = Float), as
+    // A name for a scalar type names a subtype (Money = Float), as
     // at runtime; undefined for anything else.
     // So does a refinement of one (Int32 = (n : Int) | ...), its condition kept.
     function namedSubtype(name: string, t: Ty): Ty | undefined {
@@ -2889,17 +2891,27 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 };
                 const list = resolve(args[0]), types = list.k === "list" ? list.items?.map(asType) : undefined;
                 // Of values read as sets (see Interpreter.setOf): one of them,
-                // or their common prefix, of their type; records are checked
-                // when it runs.
+                // or their common prefix, of their type; records the fields
+                // of either (|) or of both (&), each of its types.
                 const values = list.k === "list" ? list.items?.map(resolve) : undefined;
+                if (values?.length && types?.every(t => !t) && values.every(v => v.k === "record")) {
+                    const records = values as Extract<Ty, { k: "record" }>[];
+                    const keys = f.name === "union" ? [...new Set(records.flatMap(r => [...r.fields.keys()]))]
+                        : [...records[0].fields.keys()].filter(key => records.every(r => r.fields.has(key)));
+                    return { k: "record", fields: new Map(keys.map(key => [key, union(records.flatMap(r => r.fields.has(key) ? [r.fields.get(key)!] : []))])) };
+                }
                 if (values?.length && types?.every(t => !t) && values.every(v => v.k !== "record" && v.k !== "dynamic" && v.k !== "var")) {
                     const all = resolve(union(values));
                     return all.k === "list" ? { k: "list", element: all.element } as Ty : all;
                 }
                 if (!types?.every(t => t)) { runtimeChecks++; return explicitDynamic; }
-                // An intersection of types is a refinement of the first: its
-                // values are the first's to the check.
-                return { k: "type", value: f.name === "union" ? union(types as Ty[]) : types[0]! };
+                if (f.name === "union") return { k: "type", value: union(types as Ty[]) };
+                // An intersection of types: the smaller where one holds the
+                // other (Int & Number is Int), else a refinement of the first,
+                // its values the first's to the check.
+                const [a, b] = (types as Ty[]).map(resolve);
+                const holds = (big: Ty, small: Ty) => text(big) === text(small) || big.k === "atom" && small.k === "atom" && NUMERIC_TYPES.includes(big.name) && NUMERIC_TYPES.includes(small.name) && numericWithin(small.name, big.name);
+                return { k: "type", value: types.length === 2 && holds(a, b) ? b : a };
             }
             // truthy x: x's truth; an action has none.
             if (f.name === "truthy") {
@@ -4306,7 +4318,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const discards: Array<[Expr, Ty]> = [];
                 doBlocks.push(block);
                 try {
+                    const scoped = declaresNames(e);
                     for (const [n, s] of e.stmts.entries()) {
+                        if (scoped) readPatterns(s, child);
                         result = infer(s, child);
                         const binds = s.t === "patDef" || s.t === "stmDef" || s.t === "typeDef";
                         // A <- binding, or a discarded statement in a monad, makes the
@@ -5204,7 +5218,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (e.t === "var") {
             const entry = scope.get(e.name);
             if (!entry) return {};
-            if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
+            if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: constructorNames.get(e.name) ?? e.name };
             if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope } };
             return { size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };
         }
@@ -5221,7 +5235,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // A constructor applied to all its fields.
                 let t = resolve(entry?.type ?? dynamic);
                 for (let n = 0; n < args.length && t.k === "fn"; n++) t = resolve(t.output);
-                return t.k === "variant" ? { tag: head.name, ...args.length ? { payload: args.map(a => valueEntry(a, scope)) } : {} } : {};
+                return t.k === "variant" ? { tag: constructorNames.get(head.name) ?? head.name, ...args.length ? { payload: args.map(a => valueEntry(a, scope)) } : {} } : {};
             }
             if (!trustsShape(entry)) return {};
             const summary = summaryAt(entry!.type, args.length);
@@ -5237,6 +5251,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return {};
     }
     // A computed value; over enclosing parameters it is known only at their calls.
+    // A statement's patterns read by what their names are bound to in scope,
+    // as at runtime (Interpreter.readPatterns).
+    function readPatterns(s: unknown, scope: Scope): void {
+        withinScope(s, () => {
+            rewriteListConstructors(s, tag => listConstructor(tag, scope) === "cons");
+            knownTypeArguments(s, tag => { const t = resolve(scope.get(tag)?.type ?? dynamic); return t.k === "alias" && !isUnionBody(t.body); });
+            resolveHeads(s, name => { const entry = scope.get(name); return !entry ? "free" : isConstructor(entry) ? { data: constructorNames.get(name) ?? entry.ownTag ?? name } : "other"; });
+            rewriteTypedPatterns(s, tag => patternHead(tag, scope));
+        });
+    }
+    // Names bound to a constructor: its own tag (NewBox = Box).
+    const constructorNames = new Map<string, string>();
     // Calls of a widened constructor no rule takes (see infer's app).
     const ownCalls = new WeakSet<Expr>();
     function computed(e: Expr, scope: Scope): Known {
@@ -5677,7 +5703,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (env.has(e.name)) return lookup(env, e.name);
                 const entry = scope.get(e.name);
                 if (!entry) return undefined;
-                if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: e.name };
+                if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: constructorNames.get(e.name) ?? e.name };
                 if (entry.lazyTop) return forceLazyTop(entry.lazyTop, depth);
                 const type = /^[A-Z]/.test(e.name) && resolve(entry.type).k === "type" ? { type: entry.type } : {};
                 if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope }, ...type };
@@ -6098,7 +6124,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (/^[A-Z]/.test(head.name)) {
             let t = resolve(entry?.type ?? dynamic);
             for (let n = 0; n < args.length && t.k === "fn"; n++) t = resolve(t.output);
-            return t.k === "variant" ? { tag: head.name, ...args.length ? { payload: args.map(a => value(a) ?? {}) } : {} } : undefined;
+            return t.k === "variant" ? { tag: constructorNames.get(head.name) ?? head.name, ...args.length ? { payload: args.map(a => value(a) ?? {}) } : {} } : undefined;
         }
         // The runtime's numeric natives, when the name is the builtin itself.
         const native = NUMBER_NATIVES.find(([name]) => name === head.name);
@@ -6964,7 +6990,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return;
         }
         defineBinding(name, clauses, scope, location, scope.get(name));
-        const defined = /^[A-Z]/.test(name) && scope.get(name), named = defined && namedSubtype(name, defined.type);
+        // A name for a constructor is that constructor (NewBox = Box), as for
+        // an operator (constructorOperators).
+        const [only] = clauses, to = clauses.length === 1 && !only.params.length && only.body.t === "var" ? constructorNames.get(only.body.name) ?? scope.get(only.body.name)?.ownTag : undefined;
+        if (to) constructorNames.set(name, to); else constructorNames.delete(name);
+        const defined = scope.get(name), named = defined && namedSubtype(name, defined.type);
         if (defined && named) scope.set(name, { ...defined, type: named });
         // A refinement is known by its name in what it rejects.
         const refined = defined && resolve(defined.type);
@@ -7554,7 +7584,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 t = { ...fn(type, t, undefined, !variables(type).size), constructs: true } as Ty;
             }
             if (v.tag === d.name) t = { ...t, shared: true } as Ty;
-            scope.set(v.tag, { type: t, declaration: d });
+            scope.set(v.tag, { type: t, declaration: d, ownTag: v.tag });
         }
         // A constructor's logic is a clause of its fields giving a value
         // of its type (Percent (Float x) = x > 100 ? Percent 100.0 : _).
@@ -7591,10 +7621,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (t?.k === "variant" && body.t === "var") constructorOperators.set(statement.name, body.name);
             else constructorOperators.delete(statement.name);
         }
-        rewriteListConstructors(statement, tag => listConstructor(tag, scope) === "cons");
-        knownTypeArguments(statement, tag => { const t = resolve(scope.get(tag)?.type ?? dynamic); return t.k === "alias" && !isUnionBody(t.body); });
-        resolveHeads(statement, name => { const entry = scope.get(name); return !entry ? "free" : isConstructor(entry) ? "data" : "other"; });
-        rewriteTypedPatterns(statement, tag => patternHead(tag, scope));
+        readPatterns(statement, scope);
         rewriteInfixConstructors(statement, op => constructorOperators.get(op));
         checkingExpression = statement.t === "expr" || statement.t === "patDef" ? statement.value : statement.t === "def" ? statement.clauses[0].body : undefined;
         try {

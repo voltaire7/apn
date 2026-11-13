@@ -309,6 +309,7 @@ class Parser {
         this.seen = t;
         if (/^\s*(#.*)?$/.test(after)) throw new Error("Parser: a newline already separates items; remove the ',' at the end of the line");
         if (!/\s/.test(this.source[t.pos - 1] ?? " ") && (tight ? /^\S/ : /^ \S/).test(after)) return;
+        if (this.eitherCommas.has(this.toks.indexOf(t)) && !/\s/.test(this.source[t.pos - 1] ?? " ") && /^ \S/.test(after)) return;
         if (holds === "params") throw new Error("Parser: separate lambda parameters by ', ' (write x, y -> x + y)");
         const what = holds === "record" ? "record fields" : "list items";
         throw new Error(tight
@@ -371,7 +372,9 @@ class Parser {
         // [f x, g y] = [x, y]: a bracket that is the whole left side of =
         // (a statement's start, in a block too, or the fields v.[x,y] names) pairs its items
         // with the right's, so one rule spaces both: ', ' when an item on
-        // either side has a space. (f [x,y] = [...] is a parameter and a body.)
+        // either side has a space. A parameter's just before = or ->, beside a
+        // spaced body, may follow it (f [x, y] = [x + x, y + y], [x, y] ->
+        // [x + x, y + y]) or its own items ([op,x] = ["->", op]).
         const starts = (t?: Token) => !t || layout(t) || t.k === "sym" && [";", "{", "("].includes(t.v);
         const whole = (open: number) => {
             let at = open;
@@ -381,7 +384,11 @@ class Parser {
         };
         toks.forEach((t, i) => {
             const left = closed.get(i - 1), right = opened.get(i + 1);
-            if (t.k !== "sym" || t.v !== "=" || !left || !right || !whole(left.open)) return;
+            if (t.k !== "sym" || t.v !== "=" && t.v !== "->" || !left || !right) return;
+            if (t.v === "->" || !whole(left.open)) {
+                if (right.spaced) left.commas.forEach(c => this.eitherCommas.add(c));
+                return;
+            }
             const commas = [...left.commas, ...right.commas];
             commas.forEach(c => this.pairedCommas.add(c));
             if (left.spaced || right.spaced) commas.forEach(c => tight.delete(c));
@@ -390,6 +397,8 @@ class Parser {
     }
     // Commas whose spacing both sides of an = decide (see tightCommas).
     private pairedCommas = new Set<number>();
+    // A parameter's commas, which may follow a spaced body (see tightCommas).
+    private eitherCommas = new Set<number>();
 
 
     lineIndent(token: Token): number {

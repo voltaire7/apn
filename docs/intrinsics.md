@@ -81,7 +81,7 @@ Int8 = (n : Int) | -128 <= n && n <= 127
 UInt8 = (n : UInt) | n <= 255
 ```
 
-A capitalized name for a type names a subtype of it
+A name defined as a type names a subtype of it
 ([named types](type-and-resource-rules.md#distinct-types)), so an `Int8` keeps its
 name (`typeOf (1 : Int8)` is `Int8`, printed as its number) through arithmetic
 with itself or a plain `Int` (`(1 : Int8) + 2` is an `Int8`), and the range is

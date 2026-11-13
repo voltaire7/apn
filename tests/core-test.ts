@@ -126,6 +126,14 @@ for (const checked of [true, false]) {
         ["f x = _\nk = _\n[f 2, k, typeOf (f 2)]", "[f 2, k, f Int]"],
         ["sin x = _\nsin 5 ~ [(sin y) -> y, _ -> 0]", "5"],
         ["pos x = x + 1\nxs = [10,20,30]\nxs (pos 0) = 99\nshape (t1 1 t2) = [t1,t2]\n[xs, shape (Vect 1 Int)]", "[[10,99,30],[Vect,Int]]"],
+        // A definition names the type it gives, whatever its case.
+        ["meters = Int\npos = (n : Int) | n > 0\n[typeOf (3 : meters), typeOf (3 : pos), (3 : meters) + 1]", "[meters,pos,4]"],
+        // A name for a constructor is it; a block's patterns read its names.
+        ["Box x = _\nNewBox = Box\nfunc (NewBox x) = x\n[func (NewBox 123), NewBox 1 == Box 1, func (Box 5)]", "[123,True,5]"],
+        ["g = {\n    sin x = _\n    Pair a b = _\n    d (sin x) = x\n    f (p : Pair Int _) = 1\n    [d (sin 3), f (Pair 1 2)]\n}\ng", "[3,1]"],
+        ["func = [x, y] -> [x + x, y + y]\nh [x, y] = [x + x, y + y]\n[func [1,2], h [3,4]]", "[[2,4],[6,8]]"],
+        // The checker types set operations on records and numeric types exactly.
+        ["r = [x = 1] | [y = 2]\ns = [x = 1, y = 2] & [x = 1, y = 3]\nf (n : Number & Int) = n + 1\n[r.y + 1, s.x, f 2]", "[3,1,3]"],
         // A conversion instance takes a constructor's own type as written.
         [CTOR + "to (Box Int) (n : Int) = Box n\nf (b : Box Int) = b\n[(3 : Box Int), f 4]", "[Box 3, Box 4]"],
         [MAYBE + "[typeOf Nada, typeOf (Just Nada)]", "[Maybe x, Maybe (Maybe x)]"],
@@ -145,6 +153,7 @@ for (const checked of [true, false]) {
         [CTOR + "Box 5 + 1", checked ? "cannot combine Box Int and Int" : "cannot apply '+'"],
         ["Bad [x] = _\n1", "a constructor's field is a name, a typed name or a record of typed fields"],
         ["[1,2] | [1,3]", "[1,2] | [1,3] is no list: neither starts the other"],
+        ["r = [x = 1] & [y = 2]\nr.y", checked ? "missing field 'y'" : "record has no field 'y'"],
         // A type is given types; a value is ascribed.
         [OPTION + "f t = Option t\nf 3", checked ? "cannot use Int where Type (a) is required" : "Option is a type, not a function"],
         ["Big = (n : Int) | n > 2\n(1 : Int & Big)", "is not in Int & Big"],

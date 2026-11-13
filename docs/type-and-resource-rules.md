@@ -4,7 +4,10 @@ These features use ordinary definitions. There are no new keywords.
 
 ## Distinct types
 
-A capitalized name defined as a type (`X = T`) names a subtype of it. A scalar
+A name defined as a type (`X = T`, `x = T`, whatever its case; there are no
+aliases) names a subtype of it. A list or record of types is named where it is
+written as one (`Point = [x : Float, y : Float]`), not where computed
+(`t = typeOf v`), whose values are data first. A scalar
 type's (a numeric type's, `String`'s, `Bool`'s or `Char`'s) values keep the
 name: a `Count` is an `Int` wherever one is accepted, keeps its name when a
 result fits, and does not mix with another name. A list's, a record's or any

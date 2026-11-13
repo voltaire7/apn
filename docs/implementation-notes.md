@@ -491,7 +491,9 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
 
 ## Nominal types and resources
 
-- A capitalized name for a scalar type (`NAMED_BASES`, runtime and checker)
+- A name defined as a type, whatever its case (`namedValue`: on a capitalized
+  definition's value, a lowercase one's thunk or zero-argument closure as it is
+  forced, once), names it. One for a scalar type (`NAMED_BASES`, runtime and checker)
   creates a generative `VariantFamily` with base metadata. It is its base to
   operators (`conform` keeps the name), builtins and base patterns
   (`baseValue`), and the checker unifies it with its base only where the base
@@ -508,9 +510,14 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
   (`parseDefinition`): one whose body holds `_` as a value (`holdsPlaceholder`,
   not a type's `List _`) is a constructor declaration, any other a clause whose
   body is ascribed `T` (`typedClauses`).
+- A statement's patterns are read once, where it runs (`readPatterns`, at
+  runtime and in the checker): at the top level, and in a block that declares
+  names as each of its statements runs; `withinScope` keeps an outer pass out
+  of such blocks.
 - A lowercase name applied in a pattern parses as a head (`constr` with
   `head`); `resolveHeads` decides it where the statement runs, by binding, at
-  runtime (`headKind`) and in the checker: data drops the mark, a free name
+  runtime (`headKind`) and in the checker (`constructorNames` keeps a name's
+  constructor, NewBox = Box): data drops the mark, a free name
   becomes the typed run it was, anything else keeps it, and matching it is an
   error (`headError`) unless the definition assigns an item (`assignmentKey`).
 - A constructor whose rules give other types is `widened` in the checker: a
