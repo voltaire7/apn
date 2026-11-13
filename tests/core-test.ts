@@ -109,6 +109,7 @@ for (const checked of [true, false]) {
         // A type alone, its constructors declared into it; with none it is empty.
         ["Opt x : _\nSome a : Opt a = _\nNone : Opt a = _\n[typeOf (Some 1), typeOf None, Opt Int]", "[Opt Int, Opt x, Opt Int]"],
         ["Void : _\n[isType Void 3, Void]", "[False,Void]"],
+        ["Opt a : Opt a\nSome x : Opt x = _\nVoid : Void\n[typeOf (Some 1), isType Void 3]", "[Opt Int, False]"],
         // : _ is a constructor's own type; one shadows a built-in type.
         ["Type = _\n[Type, typeOf Type, isType Type Type, isType Type Int]", "[Type,Type,True,False]"],
         ["Type : _ = _\nT : T = _\n[typeOf Type, typeOf T, isType Type Int]", "[Type,T,False]"],

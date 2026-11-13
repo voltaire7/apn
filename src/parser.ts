@@ -1882,21 +1882,31 @@ class Parser {
         }
     }
     // Lookahead: Name params : _ alone, a type declared without constructors
-    // (Option a : _), which constructors are then declared into.
+    // (Option a : _), which constructors are then declared into. _ is its own
+    // type, so Option a : Option a is the same declaration.
     isTypeAlone(): boolean {
+        const word = (j: number) => { const t = this.toks[j]; return t?.k === "ident" || t?.k === "sym" ? (t as { v: string }).v : undefined; };
+        const head: string[] = [];
         let j = this.i;
-        if (this.toks[j]?.k !== "ident" || !/^[A-Z]/.test((this.toks[j] as { v: string }).v)) return false;
-        for (j++; this.toks[j]?.k === "ident" && /^[a-z]/.test((this.toks[j] as { v: string }).v); j++);
-        const colon = this.toks[j], it = this.toks[j + 1], end = this.toks[j + 2];
-        return colon?.k === "sym" && colon.v === ":" && (it?.k === "sym" || it?.k === "ident") && (it as { v: string }).v === "_" &&
-            (!end || ["newline", "dedent", "eof"].includes(end.k) || end.k === "sym" && end.v === ";");
+        if (this.toks[j]?.k !== "ident" || !/^[A-Z]/.test(word(j)!)) return false;
+        for (head.push(word(j++)!); this.toks[j]?.k === "ident" && /^[a-z]/.test(word(j)!); j++) head.push(word(j)!);
+        if (word(j) !== ":" || this.toks[j].k !== "sym") return false;
+        j++;
+        if (word(j) === "_") j++;
+        else {
+            for (const part of head) if (word(j++) !== part) return false;
+        }
+        const end = this.toks[j];
+        return !end || ["newline", "dedent", "eof"].includes(end.k) || end.k === "sym" && end.v === ";";
     }
     parseTypeAlone(): DataDef {
         const name = (this.next() as { v: string }).v, parameters: string[] = [];
         while (this.peek().k === "ident" && /^[a-z]/.test((this.peek() as { v: string }).v)) parameters.push((this.next() as { v: string }).v);
         if (new Set(parameters).size !== parameters.length) throw new Error("Parser: type parameters must be distinct lowercase names");
         this.expectSym(":");
-        this.next();
+        // _, or the type itself written out (isTypeAlone checked it).
+        const written = (this.peek() as { v: string }).v === "_" ? 1 : 1 + parameters.length;
+        for (let n = 0; n < written; n++) this.next();
         return { name, parameters, variants: [] };
     }
     // Name fields : T = _ (isConstructorDeclaration() returned true).

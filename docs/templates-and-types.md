@@ -538,7 +538,8 @@ constructor, so values made before keep the type as it was.
 
 `Name params : _` alone declares the type with no constructors yet, naming its
 parameters; constructors are then declared into it. With none it has no values
-(`Void : _`).
+(`Void : _`). As `_` is its own type, `Option a : Option a` is the same
+declaration (as `Box x : Box x = _` is `Box x = _`).
 
 ```apn
 Circle (r : Float) : Shape = _   # Shape = Circle Float | Square Float
