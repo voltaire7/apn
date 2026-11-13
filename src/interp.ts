@@ -1621,6 +1621,11 @@ export class Interpreter {
                         // A record or list of types makes its value ([] : [v : Int]).
                         if (ascribed && (ascribed.kind === "record" || this.isList(ascribed) && this.holdsType(ascribed) || this.asWritten.has(ascribed))) { r = this.conform(ascribed, argument); break; }
                         this.writtenApplication = !e.ascribed;
+                        if (e.types) {
+                            this.typeOperands++;
+                            try { r = this.apply(head, argument); } finally { this.typeOperands--; }
+                            break;
+                        }
                         const result = this.apply(head, argument, false, true, tailLoad);
                         if (result instanceof TailCall) next = result; else r = result;
                         break;
@@ -5647,7 +5652,7 @@ export class Interpreter {
     // a type test unfolds it (see belongsToType), and the union is known by
     // the name it is given (see remembered).
     private union(types: Value[]): Value {
-        if (this.ofValues(types)) return types.map(t => this.dataValue(t)).reduce((a, b) => this.joined(a, b));
+        if (!this.typeOperands && this.ofValues(types)) return types.map(t => this.dataValue(t)).reduce((a, b) => this.joined(a, b));
         const choices: Value[] = [];
         let unfolds = false;
         for (const type of types.flatMap(t => t.kind === "type" && t.choices && !t.refine ? t.choices : [t])) {
@@ -5665,23 +5670,18 @@ export class Interpreter {
     // a list or a string its (position, element) pairs, so <= is being a
     // prefix; a record or a HashMap its (key, value) pairs.
     private setOf(v: Value): "type" | "ordered" | "sequence" | "graph" | undefined {
-        // A list or record holding types is a type (List Int's [Int], [x : Int]).
-        if (this.isList(v)) {
-            // An item naming what is being defined (Tree = [] | Tree :: Tree)
-            // is of the type that definition makes, so not evaluated here.
-            const cell = this.cell(v);
-            if (!cell) return "sequence";
-            const head = cell.head, busy = (x: Value | undefined) => (x?.kind === "thunk" || x?.kind === "deferred") && !x.value && !!x.busy;
-            if (busy(head) || head.kind === "thunk" && !head.value && head.body.t === "var" && busy((head.env ?? this.env).get(head.body.name))) return "type";
-            return this.isTypeValue(this.reference(this.demand(head))) ? "type" : "sequence";
-        }
-        if (v.kind === "record") return v.v.length && this.isTypeValue(v) ? "type" : "graph";
+        // A list or record is a value; it is read as a type where one is
+        // expected (beside a type, or written where a type goes).
+        if (this.isList(v)) return "sequence";
+        if (v.kind === "record") return "graph";
         if (this.isTypeValue(v)) return "type";
         if (isNumeric(v) || v.kind === "bool" || v.kind === "char") return "ordered";
         if (v.kind === "string") return "sequence";
         if (v.kind === "hashmap") return "graph";
         return undefined;
     }
+    // Inside a | or & written where a type is expected (see typeOperators).
+    private typeOperands = 0;
     // Whether a union or an intersection is of values, not of types.
     private ofValues(values: Value[]): boolean {
         const kinds = values.map(v => this.setOf(this.dataValue(v)));
@@ -5723,7 +5723,11 @@ export class Interpreter {
     }
     // a <= b: a's set within b's.
     private subset(a: Value, b: Value): boolean {
-        if (this.setOf(a) === "type" && this.setOf(b) === "type") return this.within(a, b);
+        // Beside a type, a list or record is read as one ([Int] <= List Int).
+        if (this.setOf(a) === "type" || this.setOf(b) === "type") {
+            const x = this.asType(a), y = this.asType(b);
+            if (x && y) return this.within(x, y);
+        }
         const kind = this.setKinds(a, b, "<=");
         if (kind === "ordered") return this.compare(this.rank(a), this.rank(b)) <= 0;
         if (a.kind === "string" && b.kind === "string") return b.v.startsWith(a.v);
@@ -5737,7 +5741,7 @@ export class Interpreter {
     // a & b: the pairs both have (the longest common prefix, the fields equal
     // in both), the lesser of two ordered values, or both types' values.
     private intersection(values: Value[]): Value {
-        if (!this.ofValues(values)) {
+        if (this.typeOperands || !this.ofValues(values)) {
             const types = values.map(v => this.reference(v));
             const bad = types.find(t => !this.isTypeValue(t));
             if (bad) throw new APNError("runtime", `an intersection is of types or of values, and ${this.renderString(bad)} is not a type`);
@@ -6150,7 +6154,12 @@ export class Interpreter {
         if (expression.t === "list") return mkList(expression.v.map(value => this.schemaPatternType(value, capture)));
         if (expression.t === "block" && expression.stmts.length === 1) return this.schemaPatternType(expression.stmts[0], capture);
         // A type applied to a pattern's types (IO _, IO []).
-        if (expression.t === "app") return this.reference(this.apply(this.schemaPatternType(expression.f, capture), this.schemaPatternType(expression.a, capture)));
+        if (expression.t === "app") {
+            const head = this.schemaPatternType(expression.f, capture), argument = this.schemaPatternType(expression.a, capture);
+            if (!expression.types) return this.reference(this.apply(head, argument));
+            this.typeOperands++;
+            try { return this.reference(this.apply(head, argument)); } finally { this.typeOperands--; }
+        }
         if (capture && expression.t === "var" && /^[a-z]/.test(expression.name) && !this.env.get(expression.name)) {
             const type: Value = { kind: "type", name: "$any" };
             this.schemaTypeCaptures.set(type, expression.name);

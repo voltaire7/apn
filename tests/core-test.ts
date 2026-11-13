@@ -134,6 +134,9 @@ for (const checked of [true, false]) {
         ["func = [x, y] -> [x + x, y + y]\nh [x, y] = [x + x, y + y]\n[func [1,2], h [3,4]]", "[[2,4],[6,8]]"],
         // The checker types set operations on records and numeric types exactly.
         ["r = [x = 1] | [y = 2]\ns = [x = 1, y = 2] & [x = 1, y = 3]\nf (n : Number & Int) = n + 1\n[r.y + 1, s.x, f 2]", "[3,1,3]"],
+        // A list or record is a value; it is read as a type where one is expected.
+        ["[[1] | [1,2], [Int] <= [Int,Int], [Int] | [Int,Int], [Int] <= List Int, [Int,Int] == typeOf [1,2]]", "[[1,2],True,[Int,Int],True,True]"],
+        ["Two = [Int] | [Int,Int]\nf (x : [Int] | [Int,Int]) = 1\n[isType Two [1,2], isType Two [1,2,3], f [1], f [1,2]]", "[True,False,1,1]"],
         // A conversion instance takes a constructor's own type as written.
         [CTOR + "to (Box Int) (n : Int) = Box n\nf (b : Box Int) = b\n[(3 : Box Int), f 4]", "[Box 3, Box 4]"],
         [MAYBE + "[typeOf Nada, typeOf (Just Nada)]", "[Maybe x, Maybe (Maybe x)]"],

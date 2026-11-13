@@ -549,6 +549,11 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
   checker reads as `intrinsics.union [A, B]` while `|` is the prelude's; the
   parser keeps those parentheses (`parseDefBody`). Either way the union is a
   `type` value with `choices` at runtime and a `union` type in the checker.
+- A `|` or `&` written where a type is expected is marked by the parser
+  (`typeOperators`, `types` on the call and its operand list; `unionClause`
+  too): at runtime it counts `typeOperands`, so its lists and records are read
+  as types; the checker reads the operand list's mark. Elsewhere lists and
+  records are values (`setOf` never calls one a type).
 - Values read as sets (`Interpreter.setOf`) share one view for `<=`, `&` and
   `|`: an ordered value by its rank, a sequence or a graph by its pairs
   (`pairs`, `at`; lists walked once by `prefixOf` and `commonPrefix`). `&` and

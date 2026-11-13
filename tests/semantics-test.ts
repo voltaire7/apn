@@ -654,8 +654,10 @@ print g`, ['[1,"a","no"]', '["either","either","other","other"]', '["either","ot
 example("| is the union of types, written anywhere", `
 print (Int | String)
 print [isType (Int | String) "a", (Int | String) == (String | Int)]
-print (typeOf [1,2,3] <= ([Int] | [Int,Int] | [Int,Int,Int]))
-print (([] | Int :: List Int) == List Int)
+Short = [Int] | [Int,Int] | [Int,Int,Int]
+E = [] | Int :: List Int
+print (typeOf [1,2,3] <= Short)
+print (E == List Int)
 f = x | x > 0 -> x
 print (f 5)`, ["Int | String", "[True,True]", "True", "True", "5"]);
 failure("operators of one level and two associativities need parentheses", "print ([Int] | [Int,Int] == typeOf [1])", "share a level but not an associativity");

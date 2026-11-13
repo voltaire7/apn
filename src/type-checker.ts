@@ -2894,13 +2894,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // or their common prefix, of their type; records the fields
                 // of either (|) or of both (&), each of its types.
                 const values = list.k === "list" ? list.items?.map(resolve) : undefined;
-                if (values?.length && types?.every(t => !t) && values.every(v => v.k === "record")) {
+                // Lists and records are values, unless written where a type is
+                // expected (typeOperators), as at runtime.
+                const valued = types?.every(t => !t) || !(e as { types?: true }).types && !!values?.length && values.every(v => v.k === "list" || v.k === "record");
+                if (values?.length && valued && values.every(v => v.k === "record")) {
                     const records = values as Extract<Ty, { k: "record" }>[];
                     const keys = f.name === "union" ? [...new Set(records.flatMap(r => [...r.fields.keys()]))]
                         : [...records[0].fields.keys()].filter(key => records.every(r => r.fields.has(key)));
                     return { k: "record", fields: new Map(keys.map(key => [key, union(records.flatMap(r => r.fields.has(key) ? [r.fields.get(key)!] : []))])) };
                 }
-                if (values?.length && types?.every(t => !t) && values.every(v => v.k !== "record" && v.k !== "dynamic" && v.k !== "var")) {
+                if (values?.length && valued && values.every(v => v.k !== "record" && v.k !== "dynamic" && v.k !== "var")) {
                     const all = resolve(union(values));
                     return all.k === "list" ? { k: "list", element: all.element } as Ty : all;
                 }

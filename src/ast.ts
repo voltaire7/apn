@@ -27,11 +27,12 @@ export type Expr =
     | { t: "binop"; op: BinOp; l: Expr; r: Expr; reassociate?: true }
     | { t: "unop"; op: UnOp; e: Expr }
     // ascribed: e : T as the parser expands it, the one application of a type to a value.
-    | { t: "app"; f: Expr; a: Expr; ascribed?: true }
+    // types: a | or & written where a type is expected (see typeOperators).
+    | { t: "app"; f: Expr; a: Expr; ascribed?: true; types?: true }
     | { t: "patternLambda"; params: Pattern[]; body: Expr; guard?: Expr }
     | { t: "lambda"; params: string[]; body: Expr }
     | { t: "ternary"; cond: Expr; then: Expr; els: Expr }
-    | { t: "list"; v: Expr[] }
+    | { t: "list"; v: Expr[]; types?: true }
     // items: a record written as a list literal keeps its items as code;
     // declared: its fields written with their type (x : T, x : T = v).
     | { t: "record"; v: Array<[string, Expr]>; items?: Expr[]; declared?: string[] }
@@ -233,7 +234,28 @@ export function unionClause(def: DataDef): DefClause {
         : v.tag === "::" ? { t: "binop", op: "::", l: v.fields![0], r: v.fields![1] }
         : (v.fields ?? []).reduce<Expr>((f, a) => ({ t: "app", f, a }), { t: "var", name: v.tag }));
     const union: Expr = { t: "recordAccess", rec: { t: "var", name: "intrinsics" }, field: "union" };
-    return { params: (def.parameters ?? []).map(name => ({ p: "var", name })), body: { t: "app", f: union, a: { t: "list", v: alternatives } } };
+    return { params: (def.parameters ?? []).map(name => ({ p: "var", name })), body: { t: "app", f: union, a: { t: "list", v: alternatives, types: true }, types: true } };
+}
+// A | B and A & B where a type is expected (after :, in a typed pattern):
+// the union and intersection of types, lists and records read as types
+// ([Int] | [Int,Int]); elsewhere they are values' ([1] | [1,2] is [1,2]).
+// The type as written: its marked operators back as A | B and A & B.
+export function writtenOperators(e: Expr): Expr {
+    if (e.t === "app" && e.types && e.f.t === "recordAccess" && e.a.t === "list" && e.a.v.length === 2) {
+        return { t: "binop", op: e.f.field === "union" ? "|" : "&", l: writtenOperators(e.a.v[0]), r: writtenOperators(e.a.v[1]) };
+    }
+    if (e.t === "block" && e.stmts.length === 1) return { ...e, stmts: [writtenOperators(e.stmts[0])] };
+    if (e.t === "app") return { ...e, f: writtenOperators(e.f), a: writtenOperators(e.a) };
+    return e;
+}
+export function typeOperators(e: Expr): Expr {
+    if (e.t === "binop" && (e.op === "|" || e.op === "&")) {
+        const field = e.op === "|" ? "union" : "intersection";
+        return { t: "app", f: { t: "recordAccess", rec: { t: "var", name: "intrinsics" }, field }, a: { t: "list", v: [typeOperators(e.l), typeOperators(e.r)], types: true }, types: true };
+    }
+    if (e.t === "block" && e.stmts.length === 1) return { ...e, stmts: [typeOperators(e.stmts[0])] };
+    if (e.t === "app") return { ...e, f: typeOperators(e.f), a: typeOperators(e.a) };
+    return e;
 }
 
 // How a type function of lists makes its length from its index n, read off

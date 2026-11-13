@@ -1,4 +1,4 @@
-import { countingOf, type DataDef, extendedDeclaration, fillPlaceholders, holdsPlaceholder, patternNames, sourceLocations } from "./ast.ts";
+import { countingOf, typeOperators, writtenOperators, type DataDef, extendedDeclaration, fillPlaceholders, holdsPlaceholder, patternNames, sourceLocations } from "./ast.ts";
 import { fieldSource, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -2052,7 +2052,7 @@ class Parser {
         try { type = sub.parseExpr(); } catch (error) { this.seen = sub.seen; throw error; }
         if (sub.peek().k !== "eof") { this.seen = sub.peek(); throw new Error("Parser: unexpected token in a type"); }
         this.i = end;
-        return type;
+        return typeOperators(type);
     }
     // e : T, after its ':'. A ternary is ascribed in parentheses.
     ascription(e: Expr, colon: Token, until: "statement" | "group"): Expr {
@@ -2948,7 +2948,7 @@ export function patternSource(p: Pattern): string {
         case "schema": {
             // A type spelled with an operator (Int | String, a -> a) is grouped
             // before its value's name, and stands alone for no name.
-            let written = p.type;
+            let written = writtenOperators(p.type);
             while (written.t === "block" && written.style === "(" && written.stmts.length === 1) written = written.stmts[0];
             const type = exprToSource(written), spelled = ["binop", "lambda", "patternLambda"].includes(written.t);
             if (spelled && p.value.p === "wildcard") return `(${type})`;

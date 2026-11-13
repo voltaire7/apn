@@ -1858,7 +1858,13 @@ round. Inclusion is a partial order: two lists neither of which starts the
 other are unordered. Sorting uses dictionary order instead, the standard
 library's `compare`. Values of different kinds do not compare (`3 <= Int` is an
 error: `3` is a member of `Int`, `3 : Int`, not a part of it), and a value is
-never a type's subset. A list or record holding types is a type.
+never a type's subset.
+
+A list or record is a value, whatever it holds: `[Int] <= [Int,Int]` is `True`
+(a prefix) and `[Int] | [Int,Int]` is `[Int,Int]`. It is read as a type where a
+type is expected: beside a type (`[Int] <= List Int`, `[Int,Int] == typeOf
+[1,2]`), after `:`, in a typed pattern and in a type declaration, where `|`
+and `&` are of types (`(x : [Int] | [Int,Int])`, `Two = [Int] | [Int,Int]`).
 
 For types, `X = (A | B)` names a union, while a bare `X = A | B` declares
 constructors. `a <= b` is
