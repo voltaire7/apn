@@ -24,16 +24,17 @@ for (const [source, expected] of [
     ['typeOf []', '[]'],
     ['typeOf [1,"hello"]', '[Int,String]'],
     ['typeOf [[1,2],[3]]', '[[Int,Int],[Int]]'],
-    // A list built with '::' is described as its literal would be, without forcing its tail.
+    // A list's type is the list of its items' types, as its literal's would be,
+    // made as it is read: an item or tail is read only when its type is.
     ['typeOf ([1,2]::[3,4])', '[[Int,Int],Int,Int]'],
     ['typeOf (1::["a"])', '[Int,String]'],
     ['typeOf ("a"::1::[2])', '[String,Int,Int]'],
     ['typeOf ([1]::[[3,4]])', '[[Int],[Int,Int]]'],
     ['typeOf (1::[2,3])', '[Int,Int,Int]'],
-    // An endless list is endlessly many; one of unknown length a List.
+    // An endless list is endlessly many.
     ['xs = 1::xs; typeOf xs', '[Int..]'],
-    ['typeOf (1::missing)', 'List Int'],
-    ['typeOf [1,missing]', '[Int,a]'],
+    ['head (typeOf (1::missing))', 'Int'],
+    ['[head (typeOf [1,missing]), length (typeOf [1,missing])]', '[Int,2]'],
     ['typeOf [1..]', '[Int..]'],
     ['typeOf [.1,.2..]', '[Float..]'],
     ['f (x : Int) = x; typeOf f', 'Int -> Int'],
@@ -44,14 +45,13 @@ for (const [source, expected] of [
     ['f 0 = 1; f 1 = "no"; typeOf f', 'Int -> Int | String'],
     ['Option a = Some a | None; f (Some x) = x; f None = 0; typeOf f', 'Option Int -> Int'],
     ['f x = f x; typeOf f', 'a -> b'],
-    ['typeOf (typeOf [1])', 'Type'],
+    ['[typeOf (typeOf 1), typeOf (typeOf [1])]', '[Type,[Type]]'],
     // A type taking parameters is none of values until given them.
-    ['[typeOf [1] == List, isList [1], isType (typeOf [1]) ["hi"]]', '[False,True,True]'],
+    ['[typeOf [1] == List, isList [1], isType (typeOf [1]) ["hi"]]', '[False,True,False]'],
     ['f x = x; [typeOf f == Function, isType (typeOf f) (x -> 1)]', '[True,True]'],
     ['count = Mutable 0; action x = set count 1; t <- return (typeOf action); count', '0'],
     ['count = Mutable 0; t <- return (typeOf [set count 1]); count', '0'],
     ['f x = fail "do not call"; typeOf f', 'a -> b'],
-    ['xs = 1::xs; typeOf xs', '[Int..]'],
 ] as const) Deno.test(`type description: ${source}`, () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(source)));

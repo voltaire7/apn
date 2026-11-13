@@ -1772,9 +1772,10 @@ displays `[Int,Int,Int]`, `typeOf [1,"a"]` is `[Int,String]`, and `typeOf []`
 is `[]`, the empty list's type. A record's is the record of its fields' types,
 each found when it is shown: `typeOf [x = 1, y = Float]` is
 `[x : Int, y : Type]`, and `typeOf [p = [q = 1.5]]` is `[p : [q : Float]]`. A
-record a record type made has that type (`typeOf ([] : Quote)` is `Quote`). A list built with `::` onto a written list is
-exact too (`typeOf ([1,2]::[3,4])` is `[[Int,Int],Int,Int]`, as for
-`[[1,2],3,4]`), reading its unevaluated tail without running it. An endless
+record a record type made has that type (`typeOf ([] : Quote)` is `Quote`). A list's type
+is made as it is read, an item or tail read only when its type is
+(`head (typeOf [1,missing])` is `Int`), so a list built with `::` is exact too
+(`typeOf ([1,2]::[3,4])` is `[[Int,Int],Int,Int]`, as for `[[1,2],3,4]`). An endless
 list is endlessly many of its elements' type: `typeOf [1..]` is `[Int..]`, and
 so is `typeOf ones` for `ones = 1 :: ones`. That is a range of a type, which
 repeats it as a range of numbers counts (a range is `enumFrom` and its
@@ -1801,11 +1802,10 @@ the even-length lists of `a` (`isType (Pairs Int) [1,2,3]` is `False`),
 `Ints = [] | Int :: Ints` is `List Int`'s members, and `Tree = [] | Tree :: Tree`
 lists of trees; `(xs : Pairs Int)` matches a value of it, and the static check
 leaves such a union to the run. A [family](gradual-and-dependent-types.md#indexed-families)
-is the same alternatives, each saying its index. `typeOf` gives the most exact
-type it knows without evaluating: lists whose length is not known yet (a
-finite range, the result of `filter` or `map`) display `List` of the type every
-element has, `List a` when it is unknown, so `typeOf [1,2,3]` is
-`[Int,Int,Int]` and `typeOf (filter (> 0) [1,2,3])` is `List Int`. `(List a) xs` binds `a` to the type
+is the same alternatives, each saying its index. A list's type is a list,
+made as it is read, so any list's is exact: `typeOf (filter (> 0) [1,2,3])` is
+`[Int,Int,Int]`, `head (typeOf [1,"a"])` is `Int`, and `length (typeOf xs)` is
+`length xs`. `(List a) xs` binds `a` to the type
 every item has: `Int | String` for `[1,"a"]`. Type errors use the same
 notation.
 

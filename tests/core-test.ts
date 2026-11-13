@@ -188,7 +188,7 @@ for (const checked of [true, false]) {
         [ID + "f (UserId u) = u\nf 5", checked ? "cannot use Int where UserId is required" : "no clause"],
         [ID + "Order (u : UserId Int) (n : Int) = _\nOrder 5 3", checked ? "cannot use Int where UserId is required" : "UserId expects a UserId variant"],
         [PERCENT + "Percent 50 + 1", checked ? "cannot combine Percent and Int" : "cannot apply '+'"],
-        ['std <- import "std"; use std.function\nSpan (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _\n([s = Span 2 1] : [s : Span Int Int])', "empty span"],
+        ['Span (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _\n([s = Span 2 1] : [s : Span Int Int])', "empty span"],
         ["Low (_ : Float) = 1 > 0 ? Low 1 : _\n1", "a constructor with logic names each field"],
         // A lowercase definition's _ stays unfinished.
         // _ as an argument means nothing; as a body it makes data.

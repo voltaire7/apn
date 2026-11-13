@@ -1,9 +1,9 @@
 // The standard natives each standard module exports, by module: a program
-// reaches them only through that import (import "std/function" for fail).
+// reaches them only through that import (import "std/function" for seq).
 export const NATIVE_EXPORTS: Record<string, string[]> = {
     ffi: ["withLibrary", "allocate", "peek", "poke", "offset", "nullPointer"],
     io: ["withFile", "readFile", "readStdin", "getArgs"],
-    function: ["bracket", "fail", "seq", "do"],
+    function: ["bracket", "seq", "do"],
     text: ["upper", "lower"],
     http: ["fetch"],
     json: ["prettyJson"],

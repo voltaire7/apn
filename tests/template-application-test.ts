@@ -21,7 +21,7 @@ for (const [source, expected] of [
     ['take 1 [c -> c, missing]."hi"', "['h']"],
     ['Characters = [Char,Char]\nCharacters."hi"', "['h','i']"],
     ['cast [Char,Char] "hi"', "['h','i']"],
-    ['typeOf [Char,Char]."hi"', 'List a'],
+    ['typeOf [Char,Char]."hi"', '[Char,Char]'],
     ['[x = 0] [x = 123]', '[x = 123]'], ['[x = (0 : Int)] [x = floor .2]', '[x = 0]'], ['[x = (0 : Int32)] [x = 123]', '[x = 123]'],
     ['[x = "old"] [x = "new"]', '[x = "new"]'], ['[x = False] [x = True]', '[x = True]'], ["[x = 'a'] [x = 'b']", "[x = 'b']"],
     ['(* 2) * [1,2,3,4]', '[2,4,6,8]'],
@@ -163,6 +163,9 @@ for (const checked of [true, false]) for (const [source, expected] of [
     ['Point = [x : Float, y : Float]\nps = [x = 1, y = 2] :: ps\ntake 1 (to [Point..] ps)', '[[x = 1.0, y = 2.0]]'],
     ['ones = 1 :: ones\n[typeOf ones, take 2 (to [Float..] ones)]', '[[Int..],[1.0,1.0]]'],
     ['[take 3 [1..], [1,3..9]]', '[[1,2,3],[1,3,5,7,9]]'],
+    // A list's type is the list of its items' types, made as it is read.
+    ['t = typeOf [1,"a"]\n[t, head t, length t, typeOf (filter (> 0) [1,2])]', '[[Int,String],Int,2,[Int,Int]]'],
+    ['[typeOf [], typeOf [[1],[2,3]], typeOf [1,2] <= List Int]', '[[],[[Int],[Int,Int]],True]'],
 ] as const) Deno.test(`list type ranges (checked=${checked}): ${source}`, () => {
     const i = new Interpreter();
     if (checked) i.enableChecking();

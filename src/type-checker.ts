@@ -3841,6 +3841,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     lambdaType(typeArgument, scope, new Map());
                     return application(copy(isType.type), { type: variable() }, e);
                 }
+                // typeOf a list is the list of its items' types, as at runtime.
+                if (e.t === "app" && e.f.t === "var" && e.f.name === "typeOf" && scope.get("typeOf")?.builtin) {
+                    const given = resolve(infer(a, scope));
+                    const types = (t: Ty): Ty => { const r = resolve(t); return r.k === "list" ? { ...r, element: types(r.element), items: r.items?.map(types) } : { k: "type", value: r }; };
+                    return given.k === "list" ? types(given) : application(copy(scope.get("typeOf")!.type), { type: given }, e);
+                }
                 // while [condition] action and for [start, condition, step] action:
                 // code as written; the action reads the names it binds (as code joined
                 // after it does), and the condition is a Bool.
@@ -7351,8 +7357,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             cast: fn({ k: "type", value: a }, fn(explicitDynamic, a)),
         })
     ) scope.set(name, { type });
-    // fail, like the other standard natives, reaches programs through import "std/function".
-    if (options.library) scope.set("fail", { type: fn(atom("String"), variable()) });
+    // fail marks code still to write: the prelude's, as at runtime.
+    scope.set("fail", { type: fn(atom("String"), variable()) });
     const standardOnly = new Set(["seq", "chars", "fromChars", "upper", "lower", "readFile", "readStdin", "getArgs", "fetch", "toJson", "prettyJson", "fromJson", "entropy", "currentTime", "zoneOffset", "p5Object", "p5SketchType"]);
     const native = (name: string, inputs: Ty[], output: Ty) => {
         if (name in RETIRED_NATIVES) return;

@@ -44,10 +44,10 @@ for (const [source, expected] of [
     ['z [] = []; z (x :: r) = [x]; w xs = z xs; f [a] = a; f (w [1..])', '1'],
     // An operation reads its operands once its calls are decided: hd x with a
     // fail clause is the element there, compared as one.
-    ['std <- import "std"\nuse std.function\nhd (x :: _) = x; hd [] = fail "e"; h x = hd x > 1; h [1]', 'False'],
+    ['hd (x :: _) = x; hd [] = fail "e"; h x = hd x > 1; h [1]', 'False'],
     // A call whose argument holds the call itself stays undecided: left's
     // elements are what hd gives, in a branch of what left is.
-    ['std <- import "std"\nuse std.function\nhd (x :: _) = x; hd [] = fail "empty"; nl [] = True; nl (_ :: _) = False\n' +
+    ['hd (x :: _) = x; hd [] = fail "empty"; nl [] = True; nl (_ :: _) = False\n' +
         'm left right = nl left ? right : (nl right ? left : [hd left])\nm [1] [2]', '[1]'],
     // A call no clause ranking decides, its recursive clause's result free,
     // has the definition's type as a whole: fl's is (a -> b -> a) -> a -> List b -> a.
@@ -362,7 +362,7 @@ for (const source of [
     'g [a,b] = tail [0, b, a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1,2]',
     `${TK2}tk n xs = n < 0 ? [] : tk2 n xs\nf (tk 1 [1,2,3])`,
     `${TK2}tk n xs = n > 0 ? tk2 n xs : []\nf (tk 0 [1,2,3])`,
-    'std <- import "std"; use std.function; hd (x :: _) = x; hd [] = fail "e"; h x = hd x > 1; h ["a"]',
+    'hd (x :: _) = x; hd [] = fail "e"; h x = hd x > 1; h ["a"]',
     // A recursive call has the whole function's type: f rest is a number.
     'f [] = 0; f (x :: rest) = x + f rest; f ["a"]',
     'f [] = 0; f (x :: rest) = f rest + x; f ["a"]',
@@ -1036,7 +1036,7 @@ for (const [source, expected] of [
     ['counter = Mutable 0\nbump x = { set counter (counter + 1); return (counter + 0) }\na <- return (counter + 0)\nb <- bump 0\ng (f (r (a + b == 1)))', '0'],
     ['counter = Mutable 0\nbump x = { set counter (counter + 1); return (counter + 0) }\nb <- bump 0\ng (f (r (b + (counter + 0) == 2)))', '0'],
     ['counter = Mutable 0\nbump x = { set counter (counter + 1); return (counter + 0) }\nb <- bump 0\nprint [b, counter + 0]\ng (f (r (counter + 0 == 1)))', '0'],
-    ['counter = Mutable 0\nbump x = { set counter (counter + 1); return (counter + 0) }\nseq (bump 0) []\ng (f (r (counter + 0 == 0)))', '0'],
+    ['use std.function\ncounter = Mutable 0\nbump x = { set counter (counter + 1); return (counter + 0) }\nseq (bump 0) []\ng (f (r (counter + 0 == 0)))', '0'],
     // Values a statement leaves unforced are harmless unless kept; a kept one
     // is forced (once) where a later statement forces it. An uncertain
     // statement only affects the cells and values it can reach.

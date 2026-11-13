@@ -36,15 +36,15 @@ for (const source of ['f x = x + 1; f "bad"', 'f x y = x < y; f 1 "bad"']) {
         if (!checkSource(source, '<test>', { strict: true }).issues.length) throw new Error('invalid call escaped checking');
     });
 }
-for (const [source, module] of [['fail "x"', "function"], ['upper "x"', "text"]]) {
+for (const [source, module] of [['seq 1 2', "function"], ['upper "x"', "text"]]) {
     Deno.test(`standard natives need their module: ${source}`, () => {
         const [issue] = checkSource(source, '<test>', { strict: true, runtimeNames: new Set(["print"]) }).issues;
         if (issue?.message !== `unbound variable '${source.split(" ")[0]}'` || issue.hint !== `add \`std <- import "std"; use std.${module}\` to use \`${source.split(" ")[0]}\``) throw new Error(JSON.stringify(issue));
     });
 }
-Deno.test('fail is available after import "std/function"', () => {
+Deno.test("fail is the prelude's", () => {
     const i = new Interpreter();
     i.enableChecking();
-    const result = i.renderString(i.run(parse('std <- import "std"; use std.function; f x = x > 0 ? x : fail "negative"; f 1')));
+    const result = i.renderString(i.run(parse('f x = x > 0 ? x : fail "negative"; f 1')));
     if (result !== "1") throw new Error(result);
 });

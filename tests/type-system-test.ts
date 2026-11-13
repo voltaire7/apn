@@ -37,7 +37,7 @@ for (const [source, expected] of [
     ["myTypeOf (x : t) = t\nmyTypeOf True", "Bool"],
     ["myTypeOf (x : t) = t\nmyTypeOf (5 : Int32)", "Int32"],
     ["identity (x : t) = x\nidentity (5 : Int32)", "5"],
-    ["myTypeOf (x : t) = t\nmyTypeOf [missing]", "[a]"],
+    ["myTypeOf (x : t) = t\nhead (myTypeOf [1,missing])", "Int"],
     ["sameType (x : t) (y : t) = True\nsameType x y = False\n[sameType 1 2, sameType 1 True]", "[True,False]"],
     ["True ~ [(x : t) -> t]", "Bool"],
     ["(123 : Int)", "123"], ["x = 123 : Int32; [x, typeOf x]", "[123,Int32]"],

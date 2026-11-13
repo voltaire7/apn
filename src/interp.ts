@@ -251,6 +251,38 @@ export class Interpreter {
         return bound.kind === "type" && bound.name === name && !bound.family;
     }
     private namedTypes = new WeakMap<Value, Value>();
+    // typeOf a list: the list of its items' types, made as it is read ([1,"a"]
+    // gives [Int,String]); an endless one repeats its type ([1..] gives
+    // [Int..], as does ones = 1 :: ones, its cells met again).
+    private itemTypes(list: Value, made = new Map<Value, Value>()): Value {
+        let first: Value | undefined, last: Extract<Value, { kind: "cons" }> | undefined;
+        const link = (next: Value): Value => { if (last) last.tail = next; else first = next; return first!; };
+        // Along the cells already made, at once (so a list that is its own tail
+        // gives one); a tail still to compute is typed when it is read.
+        for (let rest = list; ;) {
+            checkInterrupt();
+            const ready = (x: Value | undefined): boolean => !!x && (!(x.kind === "thunk" || x.kind === "deferred") || x.value !== undefined
+                || x.kind === "thunk" && x.body.t === "var" && ready((x.env ?? this.env).get(x.body.name))
+                || x.kind === "deferred" && ready(x.describes));
+            const pending = !ready(rest);
+            if (pending && last) { const tail = rest; return link(this.defer(() => this.itemTypes(tail, made))); }
+            const spine = this.force(rest);
+            const known = made.get(spine);
+            if (known) return link(known);
+            if ((spine.kind === "range" || spine.kind === "floatRange" || spine.kind === "rationalRange") && spine.hi === null) {
+                const repeated: Extract<Value, { kind: "cons" }> = { kind: "cons", head: this.callNative("typeOf", [this.cell(spine)!.head]), tail: mkList([]) };
+                repeated.tail = repeated;
+                return link(repeated);
+            }
+            const cell = this.cell(spine);
+            if (!cell) return link(mkList([]));
+            const head = cell.head, out: Extract<Value, { kind: "cons" }> = { kind: "cons", head: this.defer(() => this.callNative("typeOf", [head])), tail: mkList([]) };
+            made.set(spine, out);
+            link(out);
+            last = out;
+            rest = cell.tail;
+        }
+    }
     // A definition names the type it gives, whatever its name's case: a scalar
     // type names a subtype (Money = Float: a Float wherever one is accepted,
     // keeping its name, and (x : Money) takes a Money or a Float it converts);
@@ -412,7 +444,8 @@ export class Interpreter {
         this.env.setLocal("fail", { kind: "native", name: "fail", arity: 1, applied: [] });
         this.run(parseDocument(preludeSource));
         // Bind each operator to its value itself, so evaluation finds the intrinsic.
-        for (const [name, value] of this.env.bindings()) if (name !== "fail") this.preludeBindings.set(name, this.reference(value));
+        // (fail, which marks code still to write, is the prelude's too.)
+        for (const [name, value] of this.env.bindings()) this.preludeBindings.set(name, this.reference(value));
         this.run(parse(typeSource));
         this.run(parse(doSource));
         for (const name of ["cast", "do"]) this.preludeBindings.set(name, this.env.get(name)!);
@@ -4866,7 +4899,8 @@ export class Interpreter {
             if (value.kind === "variant" && value.family) return { kind: "type", inspect: true, name: value.family.name, family: value.family, arguments: this.variantArguments(value) };
             if (isNumeric(value)) return { kind: "type", inspect: true, name: numericType(value) };
             if (value.kind === "list" && value.schema) return this.inspectType(value.schema);
-            if (this.isList(value)) return { kind: "type", inspect: true, name: "List", description: describeType(value) };
+            // A list's type is its items' types, as a record's is its fields'.
+            if (this.isList(value)) return this.itemTypes(value);
             // A record's type is its fields' types ([x = 1] is a [x : Int]),
             // each found when shown; a shared object's fields are live.
             if (value.kind === "record" && !value.shared) return { kind: "record", v: value.v.map(([key, field]): [string, Value] => [key, this.defer(() => this.callNative("typeOf", [field]))]) };
