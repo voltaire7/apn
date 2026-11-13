@@ -17,7 +17,7 @@ import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWit
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, extendedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, type PatternHead, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, type PatternHead, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, isUse } from "./ast.ts";
@@ -411,18 +411,15 @@ export class Interpreter {
         if (def.extends) {
             const bound = this.env.get(def.name), type = bound && this.reference(bound);
             const into = type?.kind === "type" && type.family && this.declarations.get(type.family);
-            if (into) def = { ...extendedDeclaration(into, def), claims: true };
+            if (into) def = extendedDeclaration(into, def);
         }
         const written = def, kind = def.extends ? "declaration" : unionKind(def, name => this.alternative(name, written.name));
         if (kind === "union") return this.evalDef(def.name, [unionClause(def)]);
-        // Constructors declared with _ where the parser could not see
-        // them (an earlier input, a module, a block) are claimed here.
-        if (kind === "claim") def = claimedDeclaration(def, tag => this.declarations.get(this.constructorFamily(tag)!)!.variants[0]);
-        else if (kind !== "declaration") throw new APNError("runtime", kind);
+        if (kind !== "declaration") throw new APNError("runtime", kind);
         // A type is declared for its whole scope, as a new name is.
         for (const name of [def.name, ...def.variants.map(v => v.tag)]) {
             const previous = this.scopeBinding(name);
-            if (previous && ((previous.kind === "native" && previous.tag) || previous.kind === "variant") && previous.family?.name !== def.name && !def.claims) {
+            if (previous && ((previous.kind === "native" && previous.tag) || previous.kind === "variant") && previous.family?.name !== def.name) {
                 throw new APNError("runtime", `cannot redeclare value constructor ${name}; it belongs to ${previous.family?.name}`);
             }
         }
@@ -5591,19 +5588,15 @@ export class Interpreter {
         if (!value) return "new";
         if (value.kind === "native" && value.tag || value.kind === "variant") {
             if (value.family?.name === declared) return "new";
-            // Declared alone with _ (Just x = _): no union owns it yet.
+            // Declared alone (Circle (r : Float) = _): its own type's.
             const own = value.family && this.declarations.get(value.family);
-            if (own && own.variants.length === 1 && own.name === name && !own.claims) return "unclaimed";
+            if (own && own.variants.length === 1 && own.name === name && !own.extends) return "declared";
             return this.sharedType(value) ? "type" : "constructor";
         }
         return this.isTypeValue(value) ? "type" : "new";
     }
-    // Each family's declaration, which a union claiming its constructor reads.
+    // Each family's declaration, which a constructor declared into it extends.
     private declarations = new WeakMap<VariantFamily, DataDef>();
-    private constructorFamily(name: string): VariantFamily | undefined {
-        const bound = this.env.get(name), value = bound && this.reference(bound);
-        return value && (value.kind === "native" || value.kind === "variant") ? value.family : undefined;
-    }
 
     // tag owner ctor fields: a value that remembers the constructor that made
     // it, the type it belongs to and its fields (Some a = tag Option Some [a]).

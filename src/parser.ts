@@ -1,4 +1,4 @@
-import { claimedDeclaration, countingOf, type DataDef, extendedDeclaration, fillPlaceholders, holdsPlaceholder, patternNames, sourceLocations, unclaimedMix } from "./ast.ts";
+import { countingOf, type DataDef, extendedDeclaration, fillPlaceholders, holdsPlaceholder, patternNames, sourceLocations } from "./ast.ts";
 import { fieldSource, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -180,8 +180,6 @@ class Parser {
     toks: Token[];
     i = 0;
     seen: Token | null = null; // last token peeked/consumed — where a failure points
-    // Constructors declared with _ that no union has claimed yet (see claimed).
-    unclaimed = new Map<string, Extract<TopLevel, { t: "type" }>>();
 
     constructor(toks: Token[], private source: string, private file = "<repl>") { this.toks = toks; }
 
@@ -1211,7 +1209,7 @@ class Parser {
                             if (operator) { stmts.push({ t: "stmDef", ...operator }); continue; }
                             // A block declares types as the top level does.
                             if (this.isTypeDeclaration()) {
-                                for (const d of this.parseTypeDeclaration(tb)) stmts.push(d.t === "type" ? { t: "typeDef", def: d.def } : d.t === "def" ? { t: "stmDef", name: d.name, clauses: d.clauses } : d.value);
+                                for (const d of this.parseTypeDeclaration()) stmts.push(d.t === "type" ? { t: "typeDef", def: d.def } : d.t === "def" ? { t: "stmDef", name: d.name, clauses: d.clauses } : d.value);
                                 continue;
                             }
                             const paired = this.pairedDefs();
@@ -1898,7 +1896,7 @@ class Parser {
         if (at < 0) { statements.push(wrap(def)); return; }
         const existing = statements[at] as { def: DataDef };
         if (existing.def.variants.some(v => def.variants.some(w => w.tag === v.tag))) throw new APNError("parse", `${def.variants[0].tag} is already a constructor of ${def.name}`);
-        existing.def = { ...extendedDeclaration(existing.def, def), ...existing.def.claims ? { claims: true } : {} };
+        existing.def = { ...extendedDeclaration(existing.def, def), extends: existing.def.extends };
     }
 
     // Parse  name p1 p2 = body  (isDef() must already have returned true).
@@ -2320,10 +2318,8 @@ class Parser {
     }
 
     // A type declaration (Color = Red | Green, Vec n a = ...), at the top level
-    // or in a block. Given the statements before it (out), a union of
-    // constructors declared with _ there claims them in place (and nothing is
-    // returned); elsewhere the run and the checker claim them.
-    parseTypeDeclaration(t: Token, out?: TopLevel[]): TopLevel[] {
+    // or in a block.
+    parseTypeDeclaration(): TopLevel[] {
         const name = (this.next() as { v: string }).v;
         const parameters: string[] = [];
         while (this.peek().k === "ident") parameters.push((this.next() as { v: string }).v);
@@ -2345,19 +2341,6 @@ class Parser {
             this.skipNL();
             this.expectSym(")");
         } else variants = this.parseConstructors(name, [name, ...parameters].join(" "));
-        // A union of constructors declared with _ claims them: they
-        // become this type's, where the first of them was declared.
-        // The run and the checker claim those the parser cannot see.
-        const claimed = variants.map(v => out && this.unclaimed.get(v.tag));
-        if (out && claimed.some(Boolean)) {
-            const other = variants.find((_, n) => !claimed[n]);
-            if (other) throw new APNError("parse", unclaimedMix(name, other.tag), { pos: t.pos, hint: `declare it first: ${other.tag} = _, or ${other.tag} x = _ with a field` });
-            const at = Math.min(...claimed.map(c => out.indexOf(c!)));
-            const def = claimedDeclaration({ name, parameters, variants }, tag => claimed.find(c => c!.def.name === tag)!.def.variants[0]);
-            for (const c of claimed) { out.splice(out.indexOf(c!), 1); this.unclaimed.delete(c!.def.name); }
-            out.splice(at, 0, { t: "type", def });
-            return [];
-        }
         // A union of list types (Pairs a = [] | a :: a :: Pairs a) is a union;
         // a family of lists, its type function's clauses (see listClauses).
         if (variants.some(v => v.tag === "[]" || v.tag === "::")) return [{ t: "type", def: { name, parameters, variants } }];
@@ -2403,7 +2386,7 @@ class Parser {
             }
 
             if (this.isTypeDeclaration()) {
-                out.push(...this.parseTypeDeclaration(t, out));
+                out.push(...this.parseTypeDeclaration());
                 continue;
             }
 
@@ -2440,9 +2423,7 @@ class Parser {
                         const [clause] = declaration.clauses;
                         if (holdsPlaceholder(clause.body)) {
                             const logic = clause.body.t === "placeholder" ? undefined : clause.body;
-                            const made = constructorDeclaration(declaration.name, clause.params, t.pos, logic);
-                            this.unclaimed.set(declaration.name, made);
-                            out.push(made);
+                            out.push(constructorDeclaration(declaration.name, clause.params, t.pos, logic));
                         } else out.push({ t: "def", ...declaration });
                         continue;
                     }

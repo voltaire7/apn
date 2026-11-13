@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, extendedDeclaration, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, extendedDeclaration, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -149,8 +149,8 @@ interface Known {
 interface Summary { clauses: (ClauseOrder & { body: Expr })[]; scope: Scope }
 interface Entry {
     type: Ty;
-    // A constructor's declaration, which a union claiming it reads (also in a
-    // later check: a REPL input, a module).
+    // A type's or constructor's declaration, which a constructor declared
+    // into it extends (also in a later check: a REPL input, a module).
     declaration?: DataDef;
     index?: Index;
     size?: bigint;
@@ -1896,9 +1896,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             let made = resolve(entry.type);
             while (made.k === "fn") made = resolve(made.output);
             if (made.k === "variant" && made.name === declared) return "new";
-            // Declared alone with _ (Just x = _): no union owns it yet.
+            // Declared alone (Circle (r : Float) = _): its own type's.
             const own = entry.declaration;
-            if (own && own.variants.length === 1 && own.name === name && !own.claims) return "unclaimed";
+            if (own && own.variants.length === 1 && own.name === name && !own.extends) return "declared";
             // One sharing its type's name is that type (see sharedType).
             return made.k === "variant" && made.name === name ? "type" : "constructor";
         }
@@ -7389,8 +7389,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         concrete: type => !variables(resolve(type as Ty)).size,
     });
     // A type declaration (Color = Red | Green), at the top level or in a block
-    // (scope), as at runtime. Constructors declared with _ where the parser
-    // could not see them are claimed here.
+    // (scope), as at runtime.
     // What a typed pattern's type name is here, as at runtime
     // (Interpreter.patternHead): a constructor or a function type, or a type
     // taking so many parameters.
@@ -7437,9 +7436,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         // Constructors declared into a type declared before join it (as at runtime).
         const into = written.extends ? scope.get(written.name)?.declaration : undefined;
-        const def = into ? { ...extendedDeclaration(into, written), claims: true }
-            : !written.extends && unionKind(written, name => alternative(name, written.name, scope)) === "claim"
-            ? claimedDeclaration(written, tag => scope.get(tag)!.declaration!.variants[0]) : written;
+        const def = into ? extendedDeclaration(into, written) : written;
         // X = A | B of existing types is their union (see unionKind), as at runtime.
         const kind = def.extends ? "declaration" : unionKind(def, name => alternative(name, def.name, scope));
         if (kind !== "declaration") {

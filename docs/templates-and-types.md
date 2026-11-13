@@ -507,34 +507,16 @@ Every way of making one from values runs it, a record slot's default too
 it is the type of its values and runs nothing. The checker checks that it gives the constructor's
 type. Its fields are named, since `_` holds them.
 
-A union of constructors declared with `_` claims them: they become one type's,
-exactly as a declaration of that type with those constructors makes it. So the
-first union listing a constructor owns it, and `typeOf`, typed patterns and
-monads (`return = Just`) key on that type. An alternative may restate a
-constructor's fields (`Just a`, tying them to the type's parameters); a bare
-one keeps the constructor's own. Within one source the union's declaration
-stands where its first constructor did; constructors declared elsewhere (an
-earlier REPL input, a module) are claimed where the union runs, so values made
-before it keep their own type.
-
-```apn
-Just x = _
-Nada = _
-Maybe a = Just a | Nada       # the same as Maybe a = Just a | Nada declaring both
-Circle (r : Float) = _
-Square (s : Float) = _
-Shape = Circle | Square       # typeOf (Circle 1) is Shape
-```
-
 A constructor can name the type it makes: `Name fields : T = _` declares it
-into `T`, and is the form a union declaration stands for. Declarations naming
+into `T`, and is the form a union declaration stands for: `typeOf`, typed
+patterns and monads (`return = Some`) key on `T`. Declarations naming
 one type make one type, each adding its constructor; `T`'s lowercase names are
 its parameters, and a computed index (`S k`) makes an indexed family, whose
 constructor makes that type. Without `: T` a constructor is its own type
 (`Box x = _` is `Box x : Box x = _`). A body with logic works as above.
 Within one source the type is declared where its first constructor is;
 declared elsewhere (an earlier REPL input, a module), the type there gains the
-constructor, so values made before keep their own type, as with claiming.
+constructor, so values made before keep the type as it was.
 
 ```apn
 Circle (r : Float) : Shape = _   # Shape = Circle Float | Square Float
@@ -546,8 +528,11 @@ Cons a (xs : Vect k a) : Vect (S k) a = _
 ```
 
 Written bare, `X = A | B` is a statement making constructors of `X`: all new
-names are declared, and constructors declared with `_` that no union owns yet
-are claimed, as above. Naming an existing type there is an error. The union
+names are declared, each with the fields written there. A constructor declared
+before is not taken into it (`Shape = Circle | Square` after `Circle (r :
+Float) = _` is an error: `Circle` takes a field, and is declared already);
+declare it into the type instead, as above. Naming an existing type there is
+an error too. The union
 of existing types is the expression `A | B`, the prelude's `|`
 (`a | b = intrinsics.union [a,b]`), so it is written in parentheses:
 `X = (A | B)` defines `X` as that type, which makes nothing: a value of any of

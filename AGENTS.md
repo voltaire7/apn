@@ -81,6 +81,13 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   a hidden parameter or call it with a different arity internally (no rewriting
   `return ((Option _) x) = Some x` into a two-parameter clause on the type),
   and never give a pattern a different meaning in one place.
+- **One arity per name, everywhere.** A name is written with the arguments it
+  takes in every place: a call, a pattern, a type, a union's alternative. A
+  constructor of one field is `Circle r`, never a bare `Circle` standing for it
+  (`Shape = Circle | Square` after `Circle (r : Float) = _` is wrong). The only
+  difference allowed is currying: a function returning a function takes more
+  arguments, and one applied to fewer is a function. Before adding any form,
+  check every name in it against the arity it was declared with.
 - Things that act the same share one implementation: never special-case one
   spelling of a definition (curried or with parameters) for no reason.
 - Things that differ act differently: never give clearly different spellings
