@@ -4019,7 +4019,7 @@ export class Interpreter {
         } finally { this.env = caller; }
     }
     // Whether a lowercase name in a type is a type variable: it is unless it
-    // names a type, or a function (which builds one).
+    // names a type (a list or record of types too), or a function (which builds one).
     // A name in a length position that keeps its value: one bound to a value.
     // Any other (unbound, or a type or function, which no length is) binds
     // there, as a type position binds a name bound to a value.
@@ -4031,7 +4031,8 @@ export class Interpreter {
         const bound = scope.get(name);
         if (!bound) return true;
         const value = this.reference(bound);
-        return !(value.kind === "type" || value.kind === "functionType" || value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native");
+        return !(value.kind === "type" || value.kind === "functionType" || value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native"
+            || (this.isList(value) || value.kind === "record") && this.isTypeValue(value));
     }
     private typeIn(e: Expr, scope: Env, variables: Map<string, Value>): Value | undefined {
         for (const name of freeTypeNames(e)) {
@@ -4447,7 +4448,8 @@ export class Interpreter {
         const bound = this.env.get(name);
         if (bound === undefined) return "free";
         const value = this.reference(bound);
-        return value.kind === "native" && value.tag ? { data: value.tag } : value.kind === "variant" ? { data: value.tag } : "other";
+        if (value.kind === "native" && value.tag || value.kind === "variant") return { data: value.tag! };
+        return this.typeVariableName(name, this.env) ? "other" : "type";
     }
     // A statement's patterns read by what their names are bound to here: at
     // the top level, and in a block declaring names, as each statement runs.

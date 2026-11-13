@@ -1702,7 +1702,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.k === "fn" && made.k === "variant") return t;
         // A lambda (Handler = a -> IO []) where a type is expected is the
         // function type it spells: its parameter any type, its result read as one.
-        if (t.k === "fn") return fn(variable(), schemaValue(t.output, e, seen));
+        if (t.k === "fn") {
+            // Its parameter as its result (a -> a) is a type variable, the same one.
+            const input = resolve(t.input), output = resolve(t.output), any = variable();
+            return fn(any, output.k === "var" ? output === input ? any : variable() : schemaValue(t.output, e, seen));
+        }
         // An unbound name (missing.File) is the problem to report, not its type.
         if (firstUnbound) return unknown();
         return problem("expected a type description", e);
@@ -1752,7 +1756,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // (a position some constructor's result computes: Z, S k).
             const vector = head.t === "var" && resolve(scope.get(head.name)?.type ?? dynamic).k === "factory";
             const family = head.t === "var" ? indexedFamilies.get(head.name) : undefined;
-            const valueAt = (n: number) => vector && n === 0 || !!family?.def.variants.some(v => {
+            // A function that is no type former (typeOf xs) takes values: a
+            // name bound there keeps its value, as anywhere a call is written.
+            const called = head.t === "var" ? resolve(scope.get(head.name)?.type ?? dynamic) : undefined;
+            let made = called;
+            while (made?.k === "fn") made = resolve(made.output);
+            const ordinary = called?.k === "fn" && !called.constructs && made?.k !== "type" && made?.k !== "variant" && !family;
+            const valueAt = (n: number) => ordinary || vector && n === 0 || !!family?.def.variants.some(v => {
                 const args: Expr[] = [];
                 let result = v.result;
                 while (result?.t === "app") { args.unshift(result.a); result = result.f; }
@@ -1768,7 +1778,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // (A function defined later is declared ahead: forward.)
                 const typeLike = kind === "type" || kind === "fn" || kind === "intrinsic" || kind === "factory" || kind === "alias" ||
                     !!bound && bound.type === forward.get(arg.name);
-                if (valueAt(n) ? bound && !typeLike : typeLike) return;
+                if (ordinary ? bound : valueAt(n) ? bound && !typeLike : typeLike) return;
                 captures.add(arg.name);
                 if (vector && n === 0) scope.set(arg.name, { type: atom("Int"), mono: true, index: { constant: 0n, terms: new Map([[`n${serial++}`, 1n]]) } });
                 else if (valueAt(n)) scope.set(arg.name, { type: variable(), mono: true });
@@ -3841,11 +3851,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     lambdaType(typeArgument, scope, new Map());
                     return application(copy(isType.type), { type: variable() }, e);
                 }
-                // typeOf a list is the list of its items' types, as at runtime.
+                // typeOf x is the type x has, a list's the list of its items' types,
+                // as at runtime.
                 if (e.t === "app" && e.f.t === "var" && e.f.name === "typeOf" && scope.get("typeOf")?.builtin) {
-                    const given = resolve(infer(a, scope));
+                    // (A copy: matching the type, typeOf x ~ [Int -> ...], decides nothing of x.)
                     const types = (t: Ty): Ty => { const r = resolve(t); return r.k === "list" ? { ...r, element: types(r.element), items: r.items?.map(types) } : { k: "type", value: r }; };
-                    return given.k === "list" ? types(given) : application(copy(scope.get("typeOf")!.type), { type: given }, e);
+                    return types(copy(infer(a, scope), new Map()));
                 }
                 // while [condition] action and for [start, condition, step] action:
                 // code as written; the action reads the names it binds (as code joined
@@ -5277,7 +5288,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         withinScope(s, () => {
             rewriteListConstructors(s, tag => listConstructor(tag, scope) === "cons");
             knownTypeArguments(s, tag => { const t = resolve(scope.get(tag)?.type ?? dynamic); return t.k === "alias" && !isUnionBody(t.body); });
-            resolveHeads(s, name => { const entry = scope.get(name); return !entry ? "free" : isConstructor(entry) ? { data: constructorNames.get(name) ?? entry.ownTag ?? name } : "other"; });
+            resolveHeads(s, name => { const entry = scope.get(name); return !entry ? "free" : isConstructor(entry) ? { data: constructorNames.get(name) ?? entry.ownTag ?? name } : describing(resolve(entry.type)) || resolve(entry.type).k === "fn" ? "type" : "other"; });
             rewriteTypedPatterns(s, tag => patternHead(tag, scope));
         });
     }
@@ -7353,7 +7364,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             tail: fn(list(a), list(a)),
             filter: fn(fn(a, b), fn(list(a), list(a))),
             length: fn(dynamic, atom("Int")),
-            typeOf: fn(a, atom("Type")),
+            typeOf: fn(a, { k: "type", value: b }),
             cast: fn({ k: "type", value: a }, fn(explicitDynamic, a)),
         })
     ) scope.set(name, { type });

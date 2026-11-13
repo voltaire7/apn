@@ -369,7 +369,10 @@ as `5 : String` is (a condition's truth is `truthy 5`). It is written outermost 
 is parenthesized, `(c ? a : b) : T`, and `x = c ? a : b : T` is an error.
 `(p : T)` in a pattern matches what `e : T` makes of the value, then `p`, and
 fails where it fails: `f (n : Int) = n + 1` takes `1.0` as `1`, `(b : Box Int)`
-takes `3` as `Box 3`, and `(x : t)` binds the value's type `t`.
+takes `3` as `Box 3`, and `(x : t)` binds the value's type `t`, unless `t`
+names a type (a list or record of types, or a function, too): then it is that
+type, as in [a function type](#function-types) (after `t = [Int,Int]`,
+`(xs : t)` takes two Ints, and `(xs : typeOf ys)` what `ys` is).
 
 A type is given a value only by ascription: `Int 5`, `Int $ x` and a type
 passed where a function goes (`f t = t 1`) are errors, `5 : Int` ascribes and

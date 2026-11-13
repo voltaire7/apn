@@ -84,13 +84,14 @@ Deno.test("guards can use nested lambda arguments", () => {
 });
 
 // A type known only when it runs may be the one a bare type name names: the
-// checker leaves that to the run, which takes the alternative or fails.
+// checker leaves that to the run, which takes the alternative or fails; one it
+// knows (typeOf "s" is String) it decides.
 for (const [code, expected] of [
     ['typeOf 123 ~ [Int -> "INT"]', '"INT"'],
     ['f x = typeOf x ~ [Int -> "INT", _ -> "other"]\n[f 5, f "a"]', '["INT","other"]'],
     ['d Int = 1\nd (typeOf 5)', '1'],
-    ['typeOf "s" ~ [Int -> "INT"]', 'non-exhaustive match'],
-    ['g (n : Int) = n\ng (typeOf 5)', 'cannot use Type where Int is required'],
+    ['typeOf "s" ~ [Int -> "INT"]', 'no alternative of this match fits its value'],
+    ['g (n : Int) = n\ng (typeOf 5)', 'cannot use Type (Int) where Int is required'],
 ]) Deno.test(`a bare type name, checked: ${code}`, () => {
     let actual: string;
     try { actual = result(code, true); } catch (error) { actual = (error as Error).message; }

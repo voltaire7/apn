@@ -418,8 +418,9 @@ export function headError(name: string): APNError {
 }
 // A lowercase name applied in a pattern, (sin x), is a head: it means what it
 // is bound to where it runs (resolveHeads), as a capitalized one does.
-// data: the constructor's own tag (NewBox = Box matches Box terms).
-export type HeadKind = { data: string } | "free" | "other";
+// data: the constructor's own tag (NewBox = Box matches Box terms); type: a
+// type value (a list or record of types too), which (x : t) then takes.
+export type HeadKind = { data: string } | "free" | "type" | "other";
 // Data (sin x = _) matches its terms; a name bound to nothing is the typed run
 // it was written as ((t1 1 t2): a type taken apart; (t x) the old spelling of
 // (x : t), an error); bound to anything else it stays a head, which no value
@@ -429,6 +430,14 @@ export function resolveHeads(node: unknown, kind: (name: string) => HeadKind): v
     if (Array.isArray(node)) { node.forEach(x => resolveHeads(x, kind)); return; }
     const n = node as Record<string, unknown>;
     for (const value of Object.values(n)) if (value && typeof value === "object") resolveHeads(value, kind);
+    // (x : t) binds t to x's type, unless t names a type: then it is (x : T)
+    // for the type it names.
+    if (n.p === "typeBind" && n.name !== "_" && kind(n.name as string) === "type") {
+        const tag = n.name, value = n.value;
+        for (const key of Object.keys(n)) delete n[key];
+        Object.assign(n, { p: "constr", tag, args: [value], typed: true });
+        return;
+    }
     if (n.p !== "constr" || n.typed) return;
     const tag = n.tag as string, args = n.args as Pattern[], k = kind(tag);
     // A name bound to a constructor matches its terms (NewBox = Box: Box ones).

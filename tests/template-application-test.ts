@@ -166,6 +166,12 @@ for (const checked of [true, false]) for (const [source, expected] of [
     // A list's type is the list of its items' types, made as it is read.
     ['t = typeOf [1,"a"]\n[t, head t, length t, typeOf (filter (> 0) [1,2])]', '[[Int,String],Int,2,[Int,Int]]'],
     ['[typeOf [], typeOf [[1],[2,3]], typeOf [1,2] <= List Int]', '[[],[[Int],[Int,Int]],True]'],
+    // A name in a parameter's type that names a type is that type; a
+    // function's argument there is a value.
+    ['xs = [1,2]\nf (ys : typeOf xs) = 1\nf _ = 0\n[f [5,6], f 7]', '[1,0]'],
+    ['t = [Int,Int]\nf (ys : t) = 1\nf _ = 0\n[f [5,6], f "ab", f 7]', '[1,0,0]'],
+    ['a = Int\ng = typeOf\nf (x : a) = 1\nf _ = 0\nh (y : g 1) = 1\nh _ = 0\n[f 1, f "s", h 2, h "s"]', '[1,0,1,0]'],
+    ['h = a -> a\nf (g : h) = 1\nf _ = 0\n[f (x -> x), f 2]', '[1,0]'],
 ] as const) Deno.test(`list type ranges (checked=${checked}): ${source}`, () => {
     const i = new Interpreter();
     if (checked) i.enableChecking();
