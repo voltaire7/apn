@@ -13,10 +13,18 @@ for (const source of ["foo =", "foo =\n", "foo = ;", "foo =\nbar = 1", "foo =\n{
     });
 }
 
-Deno.test("placeholder definitions are silent until demanded", () => {
+// A body of _ makes data, whatever the name's case: foo is itself, f 1 too.
+Deno.test("a body of _ makes data", () => {
     const interp = new Interpreter();
     interp.run(parse("foo = _\nf x = _"));
-    for (const source of ["foo", "f 1", "_"]) {
+    const shown = interp.renderString(interp.run(parse("[foo, f 1]")));
+    if (shown !== "[foo, f 1]") throw new Error(shown);
+});
+// _ elsewhere is code still to write: an error when demanded.
+Deno.test("placeholder expressions are silent until demanded", () => {
+    const interp = new Interpreter();
+    interp.run(parse("g x = x + 1"));
+    for (const source of ["g _", "_"]) {
         try { interp.run(parse(source)); }
         catch (error) {
             if (error instanceof APNError && error.kind === "runtime" && error.message.includes("not implemented")) continue;

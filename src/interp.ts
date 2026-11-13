@@ -17,7 +17,7 @@ import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWit
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, type PatternHead, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, type HeadKind, resolveHeads, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, type PatternHead, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, isUse } from "./ast.ts";
@@ -473,6 +473,7 @@ export class Interpreter {
                 const tl = written;
                 rewriteListConstructors(tl, tag => this.namesCons(tag));
                 knownTypeArguments(tl, tag => this.computedType(tag));
+                resolveHeads(tl, name => this.headKind(name));
                 rewriteTypedPatterns(tl, tag => this.patternHead(tag));
                 if (tl.t === "type") {
                     last = this.declare(tl.def, this.env.root()) ?? last;
@@ -4374,6 +4375,13 @@ export class Interpreter {
         const f = this.reference(this.force(head));
         return f.kind === "type" || f.kind === "native" && !!f.tag;
     }
+    // What a lowercase name applied in a pattern is here (see resolveHeads).
+    private headKind(name: string): HeadKind {
+        const bound = this.env.get(name);
+        if (bound === undefined) return "free";
+        const value = this.reference(bound);
+        return value.kind === "native" && value.tag || value.kind === "variant" ? "data" : "other";
+    }
     // How many parameters a type still takes (List 1, List Int 0).
     private typeArity(t: Extract<Value, { kind: "type" }>): number {
         const takes = t.alias ? t.alias.parameters.length : t.family ? t.family.parameters?.length ?? 0
@@ -5771,7 +5779,7 @@ export class Interpreter {
     // Patterns read the fields back; the value does nothing else.
     private tagged(owner: Value, ctor: Value, fields: Value): Value {
         const name = ctor.kind === "variant" ? ctor.tag : ctor.kind === "native" ? ctor.tag ?? ctor.name : ctor.kind === "clauseFn" || ctor.kind === "type" ? ctor.name : undefined;
-        if (!name || !/^[A-Z]/.test(name)) {
+        if (!name || !/^[A-Z]/.test(name) && !(ctor.kind === "native" && ctor.tag)) {
             throw new APNError("runtime", "tag's constructor must be a capitalized definition or constructor", { hint: "Some a = tag Option Some [a]" });
         }
         if (!this.isList(fields)) throw new APNError("runtime", "tag's fields must be a list", { hint: `tag ${this.ownerName(owner) ?? "Option"} ${name} [x]` });
@@ -6150,6 +6158,7 @@ export class Interpreter {
     }
 
     matchPattern(p: Pattern, v: Value, binds: Map<string, Value>): boolean {
+        if (p.p === "constr" && p.head) throw headError(p.tag);
         if (p.p === "as") {
             const local = new Map(binds);
             if (!this.matchPattern(p.left, v, local) || !this.matchPattern(p.right, v, local)) return false;

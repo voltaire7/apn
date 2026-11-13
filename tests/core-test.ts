@@ -119,6 +119,13 @@ for (const checked of [true, false]) {
         ["adder n : Int -> Int = x -> x + n\nfunc Int Int : Int = 123\n[adder 2 3, func Int Int]", "[5,123]"],
         ["Twice t : Type = [t,t]\nPi : Float = 3\n[([1,2] : Twice Int), Pi]", "[[1,2],3.0]"],
         ["g = {\n    h (x : Int) : Int = x * 2\n    Box x : Box x = _\n    [h 4, Box 1]\n}\ng", "[8, Box 1]"],
+        // _ makes data for any name; a name applied in a pattern means what it
+        // is bound to: data matches its terms, a free name binds.
+        ["sin 0 = 0\nsin x = _\ncos x = _\nd (sin x) = cos x\n[sin 0, sin 2, sin 2 == sin 2, d (sin 3)]", "[0, sin 2, True, cos 3]"],
+        ["sin 0 = 0\nsin x = _\ng y = sin y\ntypeOf (g 2)", "sin Int"],
+        ["f x = _\nk = _\n[f 2, k, typeOf (f 2)]", "[f 2, k, f Int]"],
+        ["sin x = _\nsin 5 ~ [(sin y) -> y, _ -> 0]", "5"],
+        ["pos x = x + 1\nxs = [10,20,30]\nxs (pos 0) = 99\nshape (t1 1 t2) = [t1,t2]\n[xs, shape (Vect 1 Int)]", "[[10,99,30],[Vect,Int]]"],
         // A conversion instance takes a constructor's own type as written.
         [CTOR + "to (Box Int) (n : Int) = Box n\nf (b : Box Int) = b\n[(3 : Box Int), f 4]", "[Box 3, Box 4]"],
         [MAYBE + "[typeOf Nada, typeOf (Just Nada)]", "[Maybe x, Maybe (Maybe x)]"],
@@ -143,6 +150,8 @@ for (const checked of [true, false]) {
         ["Big = (n : Int) | n > 2\n(1 : Int & Big)", "is not in Int & Big"],
         ["Add x 0 = x\nAdd (x : Int) = _\n1", "every clause of Add takes 1 parameters, as its declaration"],
         ["Opt a : _\n1", "a type is declared into Type"],
+        ["pos x = x + 1\ng (pos 0) = 1\ng 1", "pos is a function, not data: a pattern cannot call it"],
+        ["sin 0 = 0\nsin x = _\nd (sin x) = x\nd (sin 0)", checked ? "cannot use Int where sin Int is required" : "no clause of 'd' matches"],
         ["f x : Int = \"no\"\nf 1", checked ? "cannot use String where Int is required" : "Int expects a number"],
         ["f x : Int\n1", "f with parameters is typed in its definition"],
         ["Box x : _ = _\n1", "a constructor is its own type without : T"],
@@ -170,7 +179,8 @@ for (const checked of [true, false]) {
         ['std <- import "std"; use std.function\nSpan (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _\n([s = Span 2 1] : [s : Span Int Int])', "empty span"],
         ["Low (_ : Float) = 1 > 0 ? Low 1 : _\n1", "a constructor with logic names each field"],
         // A lowercase definition's _ stays unfinished.
-        ["f x = _\nf 1", "not implemented"],
+        // _ as an argument is still code to write; as a body it makes data.
+        ["g x = x + 1\ng _", "not implemented"],
     ] as const) Deno.test(`core rejects (checked=${checked}): ${source}`, () => {
         const actual = failure(source, checked);
         if (!actual.includes(message)) throw new Error(actual);

@@ -62,7 +62,7 @@ export type Pattern =
     | { p: "cons"; head: Pattern; tail: Pattern; op?: string }
     | { p: "typeBind"; name: string; value: Pattern }
     // typed: a type's pattern the parser made from (p : T), the one way to write it.
-    | { p: "constr"; tag: string; args: Pattern[]; typed?: true }
+    | { p: "constr"; tag: string; args: Pattern[]; typed?: true; head?: true }
     | { p: "recPat"; v: Array<[string, string]> }
     | { p: "range"; lo: bigint; hi: bigint };
 
@@ -79,10 +79,17 @@ export type DataVariant = { tag: string; arity: number; fields?: Expr[]; result?
 
 // A range of a type repeats it ([Int..]); a type has no step or bound.
 export const TYPE_RANGE = "a range of a type repeats it, without a step or bound: [Int..]";
-// Whether an expression holds _ as a value (a constructor's logic does).
+// Whether an expression holds _ as a value (a constructor's logic does), not
+// as the any a type is given (List _).
 export function holdsPlaceholder(e: unknown): boolean {
     if (!e || typeof e !== "object") return false;
-    if ((e as { t?: string }).t === "placeholder") return true;
+    const node = e as { t?: string; f?: Expr; name?: string };
+    if (node.t === "placeholder") return true;
+    if (node.t === "app") {
+        let head = e as Expr;
+        while (head.t === "app") head = head.f;
+        if (head.t === "var" && /^[A-Z]/.test(head.name)) return false;
+    }
     return Object.values(e).some(holdsPlaceholder);
 }
 // The expression with each _ replaced by the given one, in place (so its
@@ -361,6 +368,35 @@ export function rewriteInfixConstructors(node: unknown, tagOf: (op: string) => s
     const args = [n.head, n.tail];
     for (const key of Object.keys(n)) delete n[key];
     Object.assign(n, { p: "constr", tag, args });
+}
+// A head no value matches: a pattern calling a function.
+export function headError(name: string): APNError {
+    return new APNError("runtime", `${name} is a function, not data: a pattern cannot call it`, { hint: `declare data with _: ${name} x = _` });
+}
+// A lowercase name applied in a pattern, (sin x), is a head: it means what it
+// is bound to where it runs (resolveHeads), as a capitalized one does.
+export type HeadKind = "data" | "free" | "other";
+// Data (sin x = _) matches its terms; a name bound to nothing is the typed run
+// it was written as ((t1 1 t2): a type taken apart; (t x) the old spelling of
+// (x : t), an error); bound to anything else it stays a head, which no value
+// matches (an index where the definition assigns an item: xs (pos 0) = 9).
+export function resolveHeads(node: unknown, kind: (name: string) => HeadKind): void {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) { node.forEach(x => resolveHeads(x, kind)); return; }
+    const n = node as Record<string, unknown>;
+    for (const value of Object.values(n)) if (value && typeof value === "object") resolveHeads(value, kind);
+    if (n.p !== "constr" || !n.head) return;
+    const tag = n.tag as string, args = n.args as Pattern[], k = kind(tag);
+    if (k === "data") { delete n.head; return; }
+    if (k !== "free") return;
+    const piece = (q: Pattern): Expr | undefined => q.p === "var" ? { t: "var", name: q.name } : q.p === "int" ? { t: "int", v: q.v }
+        : q.p === "float" ? { t: "float", v: q.v } : q.p === "string" ? { t: "string", v: q.v } : q.p === "char" ? { t: "char", v: q.v } : undefined;
+    const value = args[args.length - 1], pieces = args.slice(0, -1).map(piece);
+    if (args.length === 1 && value.p === "var") throw new APNError("parse", "a typed pattern writes its type after the value", { hint: `write (${value.name} : ${tag})` });
+    if (value?.p !== "var" || !pieces.every(Boolean)) throw new APNError("parse", `${tag} in a pattern is not data`, { hint: `declare it: ${tag} x = _` });
+    const type = (pieces as Expr[]).reduce<Expr>((f, a) => ({ t: "app", f, a }), { t: "var", name: tag });
+    for (const key of Object.keys(n)) delete n[key];
+    Object.assign(n, { p: "schema", type, value });
 }
 // What the name a typed pattern (p : T args) is written with is where it
 // runs: a type taking so many parameters, a constructor with so many fields,

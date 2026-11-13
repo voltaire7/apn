@@ -505,8 +505,17 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
   are `to Int` clauses (`enumerationPositions`) the runtime and the checker
   define with its declaration.
 - Every definition, `name params [: T] = body`, is parsed once
-  (`parseDefinition`): a capitalized one whose body holds `_` is a constructor
-  declaration, any other a clause whose body is ascribed `T` (`typedClauses`).
+  (`parseDefinition`): one whose body holds `_` as a value (`holdsPlaceholder`,
+  not a type's `List _`) is a constructor declaration, any other a clause whose
+  body is ascribed `T` (`typedClauses`).
+- A lowercase name applied in a pattern parses as a head (`constr` with
+  `head`); `resolveHeads` decides it where the statement runs, by binding, at
+  runtime (`headKind`) and in the checker: data drops the mark, a free name
+  becomes the typed run it was, anything else keeps it, and matching it is an
+  error (`headError`) unless the definition assigns an item (`assignmentKey`).
+- A constructor whose rules give other types is `widened` in the checker: a
+  call is its type or theirs, its own where every rule definitely fails for the
+  arguments (`ownCalls`).
 - `Name params = _` is parser sugar (`constructorDeclaration`): the same
   `type` declaration `Name a = | Name a` makes, its fields from the
   parameters, so runtime and checker treat both alike; it declares again where

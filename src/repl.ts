@@ -363,7 +363,7 @@ function helpText(): string {
         `  1 + 2.0 => 3.0; exact/inexact convert; quotient truncates division`,
         `  sqrt -1 => 0+1i; literals 1i, 3+4i, 2@3 (radians); realPart/imagPart`,
         `  isNumber/isInteger/isExact; numerator/denominator; round ties to even`,
-        `  foo = _   unfinished definition; using it raises not implemented`,
+        `  f x = _   data: f 2 stands for itself (sin 0 = 0 before sin x = _ gives rules); fail "todo" is unfinished code`,
         `  List _ / Option _   (_ given to a type is any: typeOf x <= List _)`,
         `  arr 0 = 10   update an existing list; arr (-1) = 10 updates its last item`,
         `  both sides of = are required; use [] for an empty result`,

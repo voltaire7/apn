@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, extendedDeclaration, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, extendedDeclaration, headError, resolveHeads, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -149,6 +149,10 @@ interface Known {
 interface Summary { clauses: (ClauseOrder & { body: Expr })[]; scope: Scope }
 interface Entry {
     type: Ty;
+    // A constructor whose rules give values of other types (sin 0 = 0 before
+    // sin x = _): what applying it gives, its type or one of theirs.
+    widened?: Ty;
+    rules?: { params: Pattern[] }[];
     // A type's or constructor's declaration, which a constructor declared
     // into it extends (also in a later check: a REPL input, a module).
     declaration?: DataDef;
@@ -1929,8 +1933,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : head.t === "recordAccess" && head.field === "tag" && head.rec.t === "var" && head.rec.name === "intrinsics" && !!scope.get("intrinsics")?.builtin;
         if (!primitive || owner.t !== "var" || ctor.t !== "var") return undefined;
         // As at runtime: an owner and a constructor the program defines.
-        if (TYPE_NAMES.includes(owner.name) || !/^[A-Z]/.test(owner.name)) return problem("tag's owner must be a type the program defines", e, "Some a = tag Option Some [a]");
-        if (TYPE_NAMES.includes(ctor.name) || !/^[A-Z]/.test(ctor.name)) {
+        // (Data named in lowercase, sin x = _, is a constructor too.)
+        const data = (name: string) => /^[A-Z]/.test(name) || isConstructor(scope.get(name));
+        if (TYPE_NAMES.includes(owner.name) || !data(owner.name)) return problem("tag's owner must be a type the program defines", e, "Some a = tag Option Some [a]");
+        if (TYPE_NAMES.includes(ctor.name) || !data(ctor.name)) {
             return problem("tag's constructor must be a capitalized definition or constructor", e, "Some a = tag Option Some [a]");
         }
         const fields = resolve(infer(e.a, scope));
@@ -2278,6 +2284,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return;
             }
             case "constr": {
+                if (p.head) { const { message, hint } = headError(p.tag); return problem(message, e, hint); }
                 const entry = scope.get(p.tag), t = entry ? copy(entry.type) : dynamic;
                 // A type's pattern around a value is written (x : Int); (Int x),
                 // the type first, is the old spelling.
@@ -3005,6 +3012,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             if (!outputs.length && builtinError) throw builtinError;
             if (!outputs.length && taking.length === 1) throw taking[0];
+            // A Dynamic argument (a widened constructor's call) chooses when it runs.
+            if (!outputs.length && isExplicit(resolve(argument.type))) { runtimeChecks++; return explicitDynamic; }
             if (!outputs.length) return problem(`no overload accepts ${text(argument.type)}`, e);
             // A complete call (a partial one's choices are functions, which its
             // next argument decides) whose result no input decides (a recursive
@@ -3747,7 +3756,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         hint: unboundHint(e.name, scope) ?? (near ? `did you mean '${near}'?` : undefined) };
                 }
                 if (!entry) return unknown();
-                const type = instantiate(entry);
+                let type = instantiate(entry);
+                if (entry.widened && !ownCalls.has(e)) {
+                    const result = (t: Ty): Ty => { t = resolve(t); return t.k === "fn" ? { ...t, output: result(t.output) } : union([t, copy(entry.widened!)]); };
+                    type = result(type);
+                }
                 return callees.has(e) && trustsShape(entry) ? type : withoutShapes(type);
             }
             case "placeholder":
@@ -3831,6 +3844,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (written) return inferMatch(written, e, scope);
                 const selection = boolSelection(e);
                 if (selection && preludeSelection(selection, scope)) return inferMatch(selection, e, scope);
+                // A constructor whose rules give other types (sin 0 = 0), given
+                // arguments no rule can take (sin 3): its own value.
+                {
+                    const args: Expr[] = [];
+                    let head: Expr = e;
+                    for (; head.t === "app"; head = head.f) args.unshift(head.a);
+                    const entry = head.t === "var" ? scope.get(head.name) : undefined;
+                    if (entry?.rules && entry.rules.every(r => r.params.length === args.length)) {
+                        const entries = args.map(a => ({ type: dynamic, ...needed(valueEntry(a, scope)) }));
+                        if (entry.rules.every(r => peek(() => r.params.some((p, n) => definitelyFails(p, entries[n], 0, 0)), false))) ownCalls.add(head);
+                    }
+                }
                 callees.add(e.f);
                 // e : T, T a constructor named as its type (Point, Box Int): the type there.
                 let callee = e.t === "app" && e.ascribed && namesItsType(e.f, scope) ? { k: "type", value: typeExpr(e.f, scope) } as Ty : infer(e.f, scope), resolved = resolve(callee);
@@ -5212,6 +5237,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return {};
     }
     // A computed value; over enclosing parameters it is known only at their calls.
+    // Calls of a widened constructor no rule takes (see infer's app).
+    const ownCalls = new WeakSet<Expr>();
     function computed(e: Expr, scope: Scope): Known {
         const names = new Set<string>();
         const collect = (x: Expr): void => {
@@ -7035,7 +7062,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (p.p === "char") return { t: "char", v: p.v };
                 if (p.p === "float") return { t: "float", v: p.v };
                 if (p.p === "recPat") return { t: "record", v: p.v.map(([key, name]) => [key, { t: "var", name }]) };
-                if (p.p === "constr" && !p.args.length) return { t: "var", name: p.tag };
+                // A head applied (xs (pos 0) = 9) is the call it is written as.
+                if (p.p === "constr" && !p.typed) {
+                    const args = p.args.map(asKey);
+                    return args.every((a): a is Expr => a !== undefined) ? args.reduce<Expr>((f, a) => ({ t: "app", f, a }), { t: "var", name: p.tag }) : undefined;
+                }
                 if (p.p === "list") {
                     const values = p.v.map(asKey);
                     if (values.every((v): v is Expr => v !== undefined)) return { t: "list", v: values };
@@ -7528,12 +7559,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A constructor's logic is a clause of its fields giving a value
         // of its type (Percent (Float x) = x > 100 ? Percent 100.0 : _).
         for (const v of d.variants) {
-            for (const clause of v.logic?.clauses ?? []) {
+            // Its rules may give values of other types (sin 0 = 0): a call
+            // then gives what the run decides; the declaration's own clause
+            // gives its type.
+            const clauses = v.logic?.clauses ?? [], others: Ty[] = [];
+            for (const [n, clause] of clauses.entries()) {
                 let made = resolve(infer({ t: "patternLambda", params: clause.params, body: clause.body, guard: clause.guard }, scope));
                 let own = resolve(copy(scope.get(v.tag)!.type));
                 while (made.k === "fn" && own.k === "fn") { made = resolve(made.output); own = resolve(own.output); }
+                if (n < clauses.length - 1 && !succeeds(() => unify(copy(own), copy(made), clause.body))) { others.push(made); continue; }
                 unify(own, made, clause.body);
             }
+            if (others.length) scope.set(v.tag, { ...scope.get(v.tag)!, widened: union(others), rules: clauses.slice(0, -1) });
         }
         const positions = enumerationPositions(d);
         if (positions) define("to", positions, scope, positions[0].body);
@@ -7556,6 +7593,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         rewriteListConstructors(statement, tag => listConstructor(tag, scope) === "cons");
         knownTypeArguments(statement, tag => { const t = resolve(scope.get(tag)?.type ?? dynamic); return t.k === "alias" && !isUnionBody(t.body); });
+        resolveHeads(statement, name => { const entry = scope.get(name); return !entry ? "free" : isConstructor(entry) ? "data" : "other"; });
         rewriteTypedPatterns(statement, tag => patternHead(tag, scope));
         rewriteInfixConstructors(statement, op => constructorOperators.get(op));
         checkingExpression = statement.t === "expr" || statement.t === "patDef" ? statement.value : statement.t === "def" ? statement.clauses[0].body : undefined;

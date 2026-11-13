@@ -472,8 +472,19 @@ class Parser {
         const t = this.peek();
         if (t.k === "sym" && t.v === "(") {
             this.unnecessary.delete(this.i);
-            const run = this.typedRun(true);
-            if (run) return run;
+            // (sin x), (t1 1 t2): a lowercase name applied, a head its binding
+            // decides where it runs (see resolveHeads).
+            const name = this.peek(1), first = this.peek(2);
+            if (name.k === "ident" && /^[a-z]/.test(name.v) && this.startsParam(first) && !(first.k === "sym" && first.v === "_" && this.isSymAt(3, ")"))) {
+                const save = this.i;
+                try {
+                    this.next(); this.next();
+                    const args: Pattern[] = [];
+                    while (!this.isSym(")")) args.push(this.parsePatternAtom());
+                    this.next();
+                    return { p: "constr", tag: name.v, args, head: true };
+                } catch { this.i = save; }
+            }
         }
         if (t.k === "sym" && t.v === "_") { this.next(); return { p: "wildcard" }; }
         if (t.k === "int") { this.next(); return { p: "int", v: t.v }; }
@@ -1382,7 +1393,8 @@ class Parser {
 
     lambdaParam(): Pattern {
         const t = this.peek(), next = this.peek(1);
-        const run = this.typedRun(t.k === "sym" && t.v === "(");
+        // A parenthesized run is a head (see parsePatternAtom).
+        const run = t.k === "sym" && t.v === "(" ? undefined : this.typedRun(false);
         if (run) return run;
         if ((t.k === "ident" && /^[a-z]/.test(t.v) || t.k === "sym" && t.v === "_") && this.startsParam(next)) {
             this.next();
@@ -1859,7 +1871,7 @@ class Parser {
     // the clauses just before it (see rulesBefore); any other is a clause.
     parseDefinition(pos: number, before: Array<TopLevel | Expr>): { type: DataDef } | { def: { name: string; clauses: DefClause[] } } {
         const d = this.parseDefStatement(), [clause] = d.clauses;
-        if (/^[A-Z]/.test(d.name) && holdsPlaceholder(clause.body)) {
+        if (holdsPlaceholder(clause.body)) {
             const logic = clause.body.t === "placeholder" ? undefined : clause.body;
             return { type: constructorDeclaration(d.name, clause.params, pos, logic, d.result, rulesBefore(before, d.name)).def };
         }

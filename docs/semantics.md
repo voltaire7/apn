@@ -776,8 +776,11 @@ destination fields.
 ## Definitions and actions
 
 Ordinary named definitions do not execute their bodies when defined.
-`foo = _` declares an unfinished value; `f x = _` an unfinished function body.
-The `_` expression raises "not implemented" only when evaluated. It remains a
+A definition whose body is `_` makes data, whatever its name's case: `foo = _`
+is a value that is itself, `f x = _` makes `f 2` stand for itself (see
+[variants](templates-and-types.md#variants-parameters-and-distinct-wrappers)).
+Code still to write is `fail "todo"`. Elsewhere the `_` expression raises "not
+implemented" when evaluated. It remains a
 wildcard in patterns, and given to a type or a constructor it is any type, as
 there: `List _` is every list, so `typeOf x <= List _`, `isType (List _) x` and
 `(xs : List _)` agree, and `Option Int <= Option _`. It prints `_`. Both sides of `=` are required: `foo =`, `foo = ;`, and

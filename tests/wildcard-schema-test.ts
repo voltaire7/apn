@@ -29,7 +29,6 @@ for (const checked of [false, true]) {
         'f (v : [x : _]) = v.x; f [1,2]',
         'f (v : [x : _]) = v.x; f [y = 1]',
         'f (v : [x : _, y : Int]) = v.y; f ["hi",.2]',
-        'value = _; value',
         'value = [x : _]; value.x',
     ]) Deno.test(`wildcard schema rejects (checked=${checked}): ${source}`, () => {
         const i = new Interpreter();

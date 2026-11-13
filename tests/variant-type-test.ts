@@ -39,7 +39,7 @@ Deno.test("user's original pattern dispatch prints the payload", () => {
     const output: string[] = [];
     const log = console.log;
     console.log = (value) => output.push(String(value));
-    try { result('Option x = Some x | None\nfunc (x : Option _) = x ~ [\n    Some x -> print x\n    None -> _\n]\nfunc (Some 123)'); }
+    try { result('Option x = Some x | None\nfunc (x : Option _) = x ~ [\n    Some x -> print x\n    None -> []\n]\nfunc (Some 123)'); }
     finally { console.log = log; }
     if (output.join() !== '123') throw new Error(JSON.stringify(output));
 });

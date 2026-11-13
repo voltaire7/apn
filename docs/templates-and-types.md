@@ -478,7 +478,21 @@ parameter. A name holds anything (a type parameter); a typed name converts its
 field as a typed parameter does, and so does a record of typed fields, a pattern
 of that record's type whose fields bind their names (in any parameter:
 `len3 [x : Int, y : Int, z : Int] = x + y + z`, then `len3 [1,2,3]` is 6). A
-lowercase definition's `_` stays unfinished.
+lowercase name makes data the same way, as in Mathematica: rules before it give
+some calls values, the rest stay as written.
+
+A name applied in a pattern means what it is bound to, whatever its case: data
+matches its terms, a type takes type values apart (`(Vect n a)`), and a name
+bound to nothing binds (`(t1 1 t2)` given `Vect 1 Int` binds `t1` to `Vect`). A
+pattern cannot call a function (`(pos 0)` with `pos x = x + 1` is an error),
+except as the index of an item assignment (`xs (pos 0) = 9` with `xs` a list).
+
+```apn
+sin 0 = 0
+sin x = _                     # sin 0 is 0; sin 2 stays sin 2
+d (sin x) = cos x             # takes sin terms apart
+f x = _                       # an unknown function: f 2 stays f 2
+```
 
 ```apn
 Box x = _                     # the same as Box a = | Box a

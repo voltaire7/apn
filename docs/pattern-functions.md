@@ -11,8 +11,9 @@ use std.option
 ```
 
 Applying `(None -> print x)` to `Some 123` fails with a no-clause error. Its body
-is not run, so `x` is never looked up. `_` in a body still means unfinished code;
-use `[]` when a matched branch should do nothing.
+is not run, so `x` is never looked up. A body of `_` makes data (see
+[semantics](semantics.md#definitions-and-actions)); use `[]` when a matched
+branch should do nothing.
 
 `match` is an intrinsic function, available by default. It tries a list of unary
 functions as a function's clauses are tried: the most specific that fits first (a
@@ -335,8 +336,8 @@ independent. Inference can constrain how the body uses a field, but `_` adds no
 conversion and does not opt out of static checking like `Dynamic`.
 
 This meaning applies in schema patterns. Ordinary expressions such as
-`value = _` and `[x : _]` still contain unfinished code; `_` remains a wildcard
-in ordinary matching patterns.
+`value = _` makes data and `[x : _]` contains unfinished code; `_` remains a
+wildcard in ordinary matching patterns.
 
 ## Dotted patterns: keep the whole value
 
