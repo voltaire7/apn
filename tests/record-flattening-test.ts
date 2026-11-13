@@ -17,7 +17,7 @@ for (const checked of [false, true]) {
             ['v = [x = 1]; v._ = [x = "hi", y = 2]; v', '[x = "hi", y = 2]'],
             ["v = [inner = [x = 1]]; v.inner._ = [y = 2]; v.inner", "[x = 1, y = 2]"],
             ["x = Mutable 1; r = [use [cell = x]]; set r.cell 2; x", "2"],
-            ["T = [x : Int]; U = [use T, y : Float]; U [1,2]", "[x = 1, y = 2.0]"],
+            ["T = [x : Int]; U = [use T, y : Float]; ([1,2] : U)", "[x = 1, y = 2.0]"],
         ]
     ) {
         Deno.test(`record flattening checked=${checked}: ${source}`, () => {

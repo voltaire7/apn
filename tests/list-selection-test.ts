@@ -22,7 +22,7 @@ for (const [source, expected] of [
     ['templates = [Int,Float]; values = [1,2]; templates.(values)', '[1,2.0]'],
     ['[Char,Char]."hi"', "['h','i']"],
     ['[Int] [0]', '[Int]'],
-    ['Vector3 = [x : Float, y : Float, z : Float]; Vector3 [1,2,3]', '[x = 1.0, y = 2.0, z = 3.0]'],
+    ['Vector3 = [x : Float, y : Float, z : Float]; ([1,2,3] : Vector3)', '[x = 1.0, y = 2.0, z = 3.0]'],
     ['vec = [x = 1, y = 2]; vec.[y,x]', '[2,1]'],
     ['vec = [x = 1, y = 2]; vec.[x,y] = vec.[y,x]; vec', '[x = 2, y = 1]'],
     ['vec = [x = 1, y = 2]; vec.[a = x, b = y]', '[a = 1, b = 2]'],

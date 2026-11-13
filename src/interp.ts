@@ -15,7 +15,7 @@ import { parseLiteral, textNatives } from "./text-natives.ts";
 import { bundledText, IMPORT_ONE, loadPath, type ModuleFile, readLoad, resolveModule, sourcePath, unknownModule } from "./modules.ts";
 import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
-import { APNError, didYouMean, typeApplied, withArticle } from "./errors.ts";
+import { APNError, didYouMean, recordGivenFields, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, claimedDeclaration, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, type PatternHead, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
@@ -1925,7 +1925,16 @@ export class Interpreter {
             };
         }
         if (op === "++") {
-            const l = this.code(this.dataValue(lThunk));
+            // A record and a record of fields: a copy with them, as field
+            // assignment sets them (model ++ [name = n] is { model.name = n;
+            // model }); [] is the record of none. Other code joins it.
+            const record = this.dataValue(lThunk);
+            if (record.kind === "record") {
+                const given = this.dataValue(rThunk);
+                if (given.kind === "record") return this.assignFields(record, given.v.map(([key, value]) => [key, this.demand(value)]));
+                if (this.isList(given) && this.cell(given) === null) return record;
+            }
+            const l = this.code(record);
             const r = rThunk;
             if (this.isList(l)) return this.appendCode(l, r);
             const right = this.dataValue(r);
@@ -2478,13 +2487,9 @@ export class Interpreter {
                     // Application uses the exact string, including any quote characters.
                     return this.recordField(f, carg.v);
                 }
-                // Fields given by name, or all of them in order (r [10] is r
-                // [x = 10]): a copy with them, exactly as by field assignment
-                // (model [name = n]; Vector3 [x = 1] is Vector3.x = 1). A
-                // record's value is made by ascription ([] : Vector3).
-                if (carg.kind === "list" || carg.kind === "record") {
-                    return this.assignFields(f, this.givenFields(f, carg).map(([key, value]) => [key, this.demand(value)]));
-                }
+                // A record takes a key, not fields: a copy with fields is
+                // r ++ [x = v], and a type's value is ascribed.
+                if (carg.kind === "list" || carg.kind === "record") throw recordGivenFields();
                 if (carg.kind === "int") {
                     let i = carg.v;
                     if (i < 0n) i += BigInt(f.v.length);

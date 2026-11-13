@@ -5,6 +5,13 @@ import type { Token } from "./lexer.ts";
 // Every user-facing failure: parse/lex errors carry a source POSITION (the
 // offending token) so the reporter can draw a caret; runtime errors carry an
 // optional hint ("did you mean ...?").
+// A record applied to fields (model [name = n]), which is no update.
+export function recordGivenFields(): APNError {
+    return new APNError("runtime", "a record is applied to a key, not to fields", {
+        hint: "a copy with fields is r ++ [x = v]; a type's value is ascribed ([] : T)",
+    });
+}
+
 export class APNError extends Error {
     kind: "parse" | "lex" | "runtime" | "type";
     pos?: number;

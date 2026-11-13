@@ -17,7 +17,7 @@ for (
         "f n (xs : Vect n Int) (ys : Vect n Int) = xs; f 2 [1,2] [3,4]",
         "f n (xs : Vect n Int) (ys : Vect 1 Int) = xs ++ ys : Vect (n + 1) Int",
         "f (x : Dynamic) = x x; f (y -> y)",
-        "Vector3 = [x : Float, y : Float, z : Float]; vec = Vector3 [1,2,3]",
+        "Vector3 = [x : Float, y : Float, z : Float]; vec = [1,2,3] : Vector3",
     ]
 ) {
     Deno.test(`gradual check accepts: ${source}`, () => {

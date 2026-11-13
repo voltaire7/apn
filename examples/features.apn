@@ -204,11 +204,11 @@ print person                             # => [name = "Ada", age = 37]
 [name,age] = person                      # fields by name
 print age                                # => 37
 
-# Applying a record to values makes a copy with those fields set, so any
+# A record ++ a record of fields is a copy with those fields set, so any
 # record is a prototype.
 origin = [x = 0, y = 0, z = 0]
-print (origin [z = 3])                   # => [x = 0, y = 0, z = 3]
-print (origin [1,2,3])                   # => [x = 1, y = 2, z = 3]
+print (origin ++ [z = 3])                # => [x = 0, y = 0, z = 3]
+print (origin ++ [x = 1, y = 2])         # => [x = 1, y = 2, z = 0]
 
 # A record iterates as [field,value] pairs.
 person * print \ format "%: %"           # => name: Ada, then age: 37

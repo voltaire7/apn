@@ -23,7 +23,7 @@ for (const [source, expected] of [
     ['[Int * 3, 3 * Int, 3 * (0 : Int)]', '[[0,1,2],[0,1,2],0]'],
     ['V = [x : Float, y : Float, z : Float]\nv = [] : V\nv.x = 1\n[v, (V : Type)]', '[[x = 1.0, y = 0.0, z = 0.0], [x : Float, y : Float, z : Float]]'],
     ['V = [x : Float, y : Float]\n([x = 1] : V)', '[x = 1.0, y = 0.0]'],
-    ['V = [x : Float, y : Float]\nV [1,2]', '[x = 1.0, y = 2.0]'],
+    ['V = [x : Float, y : Float]\n([1,2] : V)', '[x = 1.0, y = 2.0]'],
     ['v = [] : [x : Float]\nv.x = 2\ntypeOf v.x', 'Float'],
     ['v = [] : [x : Int8]\nv.x = 12\nv', '[x = 12]'],
     ['([] : [x : Float, label = "origin", count = 7])', '[x = 0.0, label = "origin", count = 7]'],
@@ -34,7 +34,7 @@ for (const [source, expected] of [
     ['g n = {\n    y : Int\n    n + y\n}\ng 1', '1'],
     ['([] : [nested : [x : Float], xs : [Int]])', '[nested = [x = 0.0], xs = [0]]'],
     ['v = [] : [x : Int, bad : Function]\nv.x', '0'],
-    ['cell = Mutable 1\nv = [cell = cell] []\nset v.cell $ 2\ncell', '2'],
+    ['cell = Mutable 1\nv = [cell = cell] ++ []\nset v.cell $ 2\ncell', '2'],
     ['Option a = Some a | None\n[Option, Option Int]', '[Option, Option Int]'],
     ['Option a = Some a | None\n([] : [choice : Option Int])', '[choice = None]'],
     ['User = | MkUser Int String\n([] : [user : User])', '[user = MkUser 0 ""]'],
@@ -42,7 +42,7 @@ for (const [source, expected] of [
     ['Node = Next Node | End\n([] : [node : Node])', '[node = End]'],
     ['Node = | Next Node\nNode', 'Node'],
     ['([x -> x] : [fn : Function])', '[fn = x -> x]'],
-    ['(v -> v.fn 2) $ [fn = (+ 1)] []', '3'],
+    ['(v -> v.fn 2) $ [fn = (+ 1)] ++ []', '3'],
     ['[(floor .2 : Int), (truncate -1.7 : Int), (inexact 9007199254740993 : Float)]', '[0,-1,9007199254740992.0]'],
 ] as const) Deno.test(`construction defaults: ${source}`, () => {
     const actual = result(source);
@@ -90,7 +90,7 @@ Deno.test("failed typed-value conversion preserves the record", () => {
 
 Deno.test("omitted concrete actions stay callable without running during inspection", () => {
     const i = new Interpreter();
-    i.run(parseDocument('count = Mutable 0; action = { set count $ count + 1 }; v <- return ([action = action] [])'));
+    i.run(parseDocument('count = Mutable 0; action = { set count $ count + 1 }; v <- return ([action = action] ++ [])'));
     i.renderString(i.env.get('v')!);
     if (i.renderString(i.run(parseDocument('count'))) !== '0') throw new Error('inspection executed action');
     i.run(parseDocument('v.action'));
@@ -99,7 +99,7 @@ Deno.test("omitted concrete actions stay callable without running during inspect
 
 for (const values of ['[1]', '[1,2]', '[1,2,3,4]']) {
     Deno.test(`positional construction requires all fields: ${values}`, () => {
-        try { result(`Vector3 = [x : Float, y : Float, z : Float]\nVector3 ${values}`); }
+        try { result(`Vector3 = [x : Float, y : Float, z : Float]\n(${values} : Vector3)`); }
         catch (e) {
             if (String(e).includes('field count')) return;
             throw e;

@@ -7,7 +7,7 @@ import { IMPORT_ONE, standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
-import { APNError, didYouMean, formatFileReadError, typeApplied, withArticle } from "./errors.ts";
+import { APNError, didYouMean, formatFileReadError, recordGivenFields, typeApplied, withArticle } from "./errors.ts";
 import { bindingItem, DEFAULT_FIXITY, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
 import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
@@ -1169,7 +1169,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (t.op === "construct") {
             // A record schema converts the value once it is known.
-            if (a.k === "record") return waiting(b) ? t : application(a, { type: b }, { t: "placeholder" });
+            if (a.k === "record") return waiting(b) ? t : application(a, { type: b }, { t: "placeholder" }, false, true);
             if (a.k !== "type") return problem("expected a type constructor");
             if (resolve(a.value).k === "var") return t;
             return application(a, { type: b }, { t: "placeholder" });
@@ -1200,7 +1200,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             // So does a record schema ([quote : String, year : Int]), a type too.
             if (a.k === "record" && describing(a)) {
-                if (t.op === "to") return application(a, { type: b }, activeExpression ?? { t: "placeholder" });
+                if (t.op === "to") return application(a, { type: b }, activeExpression ?? { t: "placeholder" }, false, true);
                 const shown = text(schemaValue(a, { t: "placeholder" }));
                 return problem(`no from instance for ${shown}`, undefined, `define one, such as \`from ${shown} x = ...\``);
             }
@@ -1302,6 +1302,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return problem(`cannot compare ${text(a)} and ${text(b)}`);
         }
         if (t.op === "++") {
+            if (a.k === "record" && b.k === "list" && b.items?.length === 0) return a;
+            if (a.k === "record" && b.k === "record") return assignFields(a, [...b.fields].map(([key, type]) => [key, type, { t: "placeholder" }]), { t: "placeholder" });
             if (a.k === "list" && b.k === "list") return list(union([a.element, b.element]));
             if (a.k === "atom" && b.k === "atom" && a.name === "String" && b.name === "String") return a;
             return problem(`cannot append ${text(a)} and ${text(b)}`);
@@ -2759,6 +2761,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return list(a, tail.k === "list" && tail.length ? indexAdd(tail.length, constant(1n)) : undefined);
         }
         if (op === "++") {
+            // A record and a record of fields: a copy with them (as at runtime).
+            // A record and a record of fields: a copy with them (as at
+            // runtime); [] is the record of none. Other code joins it.
+            const record = resolve(a), fields = resolve(b);
+            if (record.k === "record" && fields.k === "record") return assignFields(record, [...fields.fields].map(([key, type]) => [key, type, e]), e);
+            if (record.k === "record" && fields.k === "list" && fields.items?.length === 0) return record;
             const x = asCode(resolve(a)), y = asCode(resolve(b));
             // Code joins code: the right's items see the left's bindings.
             if (x.k === "list" && y.k === "list" && x.formula && (y.formula || y.items)) {
@@ -3325,14 +3333,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 return union([...f.fields.values()]);
             }
-            // Given fields, a record is updated exactly as by field assignment
-            // (model [name = n]; Vector3 [x : Int] is Vector3.x = Int), as at
-            // runtime; ascribed to a type (e : T), the value it makes.
+            // Ascribed to a type (e : T), fields make its value.
             // Fields given by name, or all of them in order (r [10] is r [x = 10]).
             const given: Array<[string, Ty, Expr]> | undefined = a.k === "record" ? [...a.fields].map(([key, type]) => [key, type, fieldExpr(e, key)])
                 : a.k === "list" && a.items?.length === f.fields.size ? [...f.fields.keys()].map((key, n) => [key, a.items![n], e.t === "list" ? e.v[n] ?? e : e])
                 : undefined;
-            if (!ascribed) return given ? assignFields(f, given, e) : f;
+            // Applied to fields, a record is no update (as at runtime).
+            if (!ascribed && (a.k === "record" || a.k === "list")) {
+                const { message, hint } = recordGivenFields();
+                return problem(message, e, hint);
+            }
             // A record holding a type, given values (not types, unless for a
             // Type field), builds one; any other is updated exactly as by field
             // assignment (model [name = n]; Vector3 [x : Int] is Vector3.x = Int).

@@ -6,7 +6,7 @@ function result(source: string): string {
 }
 for (const [source, expected] of [
     ['Vector3 = [x : Float, y : Float, z : Float]\nCustomVector = Vector3\nCustomVector.x = 123\n([] : CustomVector)', '[x = 123.0, y = 0.0, z = 0.0]'],
-    ['v = [x : Float]; v.x = Int; [v [], ([] : v)]', '[[x : Int], [x = 0]]'],
+    ['v = [x : Float]; v.x = Int; [v, ([] : v)]', '[[x : Int], [x = 0]]'],
     ['v = [x : Float]; v.x = 123 : Float; v.x = 456; v', '[x = 456.0]'],
     ['v = [nested = [x = 1]]; v.nested = [y = 2]; v', '[nested = [y = 2]]'],
     ['count = Mutable 0; action = { set count 1 }; v = [f = action]; v.f = { set count 2 }; count', '0'],
@@ -15,7 +15,7 @@ for (const [source, expected] of [
     ['v = [] : [x : Float]; v "x" = 123; v.[x] = [456]; v.x', '456.0'],
     ['Id = Int; v = [id = (1 : Id)]; v.id = 2; [v.id, typeOf v.id]', '[2,Id]'],
     ['(identity : Int -> Int) <- return (x -> x); v = [f = identity]; v.f = x -> x + 1; v.f 2', '3'],
-    ['[x = 1] [y = 2]', '[x = 1, y = 2]'],
+    ['[x = 1] ++ [y = 2]', '[x = 1, y = 2]'],
 ] as const) Deno.test(`slot replacement: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

@@ -121,7 +121,7 @@ for (const [source, expected] of [
     ['append = (xs : Vect n a) -> (ys : Vect m a) -> ({\n    xs ~ [\n        [] -> ys\n        x::xs -> x :: append xs ys\n    ]\n} : Vect (n + m) a)\ntypeOf (append [] [3])', 'Vect 1 Int'],
     // A record schema applied to a value not known yet converts it at runtime.
     ['Quote = [quote : String, year : Int]\nconv r = r : Quote\n(conv [year = 2]).year', '2'],
-    ['Quote = [quote : String, year : Int]\n(Quote ([quote = "q", year = 1] : Dynamic)).quote', '"q"'],
+    ['Quote = [quote : String, year : Int]\n(([quote = "q", year = 1] : Dynamic) : Quote).quote', '"q"'],
     // A record type is a type: to applies it, and a Type parameter takes it.
     ['Quote = [quote : String, year : Int]\n(to Quote [year = 1]).year', '1'],
     ['f (t : Type) = t\nisType (f [a : Int]) [a = 3]', 'True'],
@@ -1392,7 +1392,7 @@ Deno.test("an unknown name in a type is reported as unbound", () => {
 for (const [source, expected] of [
     // A record schema's List fields hold any length, in a list cell or a record cell.
     ['Pt = [x : Float, c : [Float,Float]]\nps = Mutable ([] : List Pt)\nset ps [[x = 1.0, c = [1.0,2.0]]]\nlength ps', '1'],
-    ['B = [ns : List Int]\nb = Mutable (B [ns = []])\nset b [ns = [1,2]]\nb.ns', '[1,2]'],
+    ['B = [ns : List Int]\nb = Mutable ([ns = []] : B)\nset b [ns = [1,2]]\nb.ns', '[1,2]'],
     // A conversion of arithmetic on a parameter waits for its value.
     ['f w = w - 20 : Float\nf (3 : Number)', '-17.0'],
     ['f r = from JSON r : List Int\nf "[1, 2]"', '[1,2]'],

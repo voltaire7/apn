@@ -42,11 +42,11 @@ update msg model = msg ~ [
 ]
 
 updateKeys isDown key keys = key ~ [
-    " " -> keys [space = isDown]
-    "ArrowUp" -> keys [up = isDown]
-    "ArrowLeft" -> keys [left = isDown]
-    "ArrowDown" -> keys [down = isDown]
-    "ArrowRight" -> keys [right = isDown]
+    " " -> keys ++ [space = isDown]
+    "ArrowUp" -> keys ++ [up = isDown]
+    "ArrowLeft" -> keys ++ [left = isDown]
+    "ArrowDown" -> keys ++ [down = isDown]
+    "ArrowRight" -> keys ++ [right = isDown]
     _ -> keys
 ]
 

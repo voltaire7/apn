@@ -15,12 +15,12 @@ Concrete scalars (numbers, strings, characters, and booleans) are not callable.
 ```apn
 0 123                       # error: cannot apply a number
 [0].[123]                   # error: cannot apply a number
-[x = (0 : Int)] [floor .2]  # [x = 0]
-[x = (0 : Int)] [(.2 : Float)] # error: lossy conversion
-[x = 0] [x = 123]           # [x = 123]
-[x = 1.1] [10]              # [x = 10.0]: x is a Float
-[x = 1] [2.5]               # error: lossy conversion
-[x = False] [1]             # error: cannot use Int where Bool is required
+[x = (0 : Int)] ++ [x = floor .2]  # [x = 0]
+[x = (0 : Int)] ++ [x = (.2 : Float)] # error: lossy conversion
+[x = 0] ++ [x = 123]           # [x = 123]
+[x = 1.1] ++ [x = 10]              # [x = 10.0]: x is a Float
+[x = 1] ++ [x = 2.5]               # error: lossy conversion
+[x = False] ++ [x = 1]             # error: cannot use Int where Bool is required
 ["old"].["new"]             # error: cannot apply a string
 [Bool].[True]               # [True]
 [Char].['b']                 # ['b']
@@ -31,7 +31,7 @@ losslessly to the field's type, whether or not the program is checked: a
 number to the default's numeric type (`typeOf` of it, so `1` is an Int),
 rejecting overflow and nonzero imaginary-part loss; a string, character or
 Bool only from its own kind; a function or action only from its own kind. A
-function field is replaced, never applied: `[x = 0, y = (*2)] [1,2]` is an error.
+function field is replaced, never applied: `[x = 0, y = (*2)] ++ [x = 1, y = 2]` is an error.
 Standalone `"old" "new"`, `'a' 'b'`, and `False True` are application errors.
 List templates apply their function slots, including effects (see [Lists](#lists)).
 
@@ -252,14 +252,14 @@ v.child = [y = 2]          # replaces the whole child
 # v.f = 3                  # error: cannot use Int where a -> b is required
 ```
 
-A record applied to a record of fields is field assignment, `r [f = v, g = w]`
+A record `++` a record of fields is field assignment, `r ++ [f = v, g = w]`
 being `{ r.f = v; r.g = w; r }` in every way (a field keeps its number type or
 variant family, a schema's record takes no new field, nothing else is
 evaluated). So
-`[f = (* 2)] [f = (+ 1)]` is `[f = (+ 1)]`, `[x = 1] [y = 2]` is `[x = 1, y = 2]`, a
-model is updated as Elm's `{ model | name = n }` (`model [name = n]`), and a
-type is edited as `Vector3.x = Int` edits it: `Vector3 [x : Int]` is
-`[x : Int, y : Float, z : Float]`, and `Vector3 [x = 1]` the type
+`[f = (* 2)] ++ [f = (+ 1)]` is `[f = (+ 1)]`, `[x = 1] ++ [y = 2]` is `[x = 1, y = 2]`, a
+model is updated as Elm's `{ model | name = n }` (`model ++ [name = n]`), and a
+type is edited as `Vector3.x = Int` edits it: `Vector3 ++ [x : Int]` is
+`[x : Int, y : Float, z : Float]`, and `Vector3 ++ [x = 1]` the type
 `[x = 1.0, y : Float, z : Float]`, as `Vector3.x = 1` makes it. A record's
 value is made by ascription: given fields take their values as by assignment
 and the others their defaults, so `[x = 1] : Vector3` is

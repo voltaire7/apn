@@ -256,20 +256,19 @@ print (enumerate [10,20,30] * [index,value] -> index + value) # => [10,21,32]
 print (take 3 (enumerate [10..])) # => [[0,10],[1,11],[2,12]]
 
 # ---------------------------------------------------------
-# 7. PROTOTYPE-BASED OBJECTS —  APPLYING a record clones it:  vec [1,2,3]
-#    positional (one value per field) or  vec [z = 3, x = 1]  named (override/
-#    add, any order). An int argument indexes positionally -> [field,value].
+# 7. PROTOTYPE-BASED OBJECTS —  vec ++ [z = 3, x = 1] clones a record with
+#    those fields set (override/add, any order). An int argument indexes
+#    positionally -> [field,value].
 #    The prototype is any RECORD (LOWERCASE name — capital names are
 #    constructors); a bare-name list is a LIST, never an object.
 # ---------------------------------------------------------
 vector3 = [x = 0, y = 0, z = 0]     # prototype with defaults
 print vector3                       # => [x = 0, y = 0, z = 0]
-print (vector3 [1,2,3])         # => [x = 1, y = 2, z = 3]   positional clone
-print (vector3 [x = 1, y = 2, z = 3]) # => [x = 1, y = 2, z = 3]   named override
-print (vector3 [z = 3, x = 1])      # => [x: 1, y: 0, z: 3]  reorder — y keeps default
-print (vector3 [x = 1, y = 2, z = 3, a = 0]) # => [x = 1, y = 2, z = 3, a = 0]  new field
+print (vector3 ++ [x = 1, y = 2, z = 3]) # => [x = 1, y = 2, z = 3]   named override
+print (vector3 ++ [z = 3, x = 1])   # => [x: 1, y: 0, z: 3]  reorder — y keeps default
+print (vector3 ++ [x = 1, y = 2, z = 3, a = 0]) # => [x = 1, y = 2, z = 3, a = 0]  new field
 print vector3                       # => [x = 0, y = 0, z = 0]   prototype untouched
-print (vector3 [1,2,3]).z       # => 3     (.z chains over the clone)
+print (vector3 ++ [z = 3]).z     # => 3     (.z chains over the clone)
 print (vector3 1)                   # => ["y",0]   int index -> [field,value]
 
 # .[...] still exists, but as the QUOTED PLUCK:  a.[x,y]  gathers values
@@ -295,19 +294,19 @@ vec.[x,y] = vec.[y,x]
 print vec                        # => [x = 2, y = 10, z = 3, w = 99]  swap!
 vec.[x,y] = [7,8]
 print vec                        # => [x = 7, y = 8, z = 3, w = 99]
-# Applying a record of values to fields is the same update, as an expression:
-# vec [x = 1, y = 2] is { vec.x = 1; vec.y = 2; vec }.
-print (vec [x = 1, y = 2])       # => [x = 1, y = 2, z = 3, w = 99]
-print [vec [z = 0] == { vec.z = 0; vec }] # => [True]
-# A type given types is edited the same way; given values, it builds one.
+# ++ with a record of fields is the same update, as an expression:
+# vec ++ [x = 1, y = 2] is { vec.x = 1; vec.y = 2; vec }.
+print (vec ++ [x = 1, y = 2])    # => [x = 1, y = 2, z = 3, w = 99]
+print [vec ++ [z = 0] == { vec.z = 0; vec }] # => [True]
+# A type is edited the same way; ascribed values, it makes one.
 Vec3 = [x : Float, y : Float, z : Float]
-print (Vec3 [x : Int])           # => [x : Int, y : Float, z : Float]   as Vec3.x = Int
-print (Vec3 [x = 1])             # => [x = 1.0, y = 0.0, z = 0.0]
+print (Vec3 ++ [x : Int])        # => [x : Int, y : Float, z : Float]   as Vec3.x = Int
+print ([x = 1] : Vec3)           # => [x = 1.0, y = 0.0, z = 0.0]
 # Every field has a type: the one it holds, or its value's (then its default).
 # A value given to it converts losslessly; Type fields take types as values.
-print ([x = 1.1] [10])           # => [x = 10.0]
-# [x = 1] [2.5] and [x = False] [1] are errors
-# [f = (* 2)] [1]              # type error: cannot use Int where a -> b is required
+print ([x = 1.1] ++ [x = 10])           # => [x = 10.0]
+# [x = 1] ++ [x = 2.5] and [x = False] ++ [x = 1] are errors
+# [f = (* 2)] ++ [f = 1]       # type error: cannot use Int where a -> b is required
 print ([Int] : [type : Type])      # => [type : Int]
 
 # block scope: the update shadows obj only INSIDE the { }  (a bare block
@@ -1255,12 +1254,12 @@ namedTemplates = [Int,Float]
 namedValues = [1,2]
 print namedTemplates.namedValues    # => [1,2.0]
 print [namedValues = 42].namedValues # => 42 (literal record field)
-print ([x = 0] [123])                # => [x = 123] (record default override)
+print ([x = 0] ++ [x = 123])                # => [x = 123] (record default override)
 # Numbers, strings and characters are not callable: 0 123 and "old" "new" error.
 # A Bool applied to two values is one of them: True "yes" "no" is "yes".
 print [String,Bool,Char].["new",True,'b'] # => ["new",True,'b']
 # ["old"].["new"] and [0].[1] error: scalar slots cannot be applied.
-print ([name = "old", enabled = False] [name = "new", enabled = True])
+print ([name = "old", enabled = False] ++ [name = "new", enabled = True])
 print [Int].[floor .2]               # => [0]
 print ((* 2) * [1,2,3,4])     # => [2,4,6,8]
 print (cast String $ cast [Char,Char] $ "a😀") # => "a😀"
@@ -1293,7 +1292,7 @@ Numbers = [Int]
 Point = [x : Float, y : Float]
 print (123 : Count)                 # => Count 123 (an alias of Int names a subtype)
 print Numbers.[1]                  # => [1]
-print (Point [x = 1, y = 2])        # => [x = 1.0, y = 2.0]
+print ([x = 1, y = 2] : Point)      # => [x = 1.0, y = 2.0]
 firstNumber (Numbers values) = head values
 print (firstNumber [123])           # => 123
 print (cast [Int,Int] [1,2])         # => [1,2]
@@ -1556,7 +1555,7 @@ print browserPreview
 # A cell made from a schema's value holds that type: List fields take any
 # length. Field access reads its contents.
 Trail = [head : [Float,Float], points : List [Float,Float]]
-trail = Mutable (Trail [head = [0.0,0.0], points = []])
+trail = Mutable ([head = [0.0,0.0], points = []] : Trail)
 set trail [head = [1.0,2.0], points = [[0.0,0.0],[1.0,2.0]]]
 print trail.points                            # [[0.0,0.0],[1.0,2.0]]
 
@@ -1619,11 +1618,11 @@ Pixel = [x : Int, y : Int, lit : Bool]
 pixelJson = from JSON "{\"y\": 2, \"x\": 1, \"lit\": true}"
 print (decode.decodeValue Pixel pixelJson)     # Ok [x = 1, y = 2, lit = True]
 print (decode.decodeValue (decode.list Pixel) [pixelJson])  # Ok [[x = 1, y = 2, lit = True]]
-print (to Pixel [lit = True])                  # [x = 0, y = 0, lit = True] (as Pixel [...])
-lamp = Pixel []
+print (to Pixel [lit = True])                  # [x = 0, y = 0, lit = True] (as [...] : Pixel)
+lamp = [] : Pixel
 lamp.lit = True
 print [use lamp, size = 2]                     # [x = 0, y = 0, lit = True, size = 2] (a copy)
-asPixel value = Pixel value                    # converted when it runs
+asPixel value = value : Pixel                  # converted when it runs
 print (asPixel [lit = True]).lit               # True
 clock <- import "std/time"
 print (clock.toMinute clock.utc (clock.millisToPosix 754000))     # 12
@@ -1786,7 +1785,7 @@ print (take 3 ([0..] + [10..]))           # => [10,12,14]
 print ([x = 1, y = 2] + [y = 20, x = 10]) # => [x = 11, y = 22]
 ArrayVector = [x : Float, y : Float, z : Float]
 # (ArrayVector[1,2,3], without the space, is an error)
-print (ArrayVector [1,2,3] * 2)         # => [x = 2.0, y = 4.0, z = 6.0]
+print (([1,2,3] : ArrayVector) * 2)     # => [x = 2.0, y = 4.0, z = 6.0]
 print ([1,2] ++ [3,4])                 # => [1,2,3,4]
 std <- import "std"
 use std.array
@@ -1806,14 +1805,14 @@ print (Int * 3)                          # => [0,1,2]
 # Zero initialization happens at construction; bare types stay constructors.
 print [Int,Float,Int32,Bool,String] # => [Int,Float,Int32,Bool,String]
 ZeroVector = [x : Float, y : Float, z : Float]
-zeroVector = ZeroVector []
+zeroVector = [] : ZeroVector
 zeroVector.x = 123
 print zeroVector                     # => [x = 123.0, y = 0.0, z = 0.0]
 print ZeroVector                     # => [x : Float, y : Float, z : Float]
 template = ZeroVector
 template.x = 123
 print template                       # => [x = 123.0, y : Float, z : Float]   a Float 123.0
-print (template [])                  # => [x = 123.0, y = 0.0, z = 0.0]
+print ([] : template)                # => [x = 123.0, y = 0.0, z = 0.0]
 typeTemplate = ZeroVector
 typeTemplate.x = Int
 print typeTemplate                       # => [x : Int, y : Float, z : Float]
@@ -1821,7 +1820,7 @@ replacement = [nested = [x = 1]]
 replacement.nested = [y = 2]
 print replacement                    # => [nested = [y = 2]]
 print (Int * [1,2,3])            # => [1,2,3]
-print (ZeroVector [1,2,3])        # => [x = 1.0, y = 2.0, z = 3.0]
+print ([1,2,3] : ZeroVector)      # => [x = 1.0, y = 2.0, z = 3.0]
 # ZeroVector [1,2]                  # error: positional fields must be complete
 # Int + 1 and sqrt Float are errors; constructors are not numbers.
 print (typeOf (1 : Int))             # => Int

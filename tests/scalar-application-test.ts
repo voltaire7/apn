@@ -27,17 +27,17 @@ for (const [source, expected] of [
     }
 });
 for (const [source, expected] of [
-    ['[x = ["old",False]] [["new",True]]', '[x = ["new",True]]'],
-    ['[name = "old", enabled = False] [name = "new", enabled = True]', '[name = "new", enabled = True]'],
-    ['[name = "old", enabled = False] ["new",True]', '[name = "new", enabled = True]'],
-    ['[name = "old", enabled = False] []', '[name = "old", enabled = False]'],
+    ['[x = ["old",False]] ++ [x = ["new",True]]', '[x = ["new",True]]'],
+    ['[name = "old", enabled = False] ++ [name = "new", enabled = True]', '[name = "new", enabled = True]'],
+    ['[name = "old", enabled = False] ++ [name = "new", enabled = True]', '[name = "new", enabled = True]'],
+    ['[name = "old", enabled = False] ++ []', '[name = "old", enabled = False]'],
     ['[("hi" : String), (\'x\' : Char), truthy 1]', '["hi",\'x\',True]'],
 ] as const) Deno.test(`scalar template replacement: ${source}`, () => {
     const i = new Interpreter();
     const actual = i.renderString(i.run(parseDocument(source)));
     if (actual !== expected) throw new Error(actual);
 });
-for (const source of ['[x = False] [1]', '[x = "old"] [1]', "[x = 'a'] [1]"]) {
+for (const source of ['[x = False] ++ [x = 1]', '[x = "old"] ++ [x = 1]', "[x = 'a'] ++ [x = 1]"]) {
     Deno.test(`scalar default retains kind: ${source}`, () => {
         const i = new Interpreter();
         try { i.renderString(i.run(parseDocument(source))); } catch (e) {

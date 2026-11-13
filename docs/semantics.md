@@ -105,7 +105,7 @@ Spacing is part of the syntax (a parse error otherwise):
   multi-line list or record puts one item per line without commas (or several
   per line, `1,2`, separated by commas).
 - Application is juxtaposition with a space, also before a list, a group or a
-  block: `Vector3 [1,2,3]`, `func (f x)` and `run { x }`, not `Vector3[1,2,3]`,
+  block: `sum [1,2,3]`, `func (f x)` and `run { x }`, not `sum[1,2,3]`,
   `func(f x)` or `run{ x }` (a `[`, `(` or `{` directly after a name, literal
   or closing bracket is an error). Selections keep their dot: `v.[x,y]`,
   `v.(key)`, `obj.{ x + 1 }`.
@@ -740,11 +740,13 @@ the field's type becomes `T` (`v.[x : Float] = [3]` makes `x` the Float
 is `v = [use v, x : T = a].[y] = [b]`, the untyped entries assigned as usual,
 renamed ones too (`v.[x : T = a] = r`), and `T` is any type expression.
 
-A record applied to a record of fields is the same update: `r [f = v, g = w]`
-is `{ r.f = v; r.g = w; r }` in every way, as Elm's `{ r | f = v, g = w }`,
-a type given fields too (`Vector3 [x : Int]` is `Vector3.x = Int`). A
-record's value is made by ascription instead (`[x = 1] : Vector3`; see
-[zero initialization](zero-initialization.md)).
+A record `++` a record of fields is the same update: `r ++ [f = v, g = w]` is
+`{ r.f = v; r.g = w; r }` in every way, as Elm's `{ r | f = v, g = w }`, a type
+given fields too (`Vector3 ++ [x : Int]` is `Vector3.x = Int`); `r ++ []` is
+`r`. A record applies only to a key (`r "x"`, `r 0`): applied to fields it is
+an error. A record's value is made by ascription instead (`[x = 1] : Vector3`;
+see [zero initialization](zero-initialization.md)). Code joins code as before
+(`[x = 1] ++ [x + 1]`, the right not a record).
 
 An empty list `[]` becomes a record on its first field assignment.
 `obj.[x] = [10]` requires a one-element RHS list; `obj.[x] = 10` errors.
