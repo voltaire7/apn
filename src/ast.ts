@@ -68,9 +68,10 @@ export type Pattern =
 
 // A variant's result is the type it makes when not the family's own (an
 // indexed family: Cons a (Vec k a) -> Vec (S k) a). Its logic, if any, is the
-// clause applying it runs (Percent (Float x) = x > 100 ? Percent 100.0 : _),
-// its _ already the raw value, intrinsics.tag owner Percent [x].
-export interface ConstructorLogic { params: Pattern[]; body: Expr; owner: { t: "var"; name: string } }
+// clauses applying it runs: its rules written before it (Add x Zero = x), then
+// the clause declaring it (Percent (Float x) = x > 100 ? Percent 100.0 : _),
+// whose _ is already the raw value, intrinsics.tag owner Percent [x].
+export interface ConstructorLogic { clauses: DefClause[]; owner: { t: "var"; name: string } }
 // extends: constructors declared into a type by name (Square (x : Float) :
 // Shape = _), added to it where it is already declared (see extendedDeclaration).
 export interface DataDef { name: string; parameters?: string[]; variants: DataVariant[]; extends?: boolean; }
@@ -109,7 +110,9 @@ export function unionKind(def: DataDef, kind: (name: string) => Alternative): "d
     if (def.extends) return "declaration";
     // A list's own alternatives are list types (Pairs a = [] | a :: a :: Pairs a);
     // in a family of lists, where each says its index, they are its clauses.
-    const kinds = def.variants.map(v => v.tag === "[]" || v.tag === "::" ? v.result ? "new" : "type" : kind(v.tag));
+    // A constructor that is its own type (Box a = | Box a, Type = _) is new
+    // where it is declared, shadowing any type of that name, built-in too.
+    const kinds = def.variants.map(v => v.tag === "[]" || v.tag === "::" ? v.result ? "new" : "type" : v.tag === def.name ? "new" : kind(v.tag));
     if (kinds.every(k => k === "new")) return "declaration";
     // A union declares its constructors; one declared alone is its own
     // type's, and is declared into another by naming it there.
@@ -185,7 +188,7 @@ export function listUnion(def: DataDef): boolean {
 // as an Int: Direction = North | East declares to Int North = 0 and
 // to Int East = 1 with it, so a value indexes and counts as that Int.
 export function enumerationPositions(def: DataDef): DefClause[] | undefined {
-    if (def.parameters?.length || def.variants.some(v => v.arity || v.result || v.logic)) return undefined;
+    if (!def.variants.length || def.parameters?.length || def.variants.some(v => v.arity || v.result || v.logic)) return undefined;
     return def.variants.map((v, n) => ({
         params: [{ p: "constr", tag: "Int", args: [] }, { p: "constr", tag: v.tag, args: [] }],
         body: { t: "int", v: BigInt(n) },

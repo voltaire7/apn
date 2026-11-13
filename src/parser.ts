@@ -1222,13 +1222,17 @@ class Parser {
                             } else if (this.isPatBinding()) {
                                 stmts.push(this.parsePatBinding());
                             } else {
-                                if (this.isConstructorDeclaration()) {
-                                    this.declareInto(stmts, this.parseConstructorDeclaration(tb.pos), def => ({ t: "typeDef", def }));
+                                if (this.isTypeAlone()) {
+                                    stmts.push({ t: "typeDef", def: this.parseTypeAlone() });
+                                } else if (this.isConstructorDeclaration()) {
+                                    const name = (this.peek() as { v: string }).v;
+                                    this.declareInto(stmts, this.parseConstructorDeclaration(tb.pos, rulesBefore(stmts, name)), def => ({ t: "typeDef", def }));
                                 } else if (this.isDef()) {
                                     // Name params = _ declares a constructor, as at the top level.
                                     const d = this.parseBlockDef(), [clause] = d.clauses;
                                     if (/^[A-Z]/.test(d.name) && d.clauses.length === 1 && holdsPlaceholder(clause.body)) {
-                                        stmts.push({ t: "typeDef", def: constructorDeclaration(d.name, clause.params, tb.pos, clause.body.t === "placeholder" ? undefined : clause.body).def });
+                                        const rules = rulesBefore(stmts, d.name);
+                                        stmts.push({ t: "typeDef", def: constructorDeclaration(d.name, clause.params, tb.pos, clause.body.t === "placeholder" ? undefined : clause.body, undefined, rules).def });
                                     } else joinClauses(stmts, d);
                                 }
                                 else stmts.push(this.tryItemAssign() ?? this.parseDelimitedExpr());
@@ -1877,8 +1881,26 @@ class Parser {
             this.i = save;
         }
     }
+    // Lookahead: Name params : _ alone, a type declared without constructors
+    // (Option a : _), which constructors are then declared into.
+    isTypeAlone(): boolean {
+        let j = this.i;
+        if (this.toks[j]?.k !== "ident" || !/^[A-Z]/.test((this.toks[j] as { v: string }).v)) return false;
+        for (j++; this.toks[j]?.k === "ident" && /^[a-z]/.test((this.toks[j] as { v: string }).v); j++);
+        const colon = this.toks[j], it = this.toks[j + 1], end = this.toks[j + 2];
+        return colon?.k === "sym" && colon.v === ":" && (it?.k === "sym" || it?.k === "ident") && (it as { v: string }).v === "_" &&
+            (!end || ["newline", "dedent", "eof"].includes(end.k) || end.k === "sym" && end.v === ";");
+    }
+    parseTypeAlone(): DataDef {
+        const name = (this.next() as { v: string }).v, parameters: string[] = [];
+        while (this.peek().k === "ident" && /^[a-z]/.test((this.peek() as { v: string }).v)) parameters.push((this.next() as { v: string }).v);
+        if (new Set(parameters).size !== parameters.length) throw new Error("Parser: type parameters must be distinct lowercase names");
+        this.expectSym(":");
+        this.next();
+        return { name, parameters, variants: [] };
+    }
     // Name fields : T = _ (isConstructorDeclaration() returned true).
-    parseConstructorDeclaration(pos: number): DataDef {
+    parseConstructorDeclaration(pos: number, rules: DefClause[] = []): DataDef {
         const name = (this.next() as { v: string }).v, params: Pattern[] = [];
         while (this.startsParam(this.peek()) || this.negativeLiteral()) params.push(this.parameter());
         this.expectSym(":");
@@ -1886,7 +1908,7 @@ class Parser {
         this.expectSym("=");
         const body = this.parseDefBody();
         if (!holdsPlaceholder(body)) throw new APNError("parse", "a constructor declaration's body is _, or logic making it", { pos, hint: `${name} (x : Float) : Shape = _` });
-        return constructorDeclaration(name, params, pos, body.t === "placeholder" ? undefined : body, owner).def;
+        return constructorDeclaration(name, params, pos, body.t === "placeholder" ? undefined : body, owner, rules).def;
     }
     // A constructor declared into a type (Square (x : Float) : Shape = _)
     // joins that type's declaration earlier in the same statements; the run
@@ -2371,6 +2393,10 @@ class Parser {
             this.statementIndent = 0;
 
             if (this.skipFixityDeclaration()) continue;
+            if (this.isTypeAlone()) {
+                out.push({ t: "type", def: this.parseTypeAlone() });
+                continue;
+            }
             if (this.isDeclaration()) {
                 out.push(this.parseDeclaration());
                 continue;
@@ -2415,7 +2441,7 @@ class Parser {
                 // constructors were handled as destructuring bindings above.
                 if (/^[A-Z]/.test(t.v)) {
                     if (this.isConstructorDeclaration()) {
-                        this.declareInto(out, this.parseConstructorDeclaration(t.pos), def => ({ t: "type", def }));
+                        this.declareInto(out, this.parseConstructorDeclaration(t.pos, rulesBefore(out, t.v)), def => ({ t: "type", def }));
                         continue;
                     }
                     if (this.isDef()) {
@@ -2423,7 +2449,7 @@ class Parser {
                         const [clause] = declaration.clauses;
                         if (holdsPlaceholder(clause.body)) {
                             const logic = clause.body.t === "placeholder" ? undefined : clause.body;
-                            out.push(constructorDeclaration(declaration.name, clause.params, t.pos, logic));
+                            out.push(constructorDeclaration(declaration.name, clause.params, t.pos, logic, undefined, rulesBefore(out, declaration.name)));
                         } else out.push({ t: "def", ...declaration });
                         continue;
                     }
@@ -2476,7 +2502,8 @@ class Parser {
 // = _), whose parameters are T's names (Some a : Option a = _); T naming a
 // computed index makes it an indexed family's (Cons a (Vect k a) : Vect (S k)
 // a = _, whose result is that type). Without one, T is Name params itself.
-function constructorDeclaration(name: string, params: Pattern[], pos: number, body?: Expr, owner?: Expr): Extract<TopLevel, { t: "type" }> {
+function constructorDeclaration(name: string, params: Pattern[], pos: number, body?: Expr, owner?: Expr, rules: DefClause[] = []): Extract<TopLevel, { t: "type" }> {
+    if (rules.some(r => r.params.length !== params.length)) throw new APNError("parse", `every clause of ${name} takes ${params.length} parameters, as its declaration`, { pos });
     const parameters: string[] = [], names: string[] = [];
     const typeOf = (p: Pattern): Expr | undefined => p.p === "var" ? { t: "var", name: p.name }
         : p.p === "int" ? { t: "int", v: p.v }
@@ -2489,7 +2516,7 @@ function constructorDeclaration(name: string, params: Pattern[], pos: number, bo
             throw new APNError("parse", "a constructor's field is a name, a typed name or a record of typed fields", { pos, hint: `${name} (x : Float) = _` });
         }
         if (named.p === "var") names.push(named.name);
-        else if (body) throw new APNError("parse", "a constructor with logic names each field, which its _ holds", { pos, hint: `${name} (x : Float) = ... _` });
+        else if (body || rules.length) throw new APNError("parse", "a constructor with logic names each field, which its _ holds", { pos, hint: `${name} (x : Float) = ... _` });
         return type;
     });
     if (new Set(names).size !== names.length) throw new APNError("parse", "a constructor's field names are distinct", { pos });
@@ -2499,7 +2526,13 @@ function constructorDeclaration(name: string, params: Pattern[], pos: number, bo
     const raw: Expr = { t: "app", f: { t: "app", f: { t: "app", f: tag, a: tagged }, a: { t: "var", name } }, a: { t: "list", v: names.map(n => ({ t: "var", name: n })) } };
     const into = owner && ownerType(name, owner, pos);
     if (into) tagged.name = into.name;
-    const logic = body && { params, body: fillPlaceholders(body, raw), owner: tagged };
+    // With rules, the declaring clause is the otherwise: plain names, the
+    // least specific, given to it as written (Frac n 0 = ... before Frac
+    // (n : Int) (d : Int) = _ takes Frac 1 0).
+    const declared: Expr = body ? fillPlaceholders(body, raw) : raw;
+    const own = params.map((_, n): Pattern => ({ p: "var", name: `$field${n}` }));
+    const otherwise = { params: own, body: own.reduce<Expr>((f, p) => ({ t: "app", f, a: { t: "var", name: (p as { name: string }).name } }), { t: "patternLambda", params, body: declared }) };
+    const logic = body || rules.length ? { clauses: rules.length ? [...rules, otherwise] : [{ params, body: declared }], owner: tagged } : undefined;
     const variant = { tag: name, arity: fields.length, fields, ...into?.result ? { result: into.result } : {}, ...logic ? { logic } : {} };
     if (!into) return { t: "type", def: { name, parameters, variants: [variant] } };
     return { t: "type", def: { name: into.name, parameters: into.parameters, variants: [variant], extends: true } };
@@ -2509,8 +2542,10 @@ function constructorDeclaration(name: string, params: Pattern[], pos: number, bo
 // result the constructor makes when that names a computed index. The
 // constructor's own type (Box x : Box x) is no other.
 function ownerType(tag: string, owner: Expr, pos: number): { name: string; parameters: string[]; result?: Expr } | undefined {
+    // : _ is its own type, as without it (Box x : _ = _ is Box x = _).
+    if (owner.t === "placeholder") return undefined;
     const args: Expr[] = [];
-    let head = owner;
+    let head: Expr = owner;
     while (head.t === "app") { args.unshift(head.a); head = head.f; }
     if (head.t !== "var" || !/^[A-Z]/.test(head.name)) throw new APNError("parse", "a constructor is declared into a type by its name", { pos, hint: `${tag} (x : Float) : Shape = _` });
     const plain = args.every((a, n) => a.t === "var" && /^[a-z]/.test(a.name) && args.findIndex(b => b.t === "var" && b.name === a.name) === n);
@@ -2520,6 +2555,17 @@ function ownerType(tag: string, owner: Expr, pos: number): { name: string; param
     }
     const parameters = args.map((a, n) => plain && a.t === "var" ? a.name : `t${n}`);
     return { name: head.name, parameters, ...plain ? {} : { result: owner } };
+}
+
+// The clauses of name written just before its declaration with _ (Add x Zero
+// = x before Add x y = _): its rules, taken from the statements.
+function rulesBefore(statements: Array<TopLevel | Expr>, name: string): DefClause[] {
+    const rules: DefClause[] = [];
+    for (let last = statements[statements.length - 1]; last && (last.t === "def" || last.t === "stmDef") && last.name === name; last = statements[statements.length - 1]) {
+        rules.unshift(...last.clauses);
+        statements.pop();
+    }
+    return rules;
 }
 
 // A block's statement, joined to the definition before it when it continues

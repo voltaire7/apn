@@ -507,6 +507,24 @@ Every way of making one from values runs it, a record slot's default too
 it is the type of its values and runs nothing. The checker checks that it gives the constructor's
 type. Its fields are named, since `_` holds them.
 
+Clauses written just before the declaration are its rules: applying the
+constructor tries them first, and the declaration is what happens otherwise,
+however specific its patterns (rules are the constructor's logic, so they give
+its type too). Symbolic terms and smart constructors are one feature:
+
+```apn
+Var (s : String) : Expr = _
+Num (n : Int) : Expr = _
+Add x (Num 0) = x
+Add (Num a) (Num b) = Num (a + b)
+Add (x : Expr) (y : Expr) : Expr = _
+Add (Var "a") (Num 0)            # Var "a"
+Add (Num 2) (Num 3)              # Num 5
+Add (Var "a") (Var "b")          # Add (Var "a") (Var "b"), an Expr
+Frac n 0 = fail "zero denominator"
+Frac (n : Int) (d : Int) = _     # Frac 1 0 fails; Frac 1 2 is a value
+```
+
 A constructor can name the type it makes: `Name fields : T = _` declares it
 into `T`, and is the form a union declaration stands for: `typeOf`, typed
 patterns and monads (`return = Some`) key on `T`. Declarations naming
@@ -518,6 +536,10 @@ Within one source the type is declared where its first constructor is;
 declared elsewhere (an earlier REPL input, a module), the type there gains the
 constructor, so values made before keep the type as it was.
 
+`Name params : _` alone declares the type with no constructors yet, naming its
+parameters; constructors are then declared into it. With none it has no values
+(`Void : _`).
+
 ```apn
 Circle (r : Float) : Shape = _   # Shape = Circle Float | Square Float
 Square (s : Float) : Shape = _
@@ -525,7 +547,14 @@ Some a : Option a = _            # Option a = Some a | None
 None : Option a = _
 Nil : Vect Z a = _               # Vect n a = Nil -> Vect Z a | ...
 Cons a (xs : Vect k a) : Vect (S k) a = _
+Handle a : _                     # a type, its constructors declared after
+Open (fd : Int) : Handle Int = _
 ```
+
+`: _` is the constructor's own type, as without it, so `Type = _`,
+`Type : _ = _` and `Type : Type = _` are one declaration: a value `Type` whose
+type is itself. A constructor that is its own type shadows a type of that name,
+a built-in one too (as `docs/intrinsics.md` says a program's `Int` does).
 
 Written bare, `X = A | B` is a statement making constructors of `X`: all new
 names are declared, each with the fields written there. A constructor declared

@@ -436,7 +436,7 @@ export class Interpreter {
             } else {
                 // A constructor with logic runs it when applied; its _
                 // makes the raw value (see ConstructorLogic).
-                const logic = v.logic && { kind: "clauseFn" as const, name: v.tag, clauses: [{ params: v.logic.params, body: v.logic.body }], arity: v.arity, env: family.env, applied: [] };
+                const logic = v.logic && { kind: "clauseFn" as const, name: v.tag, clauses: v.logic.clauses, arity: v.arity, env: family.env, applied: [] };
                 scope.setLocal(v.tag, {
                     kind: "native", name: "__constr", arity: v.arity, applied: [], tag: v.tag, family,
                     ...logic ? { invoke: (args: Value[]) => args.reduce<Value>((f, arg) => this.apply(f, arg), logic) } : {},

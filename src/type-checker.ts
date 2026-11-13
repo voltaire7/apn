@@ -2371,7 +2371,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     problem(`'${p.tag}' in a pattern takes ${parameters} type${parameters === 1 ? "" : "s"}, or ${parameters + 1} patterns for a value`, e,
                         `write (${p.tag} ${"_ ".repeat(parameters)}${value})`);
                 }
-                if (p.tag === "Type") {
+                // The built-in Type (a program's own constructor named Type is its own).
+                if (p.tag === "Type" && !isConstructor(entry)) {
                     const payload: Ty = { k: "type", value: variable() };
                     unify(payload, expected, e);
                     p.args.forEach((x) => bind(x, payload, scope, e, bound));
@@ -7527,11 +7528,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A constructor's logic is a clause of its fields giving a value
         // of its type (Percent (Float x) = x > 100 ? Percent 100.0 : _).
         for (const v of d.variants) {
-            if (!v.logic) continue;
-            let made = resolve(infer({ t: "patternLambda", params: v.logic.params, body: v.logic.body }, scope));
-            let own = resolve(scope.get(v.tag)!.type);
-            while (made.k === "fn" && own.k === "fn") { made = resolve(made.output); own = resolve(own.output); }
-            unify(own, made, v.logic.body);
+            for (const clause of v.logic?.clauses ?? []) {
+                let made = resolve(infer({ t: "patternLambda", params: clause.params, body: clause.body, guard: clause.guard }, scope));
+                let own = resolve(copy(scope.get(v.tag)!.type));
+                while (made.k === "fn" && own.k === "fn") { made = resolve(made.output); own = resolve(own.output); }
+                unify(own, made, clause.body);
+            }
         }
         const positions = enumerationPositions(d);
         if (positions) define("to", positions, scope, positions[0].body);
