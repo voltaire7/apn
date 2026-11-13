@@ -530,6 +530,13 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
   checker reads as `intrinsics.union [A, B]` while `|` is the prelude's; the
   parser keeps those parentheses (`parseDefBody`). Either way the union is a
   `type` value with `choices` at runtime and a `union` type in the checker.
+- Values read as sets (`Interpreter.setOf`) share one view for `<=`, `&` and
+  `|`: an ordered value by its rank, a sequence or a graph by its pairs
+  (`pairs`, `at`; lists walked once by `prefixOf` and `commonPrefix`). `&` and
+  `|` go through `intrinsics.intersection` and `intrinsics.union`, of values
+  when no operand is a type (`ofValues`); an intersection of types is a
+  refinement of the first by membership in the rest. The checker reads `&` as
+  `intrinsics.intersection [a, b]` as it does `|`.
 - A constructor's logic (`ConstructorLogic`) is parsed with its `_` filled
   by `intrinsics.tag Owner Name [fields]` (`constructorDeclaration`), the
   owner being `T` for one declared into it. At runtime the constructor's native runs it

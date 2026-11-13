@@ -76,6 +76,10 @@ const cases: [string, string][] = [
     ['partition isEven [1..5]', '[[2,4],[1,3,5]]'],
     ['unique [3,1,3,2,1]', '[3,1,2]'],
     ['sortOn fst [[2,"b"],[1,"a"],[2,"c"]]', '[[1,"a"],[2,"b"],[2,"c"]]'],
+    // Sorting is dictionary order (compare), not inclusion (<=).
+    ['sort ["b","ab","a"]', '["a","ab","b"]'],
+    ['sort [[2],[1,2],[1]]', '[[1],[1,2],[2]]'],
+    ['[compare "ab" "b", compare [1] [1], compare 3 2]', '[-1,0,1]'],
     ['minimum []', 'None'],
     ['factorial 20', '2432902008176640000'],
     ['factorial 3.0', '6'],

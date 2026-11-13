@@ -1294,7 +1294,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             finally { evaluatingCall = outer; activeExpression = active; }
         }
         if (t.op === "compare") {
-            if (numeric(a) && numeric(b) || a.k === "atom" && b.k === "atom" && a.name === b.name && ["String", "Char"].includes(a.name)) return atom("Bool");
+            // Values compare as sets (Interpreter.setOf): numbers, Chars and
+            // Bools by order, lists, strings and records by their pairs.
+            if (numeric(a) && numeric(b) || a.k === "atom" && b.k === "atom" && a.name === b.name && ["String", "Char", "Bool"].includes(a.name)) return atom("Bool");
+            if (a.k === "list" && b.k === "list" || a.k === "record" && b.k === "record") return atom("Bool");
             // Types compare as the sets of their values (Int <= Number); a
             // written list of types is one ([Int] <= List Int), and a
             // constructor given types the type it names (Box Int).
@@ -2857,7 +2860,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // A union of types (Mixed = Int | String).
             // The union of the types listed (a | b is intrinsics.union [a,b]); a
             // written list of types is one ([Int] | [Int,Int]).
-            if (f.name === "union") {
+            if (f.name === "union" || f.name === "intersection") {
                 const asType = (x: Ty): Ty | undefined => {
                     const r = resolve(x);
                     if (r.k === "type") return r.value;
@@ -2866,8 +2869,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return items.every(Boolean) ? { k: "list", element: items.length ? union(items as Ty[]) : variable(), items: items as Ty[], length: constant(BigInt(items.length)) } : undefined;
                 };
                 const list = resolve(args[0]), types = list.k === "list" ? list.items?.map(asType) : undefined;
+                // Of values read as sets (see Interpreter.setOf): one of them,
+                // or their common prefix, of their type; records are checked
+                // when it runs.
+                const values = list.k === "list" ? list.items?.map(resolve) : undefined;
+                if (values?.length && types?.every(t => !t) && values.every(v => v.k !== "record" && v.k !== "dynamic" && v.k !== "var")) {
+                    const all = resolve(union(values));
+                    return all.k === "list" ? { k: "list", element: all.element } as Ty : all;
+                }
                 if (!types?.every(t => t)) { runtimeChecks++; return explicitDynamic; }
-                return { k: "type", value: union(types as Ty[]) };
+                // An intersection of types is a refinement of the first: its
+                // values are the first's to the check.
+                return { k: "type", value: f.name === "union" ? union(types as Ty[]) : types[0]! };
             }
             // truthy x: x's truth; an action has none.
             if (f.name === "truthy") {
@@ -4186,10 +4199,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 const bound = scope.get(e.op);
                 if (!bound) return problem(`unbound operator '${e.op}'`, e);
-                // The prelude's a | b is intrinsics.union [a,b]: checked as that call,
-                // so a union of types is that type (Int | String), as at runtime.
-                if (e.op === "|" && bound.builtin) {
-                    const union: Expr = { t: "app", f: { t: "recordAccess", rec: { t: "var", name: "intrinsics" }, field: "union" }, a: { t: "list", v: [e.l, e.r] } };
+                // The prelude's a | b is intrinsics.union [a,b] (a & b its
+                // intersection): checked as that call, so a union of types is
+                // that type (Int | String), as at runtime.
+                if ((e.op === "|" || e.op === "&") && bound.builtin) {
+                    const union: Expr = { t: "app", f: { t: "recordAccess", rec: { t: "var", name: "intrinsics" }, field: e.op === "|" ? "union" : "intersection" }, a: { t: "list", v: [e.l, e.r] } };
                     const at = sourceLocations.get(e);
                     if (at) sourceLocations.set(union, at);
                     return infer(union, scope, expected);
@@ -7341,6 +7355,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("intrinsics.match", { type: { k: "intrinsic", name: "match", arity: 2 } });
     scope.set("intrinsics.tag", { type: { k: "intrinsic", name: "tag", arity: 3 } });
     scope.set("intrinsics.union", { type: { k: "intrinsic", name: "union", arity: 1 } });
+    scope.set("intrinsics.intersection", { type: { k: "intrinsic", name: "intersection", arity: 1 } });
     scope.set("intrinsics.refine", { type: { k: "intrinsic", name: "refine", arity: 2 } });
     scope.set("intrinsics.get", { type: { k: "intrinsic", name: "get", arity: 2 } });
     scope.set("intrinsics.with", { type: { k: "intrinsic", name: "with", arity: 3 } });

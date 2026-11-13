@@ -107,8 +107,10 @@ export const NATIVES: Array<[string, number]> = [
     ["intrinsics.get", 2],
     // with v k x: a copy of v with k set to x (xs 2 = x binds xs to with xs 2 x).
     ["intrinsics.with", 3],
-    // A union of types (Mixed = Int | String).
+    // The union and the intersection of sets: of types (Mixed = Int | String),
+    // or of values read as sets (see setOf): a | b, a & b.
     ["intrinsics.union", 1],
+    ["intrinsics.intersection", 1],
     // truthy x: x's truth, which conditions read.
     ["intrinsics.truthy", 1],
     // refine T p: the values of T for which p is True (Positive = (n : Int) | n > 0).
@@ -2009,15 +2011,11 @@ export class Interpreter {
                 return bad();
             case "*": case "-": case "/": case "%": return bad();
             case "<": case ">": case "<=": case ">=": {
-                // Types compare as the sets of their values: a <= b when
-                // every value of a is one of b, a < b when b has more.
-                const x = this.isTypeValue(l) ? this.asType(l) : undefined, y = x && this.isTypeValue(r) ? this.asType(r) : undefined;
-                if (x && y) {
-                    const [small, large] = op[0] === "<" ? [x, y] : [y, x];
-                    return mkBool(this.within(small, large) && (op.length === 2 || !this.within(large, small)));
-                }
-                const order = this.compare(l, r);
-                return mkBool(op === "<" ? order < 0 : op === ">" ? order > 0 : op === "<=" ? order <= 0 : order >= 0);
+                // Values compare as sets (see setOf): a <= b when a's set is
+                // within b's, a < b when b's also has more.
+                const read = (v: Value) => this.setOf(v) === "type" ? this.asType(v) ?? v : v;
+                const [small, large] = op[0] === "<" ? [read(l), read(r)] : [read(r), read(l)];
+                return mkBool(this.subset(small, large) && (op.length === 2 || !this.subset(large, small)));
             }
         }
         throw new APNError("runtime", `'${op}' has no builtin meaning`);
@@ -4972,6 +4970,7 @@ export class Interpreter {
             case "intrinsics.get": return this.builtinGet(this.force(args[0]), args[1]);
             case "intrinsics.with": return this.assignItem(this.dataValue(args[0]), this.dataValue(args[1]), args[2]);
             case "intrinsics.union": return this.union([...this.elements(args[0])].map(x => this.reference(x)));
+            case "intrinsics.intersection": return this.intersection([...this.elements(args[0])].map(x => this.reference(x)));
             case "intrinsics.truthy": return mkBool(this.truthy(args[0]));
             case "intrinsics.refine": {
                 const base = this.reference(this.demand(args[0]));
@@ -5597,6 +5596,7 @@ export class Interpreter {
     // a type test unfolds it (see belongsToType), and the union is known by
     // the name it is given (see remembered).
     private union(types: Value[]): Value {
+        if (this.ofValues(types)) return types.map(t => this.dataValue(t)).reduce((a, b) => this.joined(a, b));
         const choices: Value[] = [];
         let unfolds = false;
         for (const type of types.flatMap(t => t.kind === "type" && t.choices && !t.refine ? t.choices : [t])) {
@@ -5607,6 +5607,147 @@ export class Interpreter {
         if (choices.length === 1) return choices[0];
         const name = unfolds ? "" : choices.map(c => this.renderString(c)).join(" | ");
         return { kind: "type", name, choices };
+    }
+    // Every value is a set, and <=, & and | are inclusion, intersection and
+    // union of those sets: a type is its values; a number its cut (the numbers
+    // below it), so they are ordered (a Bool is 0 or 1, a Char its code point);
+    // a list or a string its (position, element) pairs, so <= is being a
+    // prefix; a record or a HashMap its (key, value) pairs.
+    private setOf(v: Value): "type" | "ordered" | "sequence" | "graph" | undefined {
+        // A list or record holding types is a type (List Int's [Int], [x : Int]).
+        if (this.isList(v)) {
+            // An item naming what is being defined (Tree = [] | Tree :: Tree)
+            // is of the type that definition makes, so not evaluated here.
+            const cell = this.cell(v);
+            if (!cell) return "sequence";
+            const head = cell.head, busy = (x: Value | undefined) => (x?.kind === "thunk" || x?.kind === "deferred") && !x.value && !!x.busy;
+            if (busy(head) || head.kind === "thunk" && !head.value && head.body.t === "var" && busy((head.env ?? this.env).get(head.body.name))) return "type";
+            return this.isTypeValue(this.reference(this.demand(head))) ? "type" : "sequence";
+        }
+        if (v.kind === "record") return v.v.length && this.isTypeValue(v) ? "type" : "graph";
+        if (this.isTypeValue(v)) return "type";
+        if (isNumeric(v) || v.kind === "bool" || v.kind === "char") return "ordered";
+        if (v.kind === "string") return "sequence";
+        if (v.kind === "hashmap") return "graph";
+        return undefined;
+    }
+    // Whether a union or an intersection is of values, not of types.
+    private ofValues(values: Value[]): boolean {
+        const kinds = values.map(v => this.setOf(this.dataValue(v)));
+        return values.length > 0 && !kinds.includes("type") && kinds.every(Boolean);
+    }
+    private setKinds(a: Value, b: Value, op: string): "ordered" | "sequence" | "graph" {
+        const x = this.setOf(a), y = this.setOf(b);
+        const same = x === y && x !== "type" && x && (x !== "sequence" || (a.kind === "string") === (b.kind === "string"));
+        if (!same) throw new APNError("runtime", `${op === "<=" ? "cannot compare" : `cannot apply '${op}' to`} ${this.renderString(a)} and ${this.renderString(b)}`, { hint: "both are numbers, lists, strings, records or types" });
+        return x as "ordered" | "sequence" | "graph";
+    }
+    // An ordered value's place (False 0, True 1, a Char its code point).
+    private rank(v: Value): Value { return v.kind === "bool" ? mkInt(v.v ? 1n : 0n) : v.kind === "char" ? mkInt(BigInt(v.v.codePointAt(0)!)) : v; }
+    // The (position or key, value) pairs of a value read as a set, in order.
+    private *pairs(v: Value): Generator<[Value, Value]> {
+        if (v.kind === "string") { let n = 0n; for (const c of v.v) yield [mkInt(n++), { kind: "char", v: c }]; return; }
+        if (v.kind === "record") { for (const [key, x] of v.v) yield [mkStr(key), x]; return; }
+        if (v.kind === "hashmap") { for (const [key, x] of v.entries.values()) yield [key, x]; return; }
+        let n = 0n;
+        for (let rest: Value = v; ;) {
+            checkInterrupt();
+            const cell = this.cell(rest);
+            if (!cell) return;
+            yield [mkInt(n++), cell.head];
+            rest = cell.tail;
+        }
+    }
+    // The value a pair holds at a position or key, if any.
+    private at(v: Value, key: Value): Value | undefined {
+        if (v.kind === "record") return v.v.find(([k]) => k === (key as { v: string }).v)?.[1];
+        if (v.kind === "hashmap") return v.entries.get(this.hashKey(key))?.[1];
+        let rest: Value = v;
+        for (let n = (key as { v: bigint }).v; ; n--) {
+            const cell = this.cell(rest);
+            if (!cell) return undefined;
+            if (n === 0n) return cell.head;
+            rest = cell.tail;
+        }
+    }
+    // a <= b: a's set within b's.
+    private subset(a: Value, b: Value): boolean {
+        if (this.setOf(a) === "type" && this.setOf(b) === "type") return this.within(a, b);
+        const kind = this.setKinds(a, b, "<=");
+        if (kind === "ordered") return this.compare(this.rank(a), this.rank(b)) <= 0;
+        if (a.kind === "string" && b.kind === "string") return b.v.startsWith(a.v);
+        if (kind === "sequence") return this.prefixOf(a, b);
+        for (const [key, x] of this.pairs(a)) {
+            const y = this.at(b, key);
+            if (y === undefined || !this.equals(x, y)) return false;
+        }
+        return true;
+    }
+    // a & b: the pairs both have (the longest common prefix, the fields equal
+    // in both), the lesser of two ordered values, or both types' values.
+    private intersection(values: Value[]): Value {
+        if (!this.ofValues(values)) {
+            const types = values.map(v => this.reference(v));
+            const bad = types.find(t => !this.isTypeValue(t));
+            if (bad) throw new APNError("runtime", `an intersection is of types or of values, and ${this.renderString(bad)} is not a type`);
+            if (types.length === 1) return types[0];
+            const [first, ...rest] = types;
+            const test: Value = { kind: "native", name: "$intersection", arity: 1, applied: [], invoke: ([given]) => mkBool(rest.every(t => this.refinedMember(t, given) !== undefined)) };
+            return { kind: "type", name: types.map(t => this.renderString(t)).join(" & "), choices: [first], refine: test };
+        }
+        return values.map(v => this.dataValue(v)).reduce((a, b) => {
+            const kind = this.setKinds(a, b, "&");
+            if (kind === "ordered") return this.compare(this.rank(a), this.rank(b)) <= 0 ? a : b;
+            if (a.kind === "string" && b.kind === "string") {
+                let n = 0;
+                while (n < a.v.length && a.v[n] === b.v[n]) n++;
+                return mkStr(a.v.slice(0, n));
+            }
+            if (kind === "sequence") return mkList(this.commonPrefix(a, b));
+            const both = [...this.pairs(a)].filter(([key, x]) => { const y = this.at(b, key); return y !== undefined && this.equals(x, y); });
+            if (a.kind === "record") return { kind: "record", v: both.map(([key, x]) => [(key as { v: string }).v, x]) };
+            return { kind: "hashmap", entries: new Map(both.map(([key, x]) => [this.hashKey(key), [key, x]])) };
+        });
+    }
+    // The items two lists start with alike, walking both once.
+    private commonPrefix(a: Value, b: Value): Value[] {
+        const out: Value[] = [];
+        for (let x: Value = a, y: Value = b; ;) {
+            checkInterrupt();
+            const p = this.cell(x), q = this.cell(y);
+            if (!p || !q || !this.equals(p.head, q.head)) return out;
+            out.push(p.head); x = p.tail; y = q.tail;
+        }
+    }
+    // Whether list a starts list b.
+    private prefixOf(a: Value, b: Value): boolean {
+        for (let x: Value = a, y: Value = b; ;) {
+            checkInterrupt();
+            const p = this.cell(x);
+            if (!p) return true;
+            const q = this.cell(y);
+            if (!q || !this.equals(p.head, q.head)) return false;
+            x = p.tail; y = q.tail;
+        }
+    }
+    // a | b of values: the greater of two ordered values, else both sets'
+    // pairs, which must still make one (a list, of which the other is a
+    // prefix; a record or HashMap agreeing on the keys both have).
+    private joined(a: Value, b: Value): Value {
+        const kind = this.setKinds(a, b, "|");
+        if (kind === "ordered") return this.compare(this.rank(a), this.rank(b)) >= 0 ? a : b;
+        if (kind === "sequence") {
+            if (this.subset(a, b)) return b;
+            if (this.subset(b, a)) return a;
+            throw new APNError("runtime", `${this.renderString(a)} | ${this.renderString(b)} is no ${a.kind === "string" ? "string" : "list"}: neither starts the other`);
+        }
+        for (const [key, x] of this.pairs(b)) {
+            const y = this.at(a, key);
+            if (y !== undefined && !this.equals(x, y)) throw new APNError("runtime", `${this.renderString(a)} | ${this.renderString(b)} disagree at ${this.renderString(key)}`);
+        }
+        if (a.kind === "record" && b.kind === "record") return { kind: "record", v: [...a.v, ...b.v.filter(([key]) => !a.v.some(([k]) => k === key))] };
+        if (a.kind === "hashmap" && b.kind === "hashmap") return { kind: "hashmap", entries: new Map([...b.entries, ...a.entries]) };
+        throw new APNError("runtime", `cannot apply '|' to ${this.renderString(a)} and ${this.renderString(b)}`);
     }
     // What a name in X = A | B is bound to here (see unionKind).
     private alternative(name: string, declared: string): Alternative {

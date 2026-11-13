@@ -87,6 +87,13 @@ for (const checked of [true, false]) {
         [OPTION + CTOR + "[typeOf [1,2] <= List _, typeOf 3 <= List _, typeOf (Some 1) <= Option _, typeOf (Box 1) <= Box _]",
             "[True,False,True,True]"],
         [OPTION + "[isType (List _) [1,\"a\"], ([1] : List _), Option _ <= Option Int, typeOf [1,2] == List _]", "[True,[1],False,False]"],
+        // Every value is a set: <= is inclusion, & intersection, | union.
+        ["[[1] <= [1,2], [2] <= [1,2], [1,2] <= [1,3], [1] < [1,2], [1] < [1], [] <= [1]]", "[True,False,False,True,False,True]"],
+        ['["ab" <= "b", "a" <= "ab", False < True, 2 <= 3, Int <= Number]', "[False,True,True,True,True]"],
+        ["[[x = 1] <= [x = 1, y = 2], [x = 2] <= [x = 1, y = 2]]", "[True,False]"],
+        ['[[1,2] & [1,3], ["abc" & "abd"], [3 & 5], [3 | 5], [1] | [1,2]]', '[[1],["ab"],[3],[5],[1,2]]'],
+        ["[[x = 1, y = 2] & [x = 1, y = 3], [x = 1] | [y = 2]]", "[[x = 1], [x = 1, y = 2]]"],
+        ["Big = (n : Int) | n > 2\n[(5 : Int & Big), Int & Big <= Int, Int <= Int & Big]", "[5,True,False]"],
         // A conversion instance takes a constructor's own type as written.
         [CTOR + "to (Box Int) (n : Int) = Box n\nf (b : Box Int) = b\n[(3 : Box Int), f 4]", "[Box 3, Box 4]"],
         [MAYBE + "[typeOf Nada, typeOf (Just Nada)]", "[Maybe x, Maybe (Maybe x)]"],
@@ -105,6 +112,8 @@ for (const checked of [true, false]) {
         [CTOR + 'Rect "a" 2', checked ? "cannot use String where Float is required" : "Float expects a number"],
         [CTOR + "Box 5 + 1", checked ? "cannot combine Box Int and Int" : "cannot apply '+'"],
         ["Bad [x] = _\n1", "a constructor's field is a name, a typed name or a record of typed fields"],
+        ["[1,2] | [1,3]", "[1,2] | [1,3] is no list: neither starts the other"],
+        ["Big = (n : Int) | n > 2\n(1 : Int & Big)", "is not in Int & Big"],
         // A name keeps its arity: a type is given all its parameters.
         ["f (xs : List) = xs\nf [1]", "List takes 1 type parameter; a type is given all of them"],
         [MAYBE + "f (m : Maybe) = m\nf Nada", "Maybe takes 1 type parameter; a type is given all of them"],

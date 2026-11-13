@@ -347,7 +347,7 @@ function helpText(): string {
         `  describe Int = ...  (a bare type name in a pattern matches that type)`,
         `  do [print "hi", return 42] — the block { print "hi"; return 42 }`,
         `  123 : Int32; to Int (truncate 3.7); typeOf value; ([x : Float] : Type)`,
-        `  types are sets: Int | String; Int <= Number; typeOf [1,2] <= List Int; == same values`,
+        `  values are sets: Int | String; Int <= Number; [1] <= [1,2]; [1,2] & [1,3]; 3 | 5`,
         `  x : Int32 = 123; x = 123 : Int32; f (n : Int) = ...  (declare, ascribe, type a pattern)`,
         `  append : Vect n a -> Vect m a -> Vect (n + m) a  (declares the clauses after it)`,
         `  myTypeOf (x : t) = print t   (bind the runtime type and value)`,

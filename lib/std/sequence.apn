@@ -25,7 +25,13 @@ intersperse separator xs = null xs ? []
     : head xs :: foldr (x, rest -> separator :: x :: rest) [] (tail xs)
 partition predicate xs = [filter predicate xs, filter (x -> not (predicate x)) xs]
 unique xs = null xs ? [] : head xs :: unique (filter (x -> x != head xs) (tail xs))
+# Dictionary order, which sorts: -1, 0 or 1 (<= is inclusion: "ab" <= "b"
+# is False, compare "ab" "b" is -1).
+compare (x : String) (y : String) = _compareItems (to (List Char) x) (to (List Char) y)
+compare (xs : List _) (ys : List _) = _compareItems xs ys
 compare x y = x < y ? -1 : (x > y ? 1 : 0)
+_compareItems xs ys = null xs ? (null ys ? 0 : -1) : (null ys ? 1
+    : compare (head xs) (head ys) ~ [0 -> _compareItems (tail xs) (tail ys), c -> c])
 sort xs = sortBy compare xs
 sortOn project xs = sortBy (on compare project) xs
 minimum xs = null xs ? None : Some (foldl min (head xs) (tail xs))

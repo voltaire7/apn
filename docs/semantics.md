@@ -1811,10 +1811,40 @@ false, and `typeOf f == Function` is true. `==` is exact (`typeOf [1,2]` is
 makes: `Vect 3 Int == [Int,Int,Int]` is true. A description is not an enforced
 schema; use a typed pattern or contract when you need validation.
 
-A type is the set of its values: `a | b` is their union (the prelude's
-`a | b = intrinsics.union [a,b]`; `X = (A | B)` names one, while a bare
-`X = A | B` declares constructors), and types
-compare as sets. `a <= b` is
+### Values are sets
+
+Every value is a set, and `<=`, `&` and `|` are inclusion, intersection and
+union (the prelude's `a | b = intrinsics.union [a,b]` and
+`a & b = intrinsics.intersection [a,b]`):
+
+| Value | Its set | `a <= b` | `a & b` | `a \| b` |
+| --- | --- | --- | --- | --- |
+| A type | its values | every value of `a` is one of `b` | the values of both | the values of either |
+| A number (a `Char` its code point, `False` 0 and `True` 1) | the numbers below it (a cut) | order | the lesser | the greater |
+| A list or string | its (position, item) pairs | `a` is a prefix of `b` | the longest common prefix | the longer, one being a prefix of the other |
+| A record or `HashMap` | its (key, value) pairs | every field of `a` is in `b`, equal | the fields equal in both | both, agreeing on shared keys |
+
+```apn
+[1] <= [1,2]                    # True: a prefix
+[1,2] <= [1,3]                  # False, as is [1,3] <= [1,2]
+"ab" <= "b"                     # False; compare "ab" "b" is -1 (dictionary order)
+[x = 1] <= [x = 1, y = 2]       # True
+[1,2] & [1,3]                   # [1]
+3 & 5                           # 3
+[x = 1] | [y = 2]               # [x = 1, y = 2]
+# [1,2] | [1,3]                 # error: neither starts the other
+Int & Positive                  # the Ints that are Positive
+```
+
+`a < b` is `a <= b` where `b` has more, and `>=`, `>` are the same turned
+round. Inclusion is a partial order: two lists neither of which starts the
+other are unordered. Sorting uses dictionary order instead, the standard
+library's `compare`. Values of different kinds do not compare (`3 <= Int` is an
+error: `3` is a member of `Int`, `3 : Int`, not a part of it), and a value is
+never a type's subset. A list or record holding types is a type.
+
+For types, `X = (A | B)` names a union, while a bare `X = A | B` declares
+constructors. `a <= b` is
 containment, every value of `a` being one of `b` (`Int <= Number`,
 `typeOf [1,2,3] <= List Int`, `[Int..] <= List Int`, `Pairs Int <= List Int`);
 `a < b` is containment where `b` has more, and `>=`, `>` are the same turned

@@ -179,7 +179,7 @@ Existing `map`, `filter`, `take`, `drop`, `zipWith`, `iterate`, `foldl`, and
 | `partition predicate xs` | `[matching,nonmatching]` |
 | `unique xs` | Preserve the first occurrence of each value |
 | `reverse value` | Overloaded for List and String; reverses finite lists or Unicode code points |
-| `compare x y` | Negative, zero, or positive integer |
+| `compare x y` | `-1`, `0` or `1` in dictionary order: numbers, Chars and Bools by order, strings and lists item by item (`<=` is inclusion: a prefix) |
 | `sort xs`, `sortOn project xs`, `sortBy comparator xs` | Stable ascending sort; comparator returns an integer |
 | `minimum xs`, `maximum xs` | Optional extrema |
 

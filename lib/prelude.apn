@@ -20,7 +20,7 @@ infixl 2 ||
 infixl 3 &&
 infixl 4 == != < > <= >= <$> <*>
 infixr 4 |
-infixr 5 ::
+infixr 5 :: &
 infixl 6 + - ++
 infixl 7 * / %
 infixr 8 ^
@@ -54,8 +54,12 @@ get False _ = b -> b
 Nil = []
 Cons = intrinsics.cons
 (::) = Cons
-# The union of two types: a value of either is one of it (Int | String).
+# Every value is a set: a type its values, a number the numbers below it, a
+# list or string its (position, item) pairs, a record its (key, value) pairs.
+# a <= b is inclusion ([1] <= [1,2], Int <= Number), a | b the union
+# (Int | String; 1 | 2 is 2) and a & b the intersection ([1,2] & [1,3] is [1]).
 a | b = intrinsics.union [a,b]
+a & b = intrinsics.intersection [a,b]
 (+) = intrinsics.add
 (-) = intrinsics.sub
 (++) = intrinsics.append
