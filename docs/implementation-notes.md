@@ -504,6 +504,9 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
   instance's own patterns meeting the value again. An enumeration's positions
   are `to Int` clauses (`enumerationPositions`) the runtime and the checker
   define with its declaration.
+- Every definition, `name params [: T] = body`, is parsed once
+  (`parseDefinition`): a capitalized one whose body holds `_` is a constructor
+  declaration, any other a clause whose body is ascribed `T` (`typedClauses`).
 - `Name params = _` is parser sugar (`constructorDeclaration`): the same
   `type` declaration `Name a = | Name a` makes, its fields from the
   parameters, so runtime and checker treat both alike; it declares again where

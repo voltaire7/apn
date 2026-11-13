@@ -459,7 +459,9 @@ print [f 1, h (+ 1), lam 5, v]`, ["[2,3,6,5]"]);
 for (const source of ["x: Int = 5", "f x: Int = x", "f (x: Int) = x", "g = (x: Int) -> x", "print { x: Int = 20; x }"]) {
     failure(`an unspaced ':' is no declaration: ${source}`, source, "spaces its ':'");
 }
-failure("a definition's type is declared on its own line", "f x y : Int = x + y", "declare f's type on a line of its own");
+// f x y : T = e types f x y, the call's result; typed without a body it is an error.
+failure("a call typed without a definition", "f x y : Int\nprint 1", "f with parameters is typed in its definition");
+example("a definition's : T is the type of its left side", "f x y : Int = x + y\nprint (f 2 3)", ["5"]);
 failure("a clause takes no more parameters than declared", "f : Int -> Int\nf a b = a\nprint 1", "declared with 1 parameter");
 failure("an ascribed ternary is parenthesized", "x = True ? 1 : 2 : Int\nprint x", "parenthesize a ternary");
 failure("a declared result is proved per clause", "app : Vect n a -> Vect m a -> Vect (n + m + 1) a\n" +

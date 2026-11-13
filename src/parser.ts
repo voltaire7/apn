@@ -1224,16 +1224,10 @@ class Parser {
                             } else {
                                 if (this.isTypeAlone()) {
                                     throw this.typeAloneError();
-                                } else if (this.isConstructorDeclaration()) {
-                                    const name = (this.peek() as { v: string }).v;
-                                    this.declareInto(stmts, this.parseConstructorDeclaration(tb.pos, rulesBefore(stmts, name)), def => ({ t: "typeDef", def }));
                                 } else if (this.isDef()) {
-                                    // Name params = _ declares a constructor, as at the top level.
-                                    const d = this.parseBlockDef(), [clause] = d.clauses;
-                                    if (/^[A-Z]/.test(d.name) && d.clauses.length === 1 && holdsPlaceholder(clause.body)) {
-                                        const rules = rulesBefore(stmts, d.name);
-                                        stmts.push({ t: "typeDef", def: constructorDeclaration(d.name, clause.params, tb.pos, clause.body.t === "placeholder" ? undefined : clause.body, undefined, rules).def });
-                                    } else joinClauses(stmts, d);
+                                    const made = this.parseDefinition(tb.pos, stmts);
+                                    if ("type" in made) this.declareInto(stmts, made.type, def => ({ t: "typeDef", def }));
+                                    else joinClauses(stmts, { t: "stmDef", ...made.def });
                                 }
                                 else stmts.push(this.tryItemAssign() ?? this.parseDelimitedExpr());
                             }
@@ -1776,6 +1770,8 @@ class Parser {
             if (t.k !== "ident") return false;
             // collect param patterns; a param must be a self-delimited pattern
             while (this.startsParam(this.peek()) || this.negativeLiteral()) this.parseConsPattern();
+            // f x : T = e: the type of f x, then its definition.
+            if (this.eatSym(":")) this.i = this.typeEnd("statement").end;
             return this.isSym("=") || this.isSym(":=");
         } catch {
             return false;
@@ -1851,8 +1847,23 @@ class Parser {
 
     // A definition inside a `{ }` block (a statement, not a value expression).
     parseBlockDef(): Extract<Expr, { t: "stmDef" }> {
-        const d = this.parseDefStatement();
+        const d = this.typedClauses(this.parseDefStatement());
         return { t: "stmDef", name: d.name, clauses: d.clauses };
+    }
+    // name params : T = body, T the type of name params: its body ascribed.
+    typedClauses(d: { name: string; clauses: DefClause[]; result?: Expr }): { name: string; clauses: DefClause[] } {
+        return d.result ? { name: d.name, clauses: d.clauses.map(c => ({ ...c, body: ascribed(c.body, d.result!, this.freshName()) })) } : d;
+    }
+    // A definition, name params [: T] = body, of any name. A capitalized one
+    // whose body holds _ declares a constructor (into T, if given), its rules
+    // the clauses just before it (see rulesBefore); any other is a clause.
+    parseDefinition(pos: number, before: Array<TopLevel | Expr>): { type: DataDef } | { def: { name: string; clauses: DefClause[] } } {
+        const d = this.parseDefStatement(), [clause] = d.clauses;
+        if (/^[A-Z]/.test(d.name) && holdsPlaceholder(clause.body)) {
+            const logic = clause.body.t === "placeholder" ? undefined : clause.body;
+            return { type: constructorDeclaration(d.name, clause.params, pos, logic, d.result, rulesBefore(before, d.name)).def };
+        }
+        return { def: this.typedClauses(d) };
     }
 
     // A token that can begin a definition parameter pattern.
@@ -1865,22 +1876,6 @@ class Parser {
         return false;
     }
 
-    // Lookahead: Name fields : T = _, a constructor declared into the type T.
-    isConstructorDeclaration(): boolean {
-        const save = this.i;
-        try {
-            const t = this.next();
-            if (t.k !== "ident" || !/^[A-Z]/.test(t.v)) return false;
-            while (this.startsParam(this.peek()) || this.negativeLiteral()) this.parseConsPattern();
-            if (!this.eatSym(":")) return false;
-            this.i = this.typeEnd("statement").end;
-            return this.isSym("=");
-        } catch {
-            return false;
-        } finally {
-            this.i = save;
-        }
-    }
     // Lookahead: Name params : _ (or : Name params) alone, which declares
     // nothing: a type is a constructor declared into Type (Opt a : Type = _).
     isTypeAlone(): boolean {
@@ -1903,17 +1898,6 @@ class Parser {
         for (let j = this.i; this.toks[j]?.k === "ident"; j++) head.push((this.toks[j] as { v: string }).v);
         return new APNError("parse", "a type is declared into Type", { pos: at.pos, hint: `${head.join(" ")} : Type = _` });
     }
-    // Name fields : T = _ (isConstructorDeclaration() returned true).
-    parseConstructorDeclaration(pos: number, rules: DefClause[] = []): DataDef {
-        const name = (this.next() as { v: string }).v, params: Pattern[] = [];
-        while (this.startsParam(this.peek()) || this.negativeLiteral()) params.push(this.parameter());
-        this.expectSym(":");
-        const owner = this.typeExpr(this.typeEnd("statement").end);
-        this.expectSym("=");
-        const body = this.parseDefBody();
-        if (!holdsPlaceholder(body)) throw new APNError("parse", "a constructor declaration's body is _, or logic making it", { pos, hint: `${name} (x : Float) : Shape = _` });
-        return constructorDeclaration(name, params, pos, body.t === "placeholder" ? undefined : body, owner, rules).def;
-    }
     // A constructor declared into a type (Square (x : Float) : Shape = _)
     // joins that type's declaration earlier in the same statements; the run
     // and the checker add it to one declared elsewhere (see extendedDeclaration).
@@ -1926,17 +1910,21 @@ class Parser {
     }
 
     // Parse  name p1 p2 = body  (isDef() must already have returned true).
-    parseDefStatement(): { name: string; clauses: DefClause[] } {
+    parseDefStatement(): { name: string; clauses: DefClause[]; result?: Expr } {
         const name = (this.next() as { v: string }).v;
         const params: Pattern[] = [];
         // Haskell-style params are PATTERNS:  f [x, y] = ..., f (x :: rest) = ...
         while (this.startsParam(this.peek()) || this.negativeLiteral()) params.push(this.parameter());
+        // f x : T = e: T is the type of f x, what its = gives, as x : T = v
+        // is v's (f x : Int -> Int = ... gives a function).
+        const result = this.eatSym(":") ? this.typeExpr(this.typeEnd("statement").end) : undefined;
         const equals = this.next() as { v: string; pos: number };
         if (equals.v === ":=") {
             throw new APNError("parse", "APN defines with =, not :=", { pos: equals.pos,
                 hint: `${name} = Int names a type; ${name} (Int x) = _ declares a new one` });
         }
         let body = this.parseDefBody(equals.v);
+        if (result) return { name, clauses: [{ params, body }], result };
         // f = Int x -> ... is the curried spelling of f (Int x) = ...: the
         // same clause, so another one overloads it the same way.
         let guard: Expr | undefined;
@@ -2065,8 +2053,10 @@ class Parser {
     isDeclaration(grouped = false): boolean {
         const name = this.peek(), colon = this.peek(1);
         if (name.k !== "ident" || !/^[a-z_]/.test(name.v)) return false;
-        if (colon.k === "sym" && colon.v === ":") return !grouped || !this.ascribesGroup();
-        // f x : T = ... types a definition where its own line would: say so.
+        // x : T = v is a definition (isDef); x : T alone declares.
+        if (colon.k === "sym" && colon.v === ":") return (!grouped || !this.ascribesGroup()) && !this.isDef();
+        // f x : T = e types f x, a definition (see isDef); without = it
+        // declares nothing.
         let depth = 0;
         for (let j = this.i + 1; ; j++) {
             const t = this.toks[j];
@@ -2076,9 +2066,9 @@ class Parser {
             else if ([")", "]", "}"].includes(t.v)) { if (!depth--) return false; }
             else if (!depth && ["=", "?", ";", "<-", "->"].includes(t.v)) return false;
             else if (!depth && t.v === ":") {
-                if (grouped) return false;
+                if (grouped || this.isDef()) return false;
                 this.seen = t;
-                throw new Error(`Parser: declare ${name.v}'s type on a line of its own, before its definition: ${name.v} : A -> B`);
+                throw new Error(`Parser: ${name.v} with parameters is typed in its definition (${name.v} x : T = ...), or on a line of its own: ${name.v} : A -> B`);
             }
         }
     }
@@ -2114,11 +2104,6 @@ class Parser {
             this.i = from;
             return this.typeExpr(n < arrows.length ? arrows[n] : end);
         });
-        const whole = () => { this.i = start; return this.typeExpr(end); };
-        if (this.isSym("=")) {
-            const type = whole(), equals = this.next() as { v: string };
-            return { t: "def", name, clauses: [{ params: [], body: ascribed(this.parseDefBody(equals.v), type, this.freshName()) }] };
-        }
         const marker: Extract<TopLevel, { t: "expr" }> = { t: "expr", value: { t: "placeholder" } };
         // The function type after the first k pieces, for a clause with k parameters.
         const rest = (k: number): Expr => {
@@ -2440,26 +2425,12 @@ class Parser {
                 }
                 // Fresh capitalized definitions are type aliases. Existing
                 // constructors were handled as destructuring bindings above.
-                if (/^[A-Z]/.test(t.v)) {
-                    if (this.isConstructorDeclaration()) {
-                        this.declareInto(out, this.parseConstructorDeclaration(t.pos, rulesBefore(out, t.v)), def => ({ t: "type", def }));
-                        continue;
-                    }
-                    if (this.isDef()) {
-                        const declaration = this.parseDefStatement();
-                        const [clause] = declaration.clauses;
-                        if (holdsPlaceholder(clause.body)) {
-                            const logic = clause.body.t === "placeholder" ? undefined : clause.body;
-                            out.push(constructorDeclaration(declaration.name, clause.params, t.pos, logic, undefined, rulesBefore(out, declaration.name)));
-                        } else out.push({ t: "def", ...declaration });
-                        continue;
-                    }
-                    out.push({ t: "expr", value: this.parseExpr() });
-                    continue;
-                }
                 if (this.isDef()) {
-                    const d = this.parseDefStatement();
-                    out.push({ t: "def", name: d.name, clauses: d.clauses });
+                    const made = this.parseDefinition(t.pos, out);
+                    if ("type" in made) this.declareInto(out, made.type, def => ({ t: "type", def }));
+                    else out.push({ t: "def", ...made.def });
+                } else if (/^[A-Z]/.test(t.v)) {
+                    out.push({ t: "expr", value: this.parseExpr() });
                 } else {
                     const assignment = this.tryItemAssign();
                     if (assignment) out.push(assignment as TopLevel);

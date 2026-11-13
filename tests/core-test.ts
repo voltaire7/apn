@@ -113,6 +113,12 @@ for (const checked of [true, false]) {
         // Without : T a constructor is its own type; one shadows a built-in type.
         ["Type = _\n[Type, typeOf Type, isType Type Type, isType Type Int]", "[Type,Type,True,False]"],
         ["Type : Type = _\nT : T = _\n[typeOf Type, typeOf T, isType Type Int]", "[Type,T,False]"],
+        // left : T = body for any name: T is the type of the left, a call's
+        // result where it has parameters.
+        ["func (x : Int) (y : Int) : Int = x + y\n[func 2 3, typeOf func]", "[5, Int -> Int -> Int]"],
+        ["adder n : Int -> Int = x -> x + n\nfunc Int Int : Int = 123\n[adder 2 3, func Int Int]", "[5,123]"],
+        ["Twice t : Type = [t,t]\nPi : Float = 3\n[([1,2] : Twice Int), Pi]", "[[1,2],3.0]"],
+        ["g = {\n    h (x : Int) : Int = x * 2\n    Box x : Box x = _\n    [h 4, Box 1]\n}\ng", "[8, Box 1]"],
         // A conversion instance takes a constructor's own type as written.
         [CTOR + "to (Box Int) (n : Int) = Box n\nf (b : Box Int) = b\n[(3 : Box Int), f 4]", "[Box 3, Box 4]"],
         [MAYBE + "[typeOf Nada, typeOf (Just Nada)]", "[Maybe x, Maybe (Maybe x)]"],
@@ -137,6 +143,8 @@ for (const checked of [true, false]) {
         ["Big = (n : Int) | n > 2\n(1 : Int & Big)", "is not in Int & Big"],
         ["Add x 0 = x\nAdd (x : Int) = _\n1", "every clause of Add takes 1 parameters, as its declaration"],
         ["Opt a : _\n1", "a type is declared into Type"],
+        ["f x : Int = \"no\"\nf 1", checked ? "cannot use String where Int is required" : "Int expects a number"],
+        ["f x : Int\n1", "f with parameters is typed in its definition"],
         ["Box x : _ = _\n1", "a constructor is its own type without : T"],
         ["Opt (a : Int) : Type = _\n1", "a type's parameters are names"],
         // A name keeps its arity: a type is given all its parameters.

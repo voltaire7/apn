@@ -301,6 +301,7 @@ function helpText(): string {
         `  Positive = (n : Int) | n > 0   (a refinement: the Ints for which the condition holds)`,
         `  Box x = _   (a constructor: Box 5 stands for itself; Rect (w : Float) (h : Float) = _ converts fields)`,
         `  UserId (id : Int) = _   (a distinct type: none of Int's operations; UserId x patterns unwrap)`,
+        `  f (x : Int) : Int = x + x   (: T after the parameters is the type of f x, its result)`,
         `  Circle (r : Float) : Shape = _   (a constructor of Shape; Shape = Circle Float | ... stands for it)`,
         `  Opt a : Type = _   (a type: a constructor declared into Type; constructors are declared into it)`,
         `  Add x (Num 0) = x, then Add x y = _   (rules before a constructor's declaration run first)`,

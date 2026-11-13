@@ -319,18 +319,29 @@ never hangs the prompt.
 
 ### Declarations and ascription
 
+Every definition is `left : T = body`, both `: T` and the body optional, and
+`: T` is the type of what is on the left of it, as `= body` is its value.
 `name : T` declares the definition of `name` right after it in the same
-block; `name : T = value` declares and defines at once. A declaration no
-definition follows defines the name as its type's zero, as a record slot does
+block; `name : T = value` declares and defines at once. With parameters, the
+left is the function applied to them, so `T` is the type of its result:
+`f (x : Int) : Int = x + x` is `f : Int -> Int` with `f x = x + x`, and
+`adder n : Int -> Int = x -> x + n` gives a function. The left is a pattern, so
+`f Int Int : Int = 123` is the clause for the types `Int`, `Int` themselves,
+not a signature. A declaration no definition follows defines the name as its
+type's zero, as a record slot does
 ([zero initialization](zero-initialization.md)): `x : Int` alone is `x = ([] : [x :
-Int]).x`, so `0`. A definition's type is declared on a line of its own
-(`f x : Int = x` is an error). Lowercase names in the type that
-nothing binds are its variables, the same name the same type throughout:
+Int]).x`, so `0`; with parameters (`f x : Int` alone) it is an error, as a
+function has no zero. A capitalized definition whose body holds `_` is a
+constructor, `: T` the type it is declared into
+([variants](templates-and-types.md#variants-parameters-and-distinct-wrappers)).
+Lowercase names in the type that nothing binds are its variables, the same
+name the same type throughout:
 
 ```apn
 x : Int32 = 123
 y : Int32
 y = 123
+double (x : Int) : Int = x + x
 
 append : Vect n a -> Vect m a -> Vect (n + m) a
 append [] ys = ys
