@@ -779,8 +779,9 @@ Ordinary named definitions do not execute their bodies when defined.
 A definition whose body is `_` makes data, whatever its name's case: `foo = _`
 is a value that is itself, `f x = _` makes `f 2` stand for itself (see
 [variants](templates-and-types.md#variants-parameters-and-distinct-wrappers)).
-Code still to write is `fail "todo"`. Elsewhere the `_` expression raises "not
-implemented" when evaluated. It remains a
+Code still to write is `fail "todo"`. Elsewhere, as a value (`g _`), `_` means
+nothing: an error, reported by the checker and raised if it runs (code read as
+code, `toAST [_]`, holds it). It remains a
 wildcard in patterns, and given to a type or a constructor it is any type, as
 there: `List _` is every list, so `typeOf x <= List _`, `isType (List _) x` and
 `(xs : List _)` agree, and `Option Int <= Option _`. It prints `_`. Both sides of `=` are required: `foo =`, `foo = ;`, and

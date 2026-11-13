@@ -15,7 +15,7 @@ import { parseLiteral, textNatives } from "./text-natives.ts";
 import { bundledText, IMPORT_ONE, loadPath, type ModuleFile, readLoad, resolveModule, sourcePath, unknownModule } from "./modules.ts";
 import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
-import { APNError, didYouMean, typeApplied, withArticle } from "./errors.ts";
+import { APNError, didYouMean, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, type HeadKind, resolveHeads, declaresNames, withinScope, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, type PatternHead, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
@@ -1562,7 +1562,7 @@ export class Interpreter {
                     case "bool": r = mkBool(e.v); break;
                     case "string": r = mkStr(e.v); break;
                     case "char": r = { kind: "char", v: e.v }; break;
-                    case "placeholder": throw new APNError("runtime", "not implemented: '_' placeholder");
+                    case "placeholder": throw placeholderError();
                     case "var": {
                         const v = this.env.get(e.name);
                         if (v === undefined) {

@@ -191,8 +191,8 @@ for (const checked of [true, false]) {
         ['std <- import "std"; use std.function\nSpan (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _\n([s = Span 2 1] : [s : Span Int Int])', "empty span"],
         ["Low (_ : Float) = 1 > 0 ? Low 1 : _\n1", "a constructor with logic names each field"],
         // A lowercase definition's _ stays unfinished.
-        // _ as an argument is still code to write; as a body it makes data.
-        ["g x = x + 1\ng _", "not implemented"],
+        // _ as an argument means nothing; as a body it makes data.
+        ["g x = x + 1\ng _", "_ stands for nothing here"],
     ] as const) Deno.test(`core rejects (checked=${checked}): ${source}`, () => {
         const actual = failure(source, checked);
         if (!actual.includes(message)) throw new Error(actual);

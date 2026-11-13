@@ -50,7 +50,7 @@ for (const [code, error] of [
     ['2 ~ [1 -> 0]', 'non-exhaustive match'],
     ['1 ~ [_ -> missing, _ -> 42]', 'unbound variable'],
     ['1 ~ [x | missing -> 0, _ -> 42]', 'unbound variable'],
-    ['1 ~ [_ -> _, _ -> 42]', 'not implemented'],
+    ['1 ~ [_ -> _, _ -> 42]', '_ stands for nothing here'],
     ['1 ~ [42]', 'one remaining argument'],
     // Ranking reads every alternative (not the bodies).
     ['3 ~ (_ -> 42)::missing', 'unbound variable'],

@@ -7,7 +7,7 @@ import { IMPORT_ONE, standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, numericWithin, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
-import { APNError, didYouMean, formatFileReadError, typeApplied, withArticle } from "./errors.ts";
+import { APNError, didYouMean, formatFileReadError, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import { bindingItem, DEFAULT_FIXITY, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
 import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
@@ -3778,8 +3778,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 return callees.has(e) && trustsShape(entry) ? type : withoutShapes(type);
             }
-            case "placeholder":
-                return variable();
+            // _ means nothing as a value (as at runtime), but is code where
+            // code is read (toAST [_]).
+            case "placeholder": {
+                if (readingCode) return variable();
+                const { message, hint } = placeholderError();
+                return problem(message, e, hint);
+            }
             case "list": {
                 // [a, b] is a :: b :: [], with what :: means here, as at runtime.
                 if (e.v.length && !e.v.some(binding) && !preludeCons(scope)) return infer(listExpansion(e), scope, expected);
@@ -3859,6 +3864,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (written) return inferMatch(written, e, scope);
                 const selection = boolSelection(e);
                 if (selection && preludeSelection(selection, scope)) return inferMatch(selection, e, scope);
+                // A call reading code (toAST [_]) reads its argument as code.
+                if (e.f.t === "var" && READS_CODE.has(e.f.name) && !readingCalls.has(e)) {
+                    readingCalls.add(e);
+                    readingCode++;
+                    try { return infer(e, scope, expected); } finally { readingCode--; }
+                }
                 // A constructor whose rules give other types (sin 0 = 0), given
                 // arguments no rule can take (sin 3): its own value.
                 {
@@ -5266,6 +5277,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Names bound to a constructor: its own tag (NewBox = Box).
     const constructorNames = new Map<string, string>();
+    // Inside a call reading code (see infer's app).
+    let readingCode = 0;
+    const readingCalls = new WeakSet<Expr>();
     // Calls of a widened constructor no rule takes (see infer's app).
     const ownCalls = new WeakSet<Expr>();
     function computed(e: Expr, scope: Scope): Known {

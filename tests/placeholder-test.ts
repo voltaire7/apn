@@ -20,17 +20,17 @@ Deno.test("a body of _ makes data", () => {
     const shown = interp.renderString(interp.run(parse("[foo, f 1]")));
     if (shown !== "[foo, f 1]") throw new Error(shown);
 });
-// _ elsewhere is code still to write: an error when demanded.
+// _ elsewhere means nothing: an error when demanded.
 Deno.test("placeholder expressions are silent until demanded", () => {
     const interp = new Interpreter();
     interp.run(parse("g x = x + 1"));
     for (const source of ["g _", "_"]) {
         try { interp.run(parse(source)); }
         catch (error) {
-            if (error instanceof APNError && error.kind === "runtime" && error.message.includes("not implemented")) continue;
+            if (error instanceof APNError && error.kind === "runtime" && error.message.includes("_ stands for nothing here")) continue;
             throw error;
         }
-        throw new Error(`Expected a not implemented error for ${source}`);
+        throw new Error(`Expected a _ error for ${source}`);
     }
     if (interp.renderString(interp.run(parse("1 + 2"))) !== "3") throw new Error("Interpreter did not recover");
 });

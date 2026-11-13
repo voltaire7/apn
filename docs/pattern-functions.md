@@ -336,7 +336,7 @@ independent. Inference can constrain how the body uses a field, but `_` adds no
 conversion and does not opt out of static checking like `Dynamic`.
 
 This meaning applies in schema patterns. Ordinary expressions such as
-`value = _` makes data and `[x : _]` contains unfinished code; `_` remains a
+`value = _` makes data and `[x : _]` gives a field any type; `_` remains a
 wildcard in ordinary matching patterns.
 
 ## Dotted patterns: keep the whole value
