@@ -308,7 +308,7 @@ print (Vec3 [x = 1])             # => [x = 1.0, y = 0.0, z = 0.0]
 print ([x = 1.1] [10])           # => [x = 10.0]
 # [x = 1] [2.5] and [x = False] [1] are errors
 # [f = (* 2)] [1]              # type error: cannot use Int where a -> b is required
-print ([type : Type] [Int])      # => [type : Int]
+print ([Int] : [type : Type])      # => [type : Int]
 
 # block scope: the update shadows obj only INSIDE the { }  (a bare block
 # statement runs eagerly — a 0-arg DEF like  w = { ... } declares a
@@ -1269,8 +1269,8 @@ print [Char,Char]."a😀"                  # => ['a','😀']
 print (Int * [1,2,3,4])       # => [1,2,3,4]
 print [Int,String].[123,"hello"] # => [123,"hello"]
 print (take 3 (map Int [0..]))         # => [0,1,2]
-print ([x : Int, y = 0] [x = 1, y = 2]) # => [x = 1, y = 2]
-print ([x : Int, y : Int] [x = 123]) # => [x = 123, y = 0]
+print ([x = 1, y = 2] : [x : Int, y = 0]) # => [x = 1, y = 2]
+print ([x = 123] : [x : Int, y : Int]) # => [x = 123, y = 0]
 # [Int].[1,2] and [Int].[] error: one template slot requires one value.
 print [isType [Int] [1], isType [Int] [1,2]] # => [True,False]
 slots = [Int].[0]
@@ -1278,7 +1278,7 @@ slots 0 = floor .2
 print slots                         # => [0]
 slots 0 = 123
 print slots                         # => [123]
-recordSlots = [x : Int, y : Int] []
+recordSlots = [] : [x : Int, y : Int]
 recordSlots.y = 321
 print recordSlots                   # => [x = 0, y = 321]
 recordSlots "y" = floor .2
@@ -1827,9 +1827,9 @@ print (ZeroVector [1,2,3])        # => [x = 1.0, y = 2.0, z = 3.0]
 print (typeOf (1 : Int))             # => Int
 print (ZeroVector : Type)            # => [x : Float, y : Float, z : Float]
 DefaultChoice a = Present a | Absent
-print ([choice : DefaultChoice Int] []) # => [choice = Absent]
+print ([] : [choice : DefaultChoice Int]) # => [choice = Absent]
 DefaultUser = | MakeDefaultUser Int String
-print ([user : DefaultUser] [])       # => [user = MakeDefaultUser 0 ""]
+print ([] : [user : DefaultUser])       # => [user = MakeDefaultUser 0 ""]
 # Int .2, cast Int .2 and [Int].[.2] reject lossy conversion.
 print (floor .2 : Int)               # => 0
 
@@ -1839,7 +1839,7 @@ selectedIndex = 0
 indexedValues selectedIndex = 1
 indexedValues (selectedIndex + 1) = indexedValues selectedIndex + 1
 print indexedValues                 # => [1,2]
-indexedObject = [x : Int] []
+indexedObject = [] : [x : Int]
 selectedKey = "x"
 indexedObject selectedKey = 3
 print indexedObject                 # => [x = 3]

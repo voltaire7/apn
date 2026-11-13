@@ -1,19 +1,25 @@
 # Zero is initialization
 
-Types are constructors, not their zero values. `Int` prints `Int`, `Int + 1`
-is an error, and `Int == 0` is false. Initialization happens when applying a
-record template to a list or record of supplied fields:
+Types are not their zero values. `Int` prints `Int`, `Int + 1` is an error,
+and `Int == 0` is false. A value is given a type by ascription, as everywhere:
+a list or record of supplied fields ascribed a record template is initialized
+(`x : T` alone, a [declaration](semantics.md#declarations-and-ascription), is
+the same for one name):
 
 ```apn
 Vector3 = [x : Float, y : Float, z : Float]
-vec = Vector3 []        # [x = 0.0, y = 0.0, z = 0.0]
+vec = [] : Vector3      # [x = 0.0, y = 0.0, z = 0.0]
 vec.x = 1              # [x = 1.0, y = 0.0, z = 0.0]
-Vector3 [1,2,3]    # [x = 1.0, y = 2.0, z = 3.0]
-# Vector3 [1,2]       # error: positional fields must be complete
-Vector3 [z = 3]        # [x = 0.0, y = 0.0, z = 3.0]
+[1,2,3] : Vector3      # [x = 1.0, y = 2.0, z = 3.0]
+# [1,2] : Vector3      # error: positional fields must be complete
+[z = 3] : Vector3      # [x = 0.0, y = 0.0, z = 3.0]
 Vector3                # Vector3; Type Vector3 is [x : Float, y : Float, z : Float]
 typeOf vec             # Vector3
 ```
+
+Applying a template is field assignment, as for any record
+([records](semantics.md#records)): `Vector3 [z = 3]` is the template with that
+slot set, `[x : Float, y : Float, z = 3.0]`, and `Vector3 []` is `Vector3`.
 
 Supplied fields convert to their slots' types. Omitted type slots initialize to
 the defaults below; omitted concrete values retain their defaults. Nested
@@ -32,7 +38,7 @@ remain type descriptors; the shared template is unchanged:
 ```apn
 vec = Vector3
 vec.x = 1              # [x = 1.0, y : Float, z : Float]
-vec []                 # [x = 1.0, y = 0.0, z = 0.0]
+[] : vec               # [x = 1.0, y = 0.0, z = 0.0]
 ```
 
 A constructed Float field keeps its type: assigning `Int` to it fails with
@@ -93,9 +99,9 @@ initializing the payload fields:
 
 ```apn
 Option a = Some a | None
-[choice : Option Int] []    # [choice = None]
+([] : [choice : Option Int])    # [choice = None]
 User = | MkUser Int String
-[user : User] []            # [user = MkUser 0 ""]
+([] : [user : User])            # [user = MkUser 0 ""]
 User                       # User, the type descriptor
 ```
 

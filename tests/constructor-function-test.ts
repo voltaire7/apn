@@ -51,7 +51,7 @@ for (const checked of [true, false]) {
         ["Row = Vect 3 Int\n[Row, typeOf ([1,2,3] : Row), typeOf [1,2,3]]", "[Row,Row,[Int,Int,Int]]"],
         ["Point = [x : Float, y : Float]\np = Point [x = 1, y = 2]\nq = p\nq.x = 5\n[typeOf p, typeOf q, (Point : Type), p == [x = 1.0, y = 2.0]]",
             "[Point, Point, [x : Float, y : Float], True]"],
-        ["Point = [x : Float, y : Float]\ntypeOf ([pt : Point] []).pt", "Point"],
+        ["Point = [x : Float, y : Float]\ntypeOf ([] : [pt : Point]).pt", "Point"],
         // (c : Count) takes a plain Int as (x : Int32) does, binding it; an
         // Int's own clause, exact, is chosen first.
         ["Count = Int\nf (c : Count) = typeOf c\n[f 5, f (5 : Count)]", "[Int,Int]"],

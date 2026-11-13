@@ -2081,11 +2081,11 @@ class Parser {
             const defines = (item: TopLevel | Expr | undefined): item is Extract<TopLevel, { t: "def" }> | Extract<Expr, { t: "stmDef" }> =>
                 !!item && (item.t === "def" || item.t === "stmDef") && item.name === name;
             // Alone, it defines the name as its type's zero, as a record slot
-            // does: x : Int is x = ([x : Int] []).x.
+            // does: x : Int is x = ([] : [x : Int]).x.
             if (!defines(items[n + 1])) {
                 const type = declaration.rest(0);
                 const slots: Expr = { t: "record", v: [[name, type]], items: [{ t: "stmDef", name, clauses: [{ params: [], body: type }] }], declared: [name] };
-                const zero: Expr = { t: "recordAccess", rec: { t: "app", f: slots, a: { t: "list", v: [] } }, field: name, argument: { t: "var", name } };
+                const zero: Expr = { t: "recordAccess", rec: { t: "app", f: slots, a: { t: "list", v: [] }, ascribed: true }, field: name, argument: { t: "var", name } };
                 const def = { name, clauses: [{ params: [], body: zero }] };
                 items[n] = items[n] === declaration.marker ? { t: "def", ...def } : { t: "stmDef", ...def } as Expr;
                 continue;

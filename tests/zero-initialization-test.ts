@@ -21,27 +21,27 @@ for (const [source, expected] of [
     ['[].[]', '[]'],
     ['take 2 (map Int [1,2,missing])', '[1,2]'],
     ['[Int * 3, 3 * Int, 3 * (0 : Int)]', '[[0,1,2],[0,1,2],0]'],
-    ['V = [x : Float, y : Float, z : Float]\nv = V []\nv.x = 1\n[v, (V : Type)]', '[[x = 1.0, y = 0.0, z = 0.0], [x : Float, y : Float, z : Float]]'],
-    ['V = [x : Float, y : Float]\nV [x = 1]', '[x = 1.0, y = 0.0]'],
+    ['V = [x : Float, y : Float, z : Float]\nv = [] : V\nv.x = 1\n[v, (V : Type)]', '[[x = 1.0, y = 0.0, z = 0.0], [x : Float, y : Float, z : Float]]'],
+    ['V = [x : Float, y : Float]\n([x = 1] : V)', '[x = 1.0, y = 0.0]'],
     ['V = [x : Float, y : Float]\nV [1,2]', '[x = 1.0, y = 2.0]'],
-    ['v = [x : Float] []\nv.x = 2\ntypeOf v.x', 'Float'],
-    ['v = [x : Int8] []\nv.x = 12\nv', '[x = 12]'],
-    ['[x : Float, label = "origin", count = 7] []', '[x = 0.0, label = "origin", count = 7]'],
-    ['[x : Int, y : Int] [extra = 3]', '[x = 0, y = 0, extra = 3]'],
+    ['v = [] : [x : Float]\nv.x = 2\ntypeOf v.x', 'Float'],
+    ['v = [] : [x : Int8]\nv.x = 12\nv', '[x = 12]'],
+    ['([] : [x : Float, label = "origin", count = 7])', '[x = 0.0, label = "origin", count = 7]'],
+    ['([extra = 3] : [x : Int, y : Int])', '[x = 0, y = 0, extra = 3]'],
     // A declaration no definition follows is its type's zero, as a slot is.
     ['x : Int\ny : [a : Float]\nU (v : Int) = _\nu : U Int\n[x,y,u]', '[0, [a = 0.0], U 0]'],
     ['x = 3\nx : String\nx', '""'],
     ['g n = {\n    y : Int\n    n + y\n}\ng 1', '1'],
-    ['[nested : [x : Float], xs : [Int]] []', '[nested = [x = 0.0], xs = [0]]'],
-    ['v = [x : Int, bad : Function] []\nv.x', '0'],
+    ['([] : [nested : [x : Float], xs : [Int]])', '[nested = [x = 0.0], xs = [0]]'],
+    ['v = [] : [x : Int, bad : Function]\nv.x', '0'],
     ['cell = Mutable 1\nv = [cell = cell] []\nset v.cell $ 2\ncell', '2'],
     ['Option a = Some a | None\n[Option, Option Int]', '[Option, Option Int]'],
-    ['Option a = Some a | None\n[choice : Option Int] []', '[choice = None]'],
-    ['User = | MkUser Int String\n[user : User] []', '[user = MkUser 0 ""]'],
-    ['BoxType a = | MkBox a\n[box = BoxType (BoxType Int)] []', '[box = MkBox (MkBox 0)]'],
-    ['Node = Next Node | End\n[node : Node] []', '[node = End]'],
+    ['Option a = Some a | None\n([] : [choice : Option Int])', '[choice = None]'],
+    ['User = | MkUser Int String\n([] : [user : User])', '[user = MkUser 0 ""]'],
+    ['BoxType a = | MkBox a\n([] : [box = BoxType (BoxType Int)])', '[box = MkBox (MkBox 0)]'],
+    ['Node = Next Node | End\n([] : [node : Node])', '[node = End]'],
     ['Node = | Next Node\nNode', 'Node'],
-    ['[fn : Function] [x -> x]', '[fn = x -> x]'],
+    ['([x -> x] : [fn : Function])', '[fn = x -> x]'],
     ['(v -> v.fn 2) $ [fn = (+ 1)] []', '3'],
     ['[(floor .2 : Int), (truncate -1.7 : Int), (inexact 9007199254740993 : Float)]', '[0,-1,9007199254740992.0]'],
 ] as const) Deno.test(`construction defaults: ${source}`, () => {
@@ -56,7 +56,7 @@ for (const [type, expected] of [
     ['Bool', 'False'], ['String', '""'], ['Char', "'\\0'"], ['[]', '[]'],
     ['List', '[]'], ['Record', '[]'], ['HashMap', 'HashMap []'], ['Pointer', 'Pointer 0x0'],
 ]) Deno.test(`omitted ${type} slot initializes`, () => {
-    const actual = result(`[value = ${type}] []`);
+    const actual = result(`([] : [value = ${type}])`);
     if (actual !== `[value = ${expected}]`) throw new Error(actual);
 });
 for (const source of [
@@ -64,12 +64,12 @@ for (const source of [
  'String ++ "hi"', 'length List', '[Int,Float] + [1,2]',
     'f (x : Int) = x + 1\nf Int', 'f (x : Bool) = x\nf Bool',
     '(.2 : Int)', 'cast Int .2', '[Int].[.2]',
-    'v = [x : Int] []\nv.x = .2',
-    'v = [x : Int8] []\nv.x = 128',
-    '[x : Int] [1,2]',
-    'Node = | Next Node\n[node : Node] []',
-    'BoxType a = | MkBox a\n[box : BoxType] []',
-    '[fn : Function] []', '[cell : Mutable] []', '[ty : Type] []',
+    'v = [] : [x : Int]\nv.x = .2',
+    'v = [] : [x : Int8]\nv.x = 128',
+    '([1,2] : [x : Int])',
+    'Node = | Next Node\n([] : [node : Node])',
+    'BoxType a = | MkBox a\n([] : [box : BoxType])',
+    '([] : [fn : Function])', '([] : [cell : Mutable])', '([] : [ty : Type])',
 ]) Deno.test(`reject invalid construction or bare-type data: ${source}`, () => {
     try { result(source); } catch { return; }
     throw new Error('Expected error');
@@ -78,7 +78,7 @@ for (const source of [
 Deno.test("failed typed-value conversion preserves the record", () => {
     for (const assignment of ['v.x = .2', 'v "x" = .2', 'v.[x,y] = [.2,2]']) {
         const i = new Interpreter();
-        i.run(parseDocument('v = [x : Int, y : Int] []'));
+        i.run(parseDocument('v = [] : [x : Int, y : Int]'));
         let rejected = false;
         try { i.run(parseDocument(assignment)); } catch (e) {
             if (!String(e).includes('lossy conversion')) throw e;

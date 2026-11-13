@@ -1586,6 +1586,8 @@ export class Interpreter {
                         const ascribed = e.ascribed ? this.force(head) : undefined;
                         const type = ascribed && (this.sharedType(ascribed) ?? ascribed);
                         if (type?.kind === "type") { r = this.typeValue(type, argument); break; }
+                        // A record or list of types makes its value ([] : [v : Int]).
+                        if (ascribed && (ascribed.kind === "record" || this.isList(ascribed) && this.holdsType(ascribed) || this.asWritten.has(ascribed))) { r = this.conform(ascribed, argument); break; }
                         this.writtenApplication = !e.ascribed;
                         const result = this.apply(head, argument, false, true, tailLoad);
                         if (result instanceof TailCall) next = result; else r = result;
@@ -2476,39 +2478,12 @@ export class Interpreter {
                     // Application uses the exact string, including any quote characters.
                     return this.recordField(f, carg.v);
                 }
+                // Fields given by name, or all of them in order (r [10] is r
+                // [x = 10]): a copy with them, exactly as by field assignment
+                // (model [name = n]; Vector3 [x = 1] is Vector3.x = 1). A
+                // record's value is made by ascription ([] : Vector3).
                 if (carg.kind === "list" || carg.kind === "record") {
-                    // Fields given by name, or all of them in order (r [10] is r [x = 10]).
-                    if (carg.kind === "list" && carg.v.length !== 0 && carg.v.length !== f.v.length) {
-                        throw new Error(`Runtime: field count (${f.v.length}) does not match list size (${carg.v.length})`);
-                    }
-                    const given: Array<[string, Value]> = carg.kind === "record" ? carg.v : carg.v.map((value, i) => [f.v[i][0], value]);
-                    const slots = new Map(f.v);
-                    // A record holding a type, given values (not types, unless for a
-                    // Type field), builds one; any other is updated exactly as by
-                    // field assignment (model [name = n]; Vector3 [x : Int] is
-                    // Vector3.x = Int).
-                    // (A given field's slot is forced to tell, as assigning it would.)
-                    // (A field bound to a type, x = Int, is a value, not a slot.)
-                    const typeGiven = (key: string, value: Value) => this.holdsType(value) && !(carg.kind === "record" && carg.bound?.has(key));
-                    const building = !given.some(([key, value]) => typeGiven(key, value) && !this.typeOfTypes(slots.get(key)))
-                        && (!given.length || this.holdsType(f) || given.some(([key]) => slots.has(key) && !f.bound?.has(key) && this.holdsType(this.force(slots.get(key)!))));
-                    if (!building) return this.assignFields(f, given.map(([key, value]) => [key, this.demand(value)]));
-                    const supplied = new Map(given);
-                    for (const [key, slot] of f.v) {
-                        if (slot.kind === "type" && slot.name === "$any" && !supplied.has(key)) {
-                            throw new APNError("runtime", `missing field '${key}'`);
-                        }
-                    }
-                    // Each given field takes its value as by assignment; the others
-                    // take their defaults (a type's zero value).
-                    const out: [string, Value][] = f.v.map(([key, slot]) => [key, this.defer(() => supplied.has(key)
-                        ? this.assignSlot(slot, this.reference(supplied.get(key)!)) : this.defaultField(slot, []))]);
-                    for (const [key, value] of given) if (!slots.has(key)) out.push([key, value]);
-                    // What it builds holds values: every field is bound.
-                    const result: Value = { kind: "record", v: out, bound: new Set(out.map(([key]) => key)) };
-                    // A schema's value (Body [...]) is declared its type, as List T's.
-                    if (this.isTypeValue(f)) this.declaredTypes.set(result, f);
-                    return result;
+                    return this.assignFields(f, this.givenFields(f, carg).map(([key, value]) => [key, this.demand(value)]));
                 }
                 if (carg.kind === "int") {
                     let i = carg.v;
@@ -3046,6 +3021,7 @@ export class Interpreter {
             if (chars) return standardNative(this, "chars", [value]);
             // A list template ([Char], [Int,String]) converts position by position, as cast does.
             if (this.isList(type) && this.isTypeValue(type)) return this.templateList(type, value);
+            if (type.kind === "record" && this.isTypeValue(type)) return this.buildRecord(type, value);
             if (this.isTypeValue(type)) return this.apply(type, value);
         } else {
             if (is("String")) return this.callNative("parse", [this.demand(value)]);
@@ -3825,7 +3801,7 @@ export class Interpreter {
             return this.constructType(type.name, actual);
         }
         if (this.isList(type)) return this.templateList(type, value);
-        if (type.kind === "record") return this.apply(type, value);
+        if (type.kind === "record") return this.buildRecord(type, value);
         if (type.kind !== "functionType") throw new APNError("runtime", "expected a type constructor");
         const target = this.force(value);
         if (!this.matchesValueType("Function", target)) throw new APNError("runtime", "function contract expects a function");
@@ -5197,6 +5173,47 @@ export class Interpreter {
         });
     }
 
+    // The fields a list or record gives a record: by name, or all of them in order.
+    private givenFields(f: Extract<Value, { kind: "record" }>, carg: Value): Array<[string, Value]> {
+        if (carg.kind === "list" && carg.v.length !== 0 && carg.v.length !== f.v.length) {
+            throw new Error(`Runtime: field count (${f.v.length}) does not match list size (${carg.v.length})`);
+        }
+        return carg.kind === "record" ? carg.v : (carg as Extract<Value, { kind: "list" }>).v.map((value, i) => [f.v[i][0], value]);
+    }
+    // A record's value from a list or record of its fields ([1,2] : V, [] :
+    // [v : Int]): each given field takes its value as by assignment, the
+    // others their defaults (a type's zero value), a field it does not have
+    // joining it. A record holding no type is updated instead.
+    private buildRecord(f: Extract<Value, { kind: "record" }>, arg: Value): Value {
+        const value = this.dataValue(arg);
+        const carg = this.isList(value) ? mkList(this.items(value)) : value;
+        if (carg.kind !== "list" && carg.kind !== "record") throw new APNError("runtime", `a record is made from a list or record of its fields, not ${this.typeText(carg)}`);
+        const given = this.givenFields(f, carg), slots = new Map(f.v);
+        // (A given field's slot is forced to tell, as assigning it would; a
+        // field bound to a type, x = Int, is a value, not a slot.)
+        const typeGiven = (key: string, v: Value) => this.holdsType(v) && !(carg.kind === "record" && carg.bound?.has(key));
+        const building = !given.some(([key, v]) => typeGiven(key, v) && !this.typeOfTypes(slots.get(key)))
+            && (!given.length || this.holdsType(f) || given.some(([key]) => slots.has(key) && !f.bound?.has(key) && this.holdsType(this.force(slots.get(key)!))));
+        if (!building) return this.assignFields(f, given.map(([key, v]) => [key, this.demand(v)]));
+        const supplied = new Map(given);
+        for (const [key, slot] of f.v) {
+            if (slot.kind === "type" && slot.name === "$any" && !supplied.has(key)) {
+                throw new APNError("runtime", `missing field '${key}'`);
+            }
+        }
+        const out: [string, Value][] = f.v.map(([key, slot]) => [key, this.defer(() => supplied.has(key)
+            ? this.assignSlot(slot, this.reference(supplied.get(key)!)) : this.defaultField(slot, []))]);
+        for (const [key, v] of given) if (!slots.has(key)) out.push([key, v]);
+        // What it builds holds values: every field is bound.
+        const result: Value = { kind: "record", v: out, bound: new Set(out.map(([key]) => key)) };
+        // A schema's value is declared its type, as List T's.
+        if (this.isTypeValue(f)) this.declaredTypes.set(result, f);
+        return result;
+    }
+    // A value given to a template's slot or item, as ascription gives it.
+    private filled(target: Value, value: Value): Value {
+        return target.kind === "record" ? this.buildRecord(target, value) : this.apply(target, value);
+    }
     applyTemplateSlot(template: Value, value: Value): Value {
         const forced = this.force(template), target = this.sharedType(forced) ?? forced;
         if (isNumeric(target)) {
@@ -5209,7 +5226,7 @@ export class Interpreter {
             if (incoming.kind !== target.kind) throw new APNError("runtime", `${target.kind} template expects ${target.kind}, got ${incoming.kind}`);
             return incoming;
         }
-        return this.isList(target) ? this.templateList(target, value, true) : this.apply(target, value);
+        return this.isList(target) ? this.templateList(target, value, true) : this.filled(target, value);
     }
 
     templateList(templates: Value, values: Value, replaceDefaults = false): Value {
@@ -5244,7 +5261,7 @@ export class Interpreter {
                     const target = this.force(template.head);
                     // A type variable no call decided takes any value, as conform's does.
                     if (target.kind === "type" && target.variable) return this.reference(value.head);
-                    return this.isList(target) ? this.templateList(target, value.head) : this.apply(target, value.head);
+                    return this.isList(target) ? this.templateList(target, value.head) : this.filled(target, value.head);
                 }),
                 tail: this.applyListTemplate(template.tail, value.tail, replaceDefaults),
             };

@@ -73,7 +73,7 @@ Deno.test('selection rejects nested indices when consumed', () => {
     throw new Error('expected invalid index');
 });
 
-for (const source of ['[Int].[]', '[Int].[1,2]', '[Int]."hi"', 'cast [Int] [1,2]', '[x : [Int]] [x = [1,2]]']) {
+for (const source of ['[Int].[]', '[Int].[1,2]', '[Int]."hi"', 'cast [Int] [1,2]', '([x = [1,2]] : [x : [Int]])']) {
     Deno.test(`one template slot never broadcasts: ${source}`, () => {
         const i = new Interpreter();
         try { i.renderString(i.run(parseDocument(source))); } catch { return; }

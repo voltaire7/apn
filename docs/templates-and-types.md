@@ -168,10 +168,10 @@ a list; it does not acquire record fields or record construction behavior.
 ## Records
 
 ```apn
-[x : Int, y = 0] [x = 1, y = 2] # [x = 1, y = 2]
-[x : Int, y : Int] [x = 123]     # [x = 123, y = 0]
-[x : Int] [x = 123, z = "extra"] # [x = 123, z = "extra"]
-[x : Int, y = (* 2)] [1,2]    # [x = 1, y = 4]
+([x = 1, y = 2] : [x : Int, y = 0]) # [x = 1, y = 2]
+([x = 123] : [x : Int, y : Int])     # [x = 123, y = 0]
+([x = 123, z = "extra"] : [x : Int]) # [x = 123, z = "extra"]
+([1,2] : [x : Int, y = (* 2)])    # [x = 1, y = 4]
 ```
 
 Supplied existing fields are applied, omitted type slots are initialized,
@@ -182,7 +182,7 @@ The empty list `[]` explicitly initializes all fields from their defaults. Recor
 A schema's result keeps its fields; see [record fields](semantics.md#records).
 
 Keys retain their full string contents, including any quote characters, through application.
-`[x : Int, x : Int] [x = 1]` produces `[x = 0, x = 1]`.
+`([x = 1] : [x : Int, x : Int])` produces `[x = 0, x = 1]`.
 
 For passing collections to functions, destructuring parameters, and records as
 named arguments, see [lists and records as arguments](pattern-functions.md#lists-and-records-as-arguments).
@@ -224,7 +224,7 @@ arr = [1,2]
 arr 0 = 3.0                # stores integer 3
 # arr 0 = 3.5              # error: lossy conversion
 
-v = [x : Float, y : Int] []
+v = [] : [x : Float, y : Int]
 v.x = 123                  # stores 123.0
 v "y" = 321                # stores integer 321
 ```
@@ -241,8 +241,8 @@ xs = [Int]
 # xs 0 = .2                # error: lossy conversion
 ```
 
-A `Type` field's values are types: `[type : Type] [Int]` and
-`[type : Type] [type : Int]` are both `[type : Int]`. Records are replaced, never
+A `Type` field's values are types: `([Int] : [type : Type])` and
+`([type : Int] : [type : Type])` are both `[type : Int]`. Records are replaced, never
 merged; a function is replaced by a function, never called:
 
 ```apn
@@ -255,16 +255,15 @@ v.child = [y = 2]          # replaces the whole child
 A record applied to a record of fields is field assignment, `r [f = v, g = w]`
 being `{ r.f = v; r.g = w; r }` in every way (a field keeps its number type or
 variant family, a schema's record takes no new field, nothing else is
-evaluated), when the record holds values or the fields hold types. So
+evaluated). So
 `[f = (* 2)] [f = (+ 1)]` is `[f = (+ 1)]`, `[x = 1] [y = 2]` is `[x = 1, y = 2]`, a
 model is updated as Elm's `{ model | name = n }` (`model [name = n]`), and a
 type is edited as `Vector3.x = Int` edits it: `Vector3 [x : Int]` is
-`[x : Int, y : Float, z : Float]`. A record holding a type given values builds
-one: given fields take their values as by assignment and the others their
-defaults, so `Vector3 [x = 1]` is `[x = 1.0, y = 0.0, z = 0.0]`. (Assigning a
-value into a type's field sets that field's default instead: `Vector3.x = 1`
-is the type `[x = 1.0, y : Float, z : Float]`, and `Vector3 []` is then
-`[x = 1.0, y = 0.0, z = 0.0]`.) A list gives values in field order, exactly as by
+`[x : Int, y : Float, z : Float]`, and `Vector3 [x = 1]` the type
+`[x = 1.0, y : Float, z : Float]`, as `Vector3.x = 1` makes it. A record's
+value is made by ascription: given fields take their values as by assignment
+and the others their defaults, so `[x = 1] : Vector3` is
+`[x = 1.0, y = 0.0, z = 0.0]`. A list gives values in field order, exactly as by
 name: `r [10,20]` is `r [x = 10, y = 20]`. Whether a record has a slot is told
 from what it was built with and the fields it is given, without evaluating the
 others. A parameter given a record literal may be a function or
@@ -391,7 +390,7 @@ Points = [Point]
 
 (123 : Count)              # 123
 Numbers.[1]                # [1]; Numbers.[1,2] errors
-Point [x = 1, y = 2]       # [x = 1.0, y = 2.0]
+[x = 1, y = 2] : Point     # [x = 1.0, y = 2.0]
 cast [Int,Int] [1,2]        # [1,2]
 ([Int] : Type)            # [Int]
 isType Type [(* 2)]        # False
@@ -504,7 +503,7 @@ Span (lo : Int) (hi : Int) = lo > hi ? fail "empty span" : _
 ```
 
 Every way of making one from values runs it, a record slot's default too
-(`[s : Span Int Int] []` runs it on `Span 0 0`); given types (`Span Int Int`),
+(`([] : [s : Span Int Int])` runs it on `Span 0 0`); given types (`Span Int Int`),
 it is the type of its values and runs nothing. The checker checks that it gives the constructor's
 type. Its fields are named, since `_` holds them.
 
@@ -607,7 +606,7 @@ applied to a type for each field it is a value (`Box Int`, a `Box` holding
 type is expected, as a lambda reads as a function type: after a declaration's
 or an ascription's `:` (`p : Point Int Int = Point 1 2`, `q : Box Int = Box 4`,
 `ps : List (Point Int Int)`), a field's type (`Wrap (b : Box Int) = _`), a
-record slot (`[b : Box Int] []` is `[b = Box 0]`), `isType (Box Int) (Box 1)`, a
+record slot (`([] : [b : Box Int])` is `[b = Box 0]`), `isType (Box Int) (Box 1)`, a
 type's argument, a `to` instance (`to (Money Float) (x : Float) = Money x`).
 `Some Int` is the `Some` values holding an `Int`, a part of `Option Int`. A
 constructor with logic runs it only on values: `Mod7 Int` is a type. Bare, a
@@ -624,7 +623,7 @@ inference are not part of this change.
 Record-template patterns also accept positional lists with exactly as many
 items as the template has fields: `f (Vector3 v) = v` accepts `f [1,2,3]`
 when `Vector3 = [x : Float, y : Float, z : Float]`. Conversion is the same lazy
-conversion as `Vector3 [1,2,3]`. Wrong lengths do not match; shape checking
+conversion as `[1,2,3] : Vector3`. Wrong lengths do not match; shape checking
 reads at most one cell beyond the required count, including infinite inputs.
 Field conversion errors remain deferred until those fields are demanded.
 Equally matching record templates retain source-order dispatch.

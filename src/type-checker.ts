@@ -2819,7 +2819,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const t = field && resolve(field), value = t?.k === "type" ? resolve(t.value) : undefined;
         return value?.k === "atom" && value.name === "Type";
     }
-    function application(f: Ty, argument: Entry, e: Expr, builtin = false): Ty {
+    function application(f: Ty, argument: Entry, e: Expr, builtin = false, ascribed = false): Ty {
         spend(e);
         f = resolve(f);
         // A value that is not a function applies as get gives it: clauses for
@@ -3325,13 +3325,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 return union([...f.fields.values()]);
             }
-            // Given fields, a record is updated exactly as by field assignment:
-            // a record of values (model [name = n]), or a type given types
-            // (Vector3 [x : Int] is Vector3.x = Int). A type given values builds one.
+            // Given fields, a record is updated exactly as by field assignment
+            // (model [name = n]; Vector3 [x : Int] is Vector3.x = Int), as at
+            // runtime; ascribed to a type (e : T), the value it makes.
             // Fields given by name, or all of them in order (r [10] is r [x = 10]).
             const given: Array<[string, Ty, Expr]> | undefined = a.k === "record" ? [...a.fields].map(([key, type]) => [key, type, fieldExpr(e, key)])
                 : a.k === "list" && a.items?.length === f.fields.size ? [...f.fields.keys()].map((key, n) => [key, a.items![n], e.t === "list" ? e.v[n] ?? e : e])
                 : undefined;
+            if (!ascribed) return given ? assignFields(f, given, e) : f;
             // A record holding a type, given values (not types, unless for a
             // Type field), builds one; any other is updated exactly as by field
             // assignment (model [name = n]; Vector3 [x : Int] is Vector3.x = Int).
@@ -3896,7 +3897,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // known values (see application).
                 const condition = resolved.k === "intrinsic" && resolved.name === "refine" && resolved.args?.length === 1 && a.t === "lambda"
                     ? { fn: { e: a, env: [], scope } } : {};
-                const result = application(callee, { type: argumentType, ...valueEntry(a, scope), ...condition }, a);
+                const result = application(callee, { type: argumentType, ...valueEntry(a, scope), ...condition }, a, false, e.t === "app" && !!e.ascribed);
                 if (!callees.has(e)) noClauseMatches(e, scope);
                 // A partial application that leaves its call chain is an ordinary function value.
                 return callees.has(e) ? result : withoutShapes(result);

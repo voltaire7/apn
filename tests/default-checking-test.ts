@@ -120,7 +120,7 @@ for (const [source, expected] of [
     // A definition written with lambdas is checked as the clause with those parameters.
     ['append = (xs : Vect n a) -> (ys : Vect m a) -> ({\n    xs ~ [\n        [] -> ys\n        x::xs -> x :: append xs ys\n    ]\n} : Vect (n + m) a)\ntypeOf (append [] [3])', 'Vect 1 Int'],
     // A record schema applied to a value not known yet converts it at runtime.
-    ['Quote = [quote : String, year : Int]\nconv r = Quote r\n(conv [year = 2]).year', '2'],
+    ['Quote = [quote : String, year : Int]\nconv r = r : Quote\n(conv [year = 2]).year', '2'],
     ['Quote = [quote : String, year : Int]\n(Quote ([quote = "q", year = 1] : Dynamic)).quote', '"q"'],
     // A record type is a type: to applies it, and a Type parameter takes it.
     ['Quote = [quote : String, year : Int]\n(to Quote [year = 1]).year', '1'],
@@ -131,7 +131,7 @@ for (const [source, expected] of [
     ['f w = w.[first = x]\n(f [x = 1]).first', '1'],
     ['f w = w.[x,y]\nf [x = 1, y = 2]', '[1,2]'],
     // A record its type made takes updates to its fields, and a literal copy new ones.
-    ['Quote = [quote : String, year : Int]\nq = Quote []\nq.year = 3\nq "quote" = "x"\n[use q, more = 1]', '[quote = "x", year = 3, more = 1]'],
+    ['Quote = [quote : String, year : Int]\nq = [] : Quote\nq.year = 3\nq "quote" = "x"\n[use q, more = 1]', '[quote = "x", year = 3, more = 1]'],
     // A list item may take a value apart with a constructor, as a block's statement may.
     ['std <- import "std"; use std.option\n[Some v = Some 3, v + 1]', '[4]'],
     ['std <- import "std"; use std.option\ncode = [Some v = Some 3] ++ [v]\ncode 0 = (Some v = Some 5)\ncode', '[5]'],
@@ -161,10 +161,10 @@ for (const source of [
     'f (t : Type) = t; f [a = Int]',
     '"ab" * c -> c + 1',
     // A record its type made keeps its fields.
-    'Quote = [quote : String, year : Int]; q = Quote []; q.yaer = 1',
-    'Quote = [quote : String, year : Int]; q = Quote []; q "yaer" = 1',
+    'Quote = [quote : String, year : Int]; q = [] : Quote; q.yaer = 1',
+    'Quote = [quote : String, year : Int]; q = [] : Quote; q "yaer" = 1',
     'Quote = [quote : String, year : Int]; f (q : Quote) = { q.x = 1; q }',
-    'Quote = [quote : String, year : Int]; conv r = Quote r; (conv [year = "x"]).year',
+    'Quote = [quote : String, year : Int]; conv r = r : Quote; (conv [year = "x"]).year',
     // Only use opens a module, in its own block: not a statement, a field of it or a binding.
     'numbers <- import "std/number"\nnumbers.sq 2\nsq 3',
     'numbers <- import "std/number"\n{ use numbers; 1 }\nsq 3',
@@ -174,7 +174,7 @@ for (const source of [
     // A record's entry is written as a [key,value] pair, within the record.
     'v = [x = 1]\nv 0 = [x1 = 22]',
     'v = [x = 1]\nv 1 = ["a",1]',
-    'P = [x : Float, y : Float]\np = P [1,2]\np 1 = ["w",1]',
+    'P = [x : Float, y : Float]\np = [1,2] : P\np 1 = ["w",1]',
     // An item after an x <- m item yields the block ending in it: { x <- m; x } is an error.
     'print [x <- return 1, x]',
     'print [x <- [1,2], 7]',

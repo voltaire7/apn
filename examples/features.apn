@@ -221,11 +221,11 @@ person * print \ format "%: %"           # => name: Ada, then age: 37
 print [typeOf 1, typeOf [1,2], typeOf "a"]  # => [Int,[Int,Int],String]
 print (typeOf (x -> [x,x]))              # => a -> [a,a]
 
-# A type is a function: applied, it converts a value without losing
-# anything, and given nothing it makes its zero value.
+# A value is given a type by ascription, converting it without losing
+# anything; a record of types fills what is not given with zero values.
 print [(1 : Float), (200 : UInt8), (0 : Int)] # => [1.0,200,0]
 Point = [x : Float, y : Float]
-print [Point [1,2], Point []]            # => [[x = 1.0, y = 2.0], [x = 0.0, y = 0.0]]
+print [([1,2] : Point), ([] : Point)]    # => [[x = 1.0, y = 2.0], [x = 0.0, y = 0.0]]
 
 # A type in a pattern requires it, converting as above, and e : T is e as
 # a value of T.

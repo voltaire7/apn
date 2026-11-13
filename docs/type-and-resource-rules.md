@@ -59,7 +59,7 @@ accepts only a `UserId`. Applying `UserId` makes one from an `Int`, checking the
 value as `Int` would (`UserId .2` is a lossy conversion); nothing else converts
 to one (`UserId (OrderId 3)` and assigning `3` to a `UserId` slot are errors).
 Given its field's type it is its own type where a type is expected: an omitted
-record slot (`[id : UserId Int] []` is `[id = UserId 0]`), another constructor's
+record slot (`([] : [id : UserId Int])` is `[id = UserId 0]`), another constructor's
 field (`Order (u : UserId Int) (n : Int) = _`), `isType (UserId Int)`,
 `List (UserId Int)`.
 

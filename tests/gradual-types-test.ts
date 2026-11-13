@@ -127,7 +127,7 @@ Deno.test("runtime value-dependent type selection", () => {
 });
 for (
     const source of [
-        'v = [x : Float] []; v.x = "bad"',
+        'v = [] : [x : Float]; v.x = "bad"',
         'v = [1,2] : Vect 2 Int; i = 0; v i = "bad"',
         "v = [x = 1]; v.x = .2",
         "v = [1,2]; v 2 = 3",
@@ -139,7 +139,7 @@ for (
 }
 for (
     const source of [
-        "v = [x : Float] []; v.x = 1",
+        "v = [] : [x : Float]; v.x = 1",
         "v = [x : Float]; v.x = 123",
         "v = [1,2] : Vect 2 Int; i = 0; v i = 3",
     ]

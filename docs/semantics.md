@@ -322,8 +322,8 @@ never hangs the prompt.
 `name : T` declares the definition of `name` right after it in the same
 block; `name : T = value` declares and defines at once. A declaration no
 definition follows defines the name as its type's zero, as a record slot does
-([zero initialization](zero-initialization.md)): `x : Int` alone is `x = ([x :
-Int] []).x`, so `0`. A definition's type is declared on a line of its own
+([zero initialization](zero-initialization.md)): `x : Int` alone is `x = ([] : [x :
+Int]).x`, so `0`. A definition's type is declared on a line of its own
 (`f x : Int = x` is an error). Lowercase names in the type that
 nothing binds are its variables, the same name the same type throughout:
 
@@ -726,7 +726,7 @@ It does not invoke an ordinary function stored in the old slot. A new field is
 inserted unchanged. On an unbound name or an existing function, `f "x" = value`
 remains a string-pattern function clause.
 
-A record a record schema made (`Quote [...]` or `Quote []` for
+A record a record schema made (`[...] : Quote` or `[] : Quote` for
 `Quote = [quote : String, year : Int]`, a `(Quote q)` parameter, a nested
 schema's field) keeps the schema's fields: adding one, by `.` or a string
 key, is an error (`[quote : String, year : Int] has no field 'yaer'`), before
@@ -742,9 +742,9 @@ renamed ones too (`v.[x : T = a] = r`), and `T` is any type expression.
 
 A record applied to a record of fields is the same update: `r [f = v, g = w]`
 is `{ r.f = v; r.g = w; r }` in every way, as Elm's `{ r | f = v, g = w }`,
-for a record of values and for a type given types (`Vector3 [x : Int]` is
-`Vector3.x = Int`). A type given values builds one instead (`Vector3 [x = 1]`;
-see [templates](templates-and-types.md)).
+a type given fields too (`Vector3 [x : Int]` is `Vector3.x = Int`). A
+record's value is made by ascription instead (`[x = 1] : Vector3`; see
+[zero initialization](zero-initialization.md)).
 
 An empty list `[]` becomes a record on its first field assignment.
 `obj.[x] = [10]` requires a one-element RHS list; `obj.[x] = 10` errors.
@@ -1599,7 +1599,7 @@ loading retains its existing definition behavior.
 taking arguments can create independent cells. A cell holds values of its
 first contents' type (`Mutable [0,0]` holds pairs); one made from a
 conversion holds that type's values, so `Mutable ([] : List [Int,Int])`, or a
-record schema's value (`Mutable (Body [...])`), holds lists of any length where
+record schema's value (`Mutable ([...] : Body)`), holds lists of any length where
 the type says `List`. Like a cell, a stateful object a definition makes (a
 [p5](p5.md) object such as `loadImage "a.png"`) is made once, where the
 definition is first used, and a cell holding one takes another as itself.
@@ -1684,8 +1684,8 @@ See [numeric arrays](arrays.md) for matching-shape rules and lazy validation.
 
 ## Zero is initialization
 
-Type descriptors remain constructors in every ordinary value context. Applying a
-record template initializes omitted type slots; `Vector3 []` constructs defaults.
+A value is given a type by ascription; ascribing a list or record to a record
+template initializes its omitted type slots: `[] : Vector3` is its defaults.
 Assigning a value into a type slot makes it that type's default
 ([slot assignment](templates-and-types.md#slot-assignment)). See [zero initialization](zero-initialization.md)
 for the default table, type inspection, variant rules and limitations.
@@ -1748,7 +1748,7 @@ displays `[Int,Int,Int]`, `typeOf [1,"a"]` is `[Int,String]`, and `typeOf []`
 is `[]`, the empty list's type. A record's is the record of its fields' types,
 each found when it is shown: `typeOf [x = 1, y = Float]` is
 `[x : Int, y : Type]`, and `typeOf [p = [q = 1.5]]` is `[p : [q : Float]]`. A
-record a record type made has that type (`typeOf (Quote [])` is `Quote`). A list built with `::` onto a written list is
+record a record type made has that type (`typeOf ([] : Quote)` is `Quote`). A list built with `::` onto a written list is
 exact too (`typeOf ([1,2]::[3,4])` is `[[Int,Int],Int,Int]`, as for
 `[[1,2],3,4]`), reading its unevaluated tail without running it. An endless
 list is endlessly many of its elements' type: `typeOf [1..]` is `[Int..]`, and

@@ -513,7 +513,7 @@ for (const source of ["1 = 2", "[a,1] = [5,2]", 'std <- import "std"; use std.op
 
 example("a record its type made keeps its fields; a copy takes new ones", `
 Quote = [quote : String, year : Int]
-q = Quote []
+q = [] : Quote
 q.year = 3
 q "quote" = "x"
 print q
@@ -521,13 +521,13 @@ r = [use q, more = 1]
 r.again = 2
 print r
 Line = [from : [x : Int, y : Int], to : [x : Int, y : Int]]
-l = Line []
+l = [] : Line
 l.from.x = 4
 print l`, ['[quote = "x", year = 3]', '[quote = "x", year = 3, more = 1, again = 2]', "[from = [x = 4, y = 0], to = [x = 0, y = 0]]"]);
 for (const source of [
-    "q = Quote []\nq.yaer = 1", 'q = Quote ["a",1]\nq "yaer" = 1', "q = Quote []\nq._ = [yaer = 1]",
+    "q = [] : Quote\nq.yaer = 1", 'q = ["a",1] : Quote\nq "yaer" = 1', "q = [] : Quote\nq._ = [yaer = 1]",
     "f (q : Quote) = { q.yaer = 1; q }\nprint (f [quote = \"a\", year = 1])",
-    "Line = [from : Quote, to : Quote]\nl = Line []\nl.from.yaer = 1",
+    "Line = [from : Quote, to : Quote]\nl = [] : Line\nl.from.yaer = 1",
 ]) failure(`a new field on a record its type made: ${source}`, `Quote = [quote : String, year : Int]\n${source}`, "has no field 'yaer'");
 
 example("an empty vector's open element type is bound by an inner lambda's pattern", `

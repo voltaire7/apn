@@ -17,7 +17,7 @@ for (const [source, expected] of [
     ["typeOf $ [x = 1]", "[x : Int]"],
     ["typeOf [x = 1, y = Float, p = [q = 1.5]]", "[x : Int, y : Type, p : [q : Float]]"],
     ["t = typeOf [x = head [], y = 2]\n[t.y, typeOf [x = 1] == [x : Int]]", "[Int,True]"],
-    ["Quote = [quote : String]\ntypeOf (Quote [])", "Quote"],
+    ["Quote = [quote : String]\ntypeOf ([] : Quote)", "Quote"],
     ["typeOf $ sqrt", "Number -> Number"],
     // Builtins show the checker's signatures.
     ["typeOf $ S", "UInt -> UInt"],
