@@ -1296,8 +1296,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.op === "compare") {
             if (numeric(a) && numeric(b) || a.k === "atom" && b.k === "atom" && a.name === b.name && ["String", "Char"].includes(a.name)) return atom("Bool");
             // Types compare as the sets of their values (Int <= Number); a
-            // written list of types is one ([Int] <= List Int).
-            const typed = (x: Ty): boolean => x.k === "type" || x.k === "atom" && x.name === "Type" || x.k === "list" && (x.items ? x.items.every(item => typed(resolve(item))) : typed(resolve(x.element)));
+            // written list of types is one ([Int] <= List Int), and a
+            // constructor given types the type it names (Box Int).
+            const typed = (x: Ty): boolean => x.k === "type" || !!sharedType(x) || x.k === "atom" && x.name === "Type" || x.k === "list" && (x.items ? x.items.every(item => typed(resolve(item))) : typed(resolve(x.element)));
             if (typed(a) && typed(b)) return atom("Bool");
             return problem(`cannot compare ${text(a)} and ${text(b)}`);
         }
@@ -3867,7 +3868,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     while (inner.t === "block" && inner.stmts.length === 1) inner = inner.stmts[0];
                     matchClaims.set(inner.t === "ternary" ? ternaryExpansion(inner) : inner, claimed.length);
                 }
-                let argumentType = infer(a, scope);
+                // _ given to a type or a constructor is any type, as at runtime.
+                let argumentType = a.t === "placeholder" && (resolved.k === "type" || resolved.k === "fn" && resolved.constructs)
+                    ? { k: "type", value: variable() } as Ty : infer(a, scope);
                 // List takes only a type: given anything else, it is the value.
                 const value = (given: Ty) => !["type", "var", "factory", "alias", "dynamic"].includes(given.k) && !describing(given)
                     && !(given.k === "list" && given.items?.length === 0) && !isExplicit(given);

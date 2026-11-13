@@ -82,6 +82,11 @@ for (const checked of [true, false]) {
         [PERCENT + "map Percent [1,200]", "[Percent 1.0, Percent 100.0]"],
         ["Low (x : Int) = x > 5 ? Low 5 : _\n[([l = Low 9] : [l : Low Int]), Low Int]", "[[l = Low 5], Low Int]"],
         ["Even (n : Int) = n % 2 == 0 ? _ : Even (n + 1)\n[Even 3, Even 4]", "[Even 4, Even 4]"],
+        // _ given to a type is any, as in a pattern; <= asks for a type within it.
+        [OPTION + CTOR + "[List _, Option _, Box _]", "[List _, Option _, Box _]"],
+        [OPTION + CTOR + "[typeOf [1,2] <= List _, typeOf 3 <= List _, typeOf (Some 1) <= Option _, typeOf (Box 1) <= Box _]",
+            "[True,False,True,True]"],
+        [OPTION + "[isType (List _) [1,\"a\"], ([1] : List _), Option _ <= Option Int, typeOf [1,2] == List _]", "[True,[1],False,False]"],
         // A conversion instance takes a constructor's own type as written.
         [CTOR + "to (Box Int) (n : Int) = Box n\nf (b : Box Int) = b\n[(3 : Box Int), f 4]", "[Box 3, Box 4]"],
         [MAYBE + "[typeOf Nada, typeOf (Just Nada)]", "[Maybe x, Maybe (Maybe x)]"],

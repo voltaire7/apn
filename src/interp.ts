@@ -1587,7 +1587,10 @@ export class Interpreter {
                         if (written && this.preludeCons() && this.isBuiltinMatch(this.env.get(((e.f as Extract<Expr, { t: "app" }>).f as Extract<Expr, { t: "var" }>).name))) { next = this.coreMatch(written); break; }
                         // Arguments stay lazy; a completed call can hand its body
                         // straight back to this loop instead of nesting eval calls.
-                        const head = this.eval(e.f), argument: Value = { kind: "thunk", body: e.a, env: this.env };
+                        const head = this.eval(e.f);
+                        // _ given to a type (or a constructor named as its type)
+                        // is any, as in a pattern: List _ is every list.
+                        const argument: Value = e.a.t === "placeholder" && this.takesTypes(head) ? { kind: "type", name: "$any" } : { kind: "thunk", body: e.a, env: this.env };
                         // e : T: a type applied to a value, as a member of it. A
                         // constructor named as its type is the type there (Point, Box Int).
                         const ascribed = e.ascribed ? this.force(head) : undefined;
@@ -3459,7 +3462,7 @@ export class Interpreter {
                 // Its arguments show as source writes them: Vect 2 (Option Int),
                 // a written type's as written (Pairs 2 Int).
                 const written = this.asWritten.get(v), type = v as Extract<Value, { kind: "type" }>;
-                emit(written?.name ?? type.description ?? type.name, "type");
+                emit(written?.name ?? type.description ?? (this.isAny(type) ? "_" : type.name), "type");
                 for (const argument of written?.args ?? type.arguments ?? []) {
                     const shown = this.inspectType(argument), wrap = compoundArgument(shown);
                     emit(wrap ? " (" : " ");
@@ -4019,6 +4022,11 @@ export class Interpreter {
             const lists = b.choices.map(choice => this.reference(choice)).filter(choice => this.listShaped(choice));
             return this.listShaped(a) && lists.length > 0 && this.within(a, this.unionOf(lists), met);
         }
+        // A type given _ holds it given anything there (Option Int <= Option _).
+        if (a.kind === "type" && b.kind === "type" && b.arguments?.length && a.name === b.name && a.family === b.family && !a.alias && !b.alias &&
+            a.arguments?.length === b.arguments.length) {
+            return b.arguments.every((x, n) => this.isAny(x) || this.sameType(a.arguments![n], x));
+        }
         return a.kind === "type" && b.kind === "type" && !a.family && !b.family && !a.arguments?.length && !b.arguments?.length &&
             NUMERIC_TYPES.includes(a.name) && NUMERIC_TYPES.includes(b.name) && numericWithin(a.name, b.name);
     }
@@ -4357,6 +4365,16 @@ export class Interpreter {
         if (t.kind === "variant") return t.v.length ? { kind: "schema" } : { kind: "constructor", fields: 0 };
         if (t.kind === "closure" || t.kind === "functionType") return { kind: "schema" };
         return t.kind === "type" ? { kind: "type", arity: this.typeArity(t) } : undefined;
+    }
+    // Whether a type is any (_ given to a type).
+    private isAny(t: Value): boolean {
+        const x = this.reference(t);
+        return x.kind === "type" && x.name === "$any" && !x.description && !x.family;
+    }
+    // Whether a value is applied to types: a type, or a constructor.
+    private takesTypes(head: Value): boolean {
+        const f = this.reference(this.force(head));
+        return f.kind === "type" || f.kind === "native" && !!f.tag;
     }
     // How many parameters a type still takes (List 1, List Int 0).
     private typeArity(t: Extract<Value, { kind: "type" }>): number {

@@ -764,7 +764,9 @@ destination fields.
 Ordinary named definitions do not execute their bodies when defined.
 `foo = _` declares an unfinished value; `f x = _` an unfinished function body.
 The `_` expression raises "not implemented" only when evaluated. It remains a
-wildcard in patterns. Both sides of `=` are required: `foo =`, `foo = ;`, and
+wildcard in patterns, and given to a type or a constructor it is any type, as
+there: `List _` is every list, so `typeOf x <= List _`, `isType (List _) x` and
+`(xs : List _)` agree, and `Option Int <= Option _`. It prints `_`. Both sides of `=` are required: `foo =`, `foo = ;`, and
 `= bar` are syntax errors. Use `foo = []` for an empty result. An indented body may follow
 `=` on the next line in a complete source chunk; a same-level line may not.
 
@@ -1803,8 +1805,9 @@ so `typeOf` describes its result.
 A described type compares equal to the type it describes: `[Int,Int] == typeOf
 [1,2]` and `(a -> a) == typeOf (x -> x)` are true. A type taking
 parameters is no type of values until given them: `typeOf [1] == List` is
-false, `isList [1]` asks whether a value is a list, and `typeOf f == Function`
-is true. A counted list type is the positional type it
+false, and `typeOf f == Function` is true. `==` is exact (`typeOf [1,2]` is
+`[Int,Int]`, not `List Int`); whether a value's type is within one is `<=`:
+`typeOf [1,2] <= List _`, or `isList [1,2]`. A counted list type is the positional type it
 makes: `Vect 3 Int == [Int,Int,Int]` is true. A description is not an enforced
 schema; use a typed pattern or contract when you need validation.
 

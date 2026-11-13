@@ -128,7 +128,8 @@ export function valueToString(v: Value): string {
         case "contract": return `((${valueToString({ kind: "functionType", from: v.from, to: v.to })}) (${valueToString(v.target)}))`;
         case "pointer": return `Pointer 0x${v.bits.toString(16)}`;
         case "type": {
-            return (v.description ?? v.name) + (v.arguments?.length ? " " + v.arguments.map(typeArgumentText).join(" ") : "");
+            // Any (_ given to a type) is written _.
+            return (v.description ?? (v.name === "$any" && !v.family ? "_" : v.name)) + (v.arguments?.length ? " " + v.arguments.map(typeArgumentText).join(" ") : "");
         }
         case "hashmap": return `HashMap [${itemsText([...v.entries.values()].map(([k, x]) => `[${itemsText([valueToString(k), valueToString(x)])}]`))}]`;
         case "rationalRange": return rangeText(v.lo, arithmetic("+", v.lo, v.step), v.hi);
