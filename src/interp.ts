@@ -4523,7 +4523,8 @@ export class Interpreter {
         if (isNumeric(value)) return NUMERIC_TYPES.includes(name) && matchesType(name, value);
         if (name === "List") return this.isList(value);
         if (name === "Type" && value.kind === "functionType") return true;
-        if (name === "Function") return value.kind === "contract" || value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native";
+        // A type still taking parameters is a function of types (Option).
+        if (name === "Function") return value.kind === "contract" || value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native" || value.kind === "type" && this.typeArity(value) > 0;
         const names: Partial<Record<Value["kind"], string>> = {
             bool: "Bool", string: "String", char: "Char",
             record: "Record", hashmap: "HashMap", type: "Type", variant: "Variant", pointer: "Pointer", io: "IO",
@@ -5792,7 +5793,23 @@ export class Interpreter {
             throw new APNError("runtime", "tag's owner must be a type the program defines", { hint: "Some a = tag Option Some [a]" });
         }
         let family = this.owners.get(key);
-        if (!family) this.owners.set(key, family = { name });
+        if (!family) {
+            // A definition tagging its own values (Box a = tag Box Box [a]) is
+            // what Box x = _ declares: its parameters are its type's, each the
+            // type of the field in its place (typeOf (Box 3) is Box Int).
+            const names = owner.kind === "type" ? owner.alias?.parameters : undefined;
+            const run = owner.kind === "type" ? owner.alias?.run : undefined;
+            const [clause] = run?.kind === "clauseFn" && run.clauses.length === 1 ? run.clauses : [];
+            let body = clause?.body;
+            while (body?.t === "block" && body.stmts.length === 1) body = body.stmts[0];
+            // Its fields as its tag lists them (tag Pt Pt [y,x]).
+            let head = body;
+            while (head?.t === "app") head = head.f;
+            const tags = head?.t === "var" && head.name === "tag" || head?.t === "recordAccess" && head.field === "tag";
+            const listed = tags && body?.t === "app" && body.a.t === "list" ? body.a.v : undefined;
+            family = names?.length && listed ? { name, parameters: names, fields: new Map([[name, listed]]), env: new Env(this.env) } : { name };
+            this.owners.set(key, family);
+        }
         return family;
     }
 

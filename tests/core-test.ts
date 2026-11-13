@@ -31,7 +31,13 @@ const PERCENT = "Percent (x : Float) = x > 100 ? Percent 100.0 : _\n";
 for (const checked of [true, false]) {
     for (const [source, expected] of [
         [BOX + "Box 5", "Box 5"],
-        [BOX + "typeOf (Box 5)", "Box"],
+        // A definition tagging its own values is what Box x = _ declares.
+        [BOX + "[typeOf (Box 5), typeOf (Box \"a\")]", "[Box Int, Box String]"],
+        ["Pt x y = tag Pt Pt [y,x]\ntypeOf (Pt 1 \"a\")", "Pt Int String"],
+        // A type taking parameters is a function of types.
+        [OPTION + "f (g : Type -> Type) = g Int\n[f Option, map Option [Int,String], map (t -> List t) [Int,String]]",
+            "[Option Int, [Option Int, Option String], [List Int, List String]]"],
+        [OPTION + "[isType Function Option, isType Function Int, isType (Type -> Type) List]", "[True,False,True]"],
         [BOX + "unbox (Box x) = x\nunbox (Box 5)", "5"],
         [BOX + "[Box 5 == Box 5, Box 5 == Box 6]", "[True,False]"],
         ["Pt x y = tag Pt Pt [x,y]\nPt 1 2 ~ [Pt a b -> a + b]", "3"],
@@ -113,6 +119,8 @@ for (const checked of [true, false]) {
         [CTOR + "Box 5 + 1", checked ? "cannot combine Box Int and Int" : "cannot apply '+'"],
         ["Bad [x] = _\n1", "a constructor's field is a name, a typed name or a record of typed fields"],
         ["[1,2] | [1,3]", "[1,2] | [1,3] is no list: neither starts the other"],
+        // A type is given types; a value is ascribed.
+        [OPTION + "f t = Option t\nf 3", checked ? "cannot use Int where Type (a) is required" : "Option is a type, not a function"],
         ["Big = (n : Int) | n > 2\n(1 : Int & Big)", "is not in Int & Big"],
         // A name keeps its arity: a type is given all its parameters.
         ["f (xs : List) = xs\nf [1]", "List takes 1 type parameter; a type is given all of them"],

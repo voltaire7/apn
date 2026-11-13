@@ -363,7 +363,10 @@ takes `3` as `Box 3`, and `(x : t)` binds the value's type `t`.
 A type is given a value only by ascription: `Int 5`, `Int $ x` and a type
 passed where a function goes (`f t = t 1`) are errors, `5 : Int` ascribes and
 `to Int x` converts. A type still takes its parameters (`Vect 2 Int`,
-`Option Int`, a computed `Sized 2`), and `HashMap`, `Mutable` and `Pointer`,
+`Option Int`, a computed `Sized 2`): until given them it is a function of types,
+as any function is (`Option : Type -> Type`, `map Option [Int,String]` is
+`[Option Int, Option String]`), and a constructor is a function that does not
+evaluate (`map Box [1,2]`). And `HashMap`, `Mutable` and `Pointer`,
 types that are their own constructors, build their values (`HashMap [...]`,
 `Mutable 0`). A typed pattern writes its type after the value: `(Int x)`,
 `((T) p)` and `(t x)` are errors whose hint is `(x : Int)`. A type is given

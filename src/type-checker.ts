@@ -1464,6 +1464,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             return problem(cannotUse(actual, expected), e);
         }
+        // A type taking parameters where a function is expected is one of
+        // types: Option is Type -> Type.
+        if (expected.k === "fn" && actual.k === "type" && typeParameters(actual) > 0) {
+            const input: Ty = { k: "type", value: variable() };
+            unify(expected.input, input, e, seen);
+            return unify(expected.output, application(copy(actual), { type: input }, e ?? { t: "placeholder" }), e, seen);
+        }
+        // One of several types, where a type is expected: a type within their
+        // union (t in map (t -> List t) [Int,String] is Int or String).
+        const types = actual.k === "union" && expected.k === "type" ? actual.choices.map(resolve) : undefined;
+        if (types?.every(c => c.k === "type")) return unify((expected as Extract<Ty, { k: "type" }>).value, union(types.map(c => (c as Extract<Ty, { k: "type" }>).value)), e, seen);
         if (actual.k === "union") { for (const choice of actual.choices) unify(expected, choice, e, seen); return; }
         // A pending monadic value takes the type of the monad it is used in.
         if (isPending(expected) || isPending(actual)) {
@@ -3072,6 +3083,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (refinementFails(f, argument, e)) return f;
             const t = resolve(f.value);
             let a = resolve(argument.type);
+            // A type taking parameters is given types (a value is ascribed):
+            // given one not known yet (t -> Option t), it is a type.
+            if (!(t.k === "variant" && t.indexed) && a.k === "var" && typeParameters(f) > 0) {
+                unify(a, { k: "type", value: variable() }, e);
+                a = resolve(a);
+            }
+            // A type taking parameters given one of several types (map Option
+            // [Int,String] gives it Int or String) makes one of their types.
+            if (a.k === "union" && typeParameters(f) > 0 && a.choices.every(c => resolve(c).k === "type")) {
+                const made = a.choices.map(c => resolve(application(copy(f), { ...argument, type: c }, e)));
+                if (made.every(m => m.k === "type")) return { k: "type", value: union(made.map(m => (m as Extract<Ty, { k: "type" }>).value)) };
+            }
             // A list or record of types (Point = [x : Float, y : Float]) given as a
             // type's argument is the type it describes: List Point, Option Point.
             // (Nested ones too: [x : Float, color = [Float, Float]].)
