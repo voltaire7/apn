@@ -290,14 +290,13 @@ body `_` a constructor; see
 for those and variant declarations. One giving a type or a schema gives, applied
 to all its parameters, a type that remembers how it was written (`Point`,
 `Pairs 2 Int`), as do the values made with it (`typeOf p` is `Point`), which
-patterns read back (`(Pairs n a xs)`). It is an alias: the name and the type
-it gives are the same set of values, so a scalar's (`Count = Int`) are its
-base's (`(5 : Count) + 1` is the `Int` `6`). A constructor (`UserId (id : Int) =
-_`) makes a type of its own: `UserId 1` has none of an Int's operations, builtins
+patterns read back (`(Pairs n a xs)`). A scalar
+type (`Count = Int`) makes a named subtype: a `Count` is an `Int` wherever one is accepted and keeps its name when
+a result fits (`(5 : Count) + 1` is `6`, a `Count`). A constructor (`UserId (id : Int) =
+_`) makes a distinct type: `UserId 1` has none of an Int's operations, builtins
 and `(x : Int)` patterns reject it, its clauses give it what it needs
 (`UserId a + UserId b = UserId (a + b)`), and `(UserId x)` takes it apart.
-A `to Int` instance lets it stand where an `Int` is needed. See
-[distinct types](type-and-resource-rules.md#distinct-types).
+See [named and distinct types](type-and-resource-rules.md#distinct-types).
 
 A declaration or an ascription states a type (see
 [declarations and ascription](#declarations-and-ascription)); otherwise `:`
@@ -1365,7 +1364,8 @@ variants. `Float` is flexible floating precision, using binary64 by default.
 `Fraction` holds an exact rational, `Complex` any numeric complex value, and
 `ComplexExact` an exact one. A value is given one by ascription (`5 : Int32`),
 and `to T` is the conversion as a function (`map (to Int) [1.0,2.0]`). A number prints as its value whatever its type (`(123 : Int32)`
-prints `123`); `typeOf` gives the type.
+prints `123`), as a named subtype's value does (`5 : Count` prints `5`); `typeOf`
+gives the type.
 
 `UInt` is the natural numbers, with built-in constructors `Z` (`(0 : UInt)`) and
 `S` (`S n` is `n + 1`, converting `n` as `(n : UInt)` does). The patterns `Z` and
@@ -1815,7 +1815,7 @@ union does not matter (`Int | String == String | Int`), nor how it is written
 (`List Int == E` for `E = [] | Int :: List Int`; `Seq Int == List Int`), but a
 union is none of its members (`List Int == [Int]` is `False`), so
 `isType t x` is `typeOf x <= t` where `typeOf` is exact (and `t` is no
-[refinement](#refinement-types)). Containment is decided
+unnamed [refinement](#refinement-types)). Containment is decided
 as a type test is: unions alternative by alternative, list types as they
 unfold (a head within the heads it may be, the rest within their rests), a
 pair of types met again holding, as their unfoldings never end. A type
@@ -1839,20 +1839,32 @@ Ordered = ([a,b] : [Int,Int]) | a <= b
 f (x : Positive) = x                  # f -3 matches no clause
 (3 : Bounded 1 10)                    # 3
 (-3 : Positive)                       # error: -3 is not in Positive
+typeOf ((3 : Positive) + 1)           # Positive
 ```
 
-A refinement's values are its base's (`X = T` is an alias, whatever `T` is):
-`typeOf (3 : Positive)` is `Int`, and arithmetic on one gives an `Int`.
-Ascription and typed patterns take a value as the base's would (converted:
-`(c : Scalar)` takes `65` as `(c : UInt)` does), then test the condition;
-`isType X v`, a constructor field and a union holding `X` test membership. A
-refinement is within its base and its base's supersets (`Positive <= Int`),
-but nothing is within it except itself and its own refinements (`Int <=
-Positive` and `Small <= Positive` compare no conditions: the second is `True`
-only because `Small` refines `Positive`). A type of its own over one is a
-constructor (`Int8 (n : Range8) = _`, see [intrinsics](intrinsics.md)). The
-static check decides the condition on values it knows (`f -3` above is a static
-error) and leaves the rest to the run.
+A capitalized name for a refinement of a scalar type, defined without
+parameters, names a subtype, as `Count = Int` does
+([named types](type-and-resource-rules.md#distinct-types)), and the sized
+integers are exactly this (`Int32`, see [intrinsics](intrinsics.md)):
+`(3 : Positive)` is a `Positive` (`typeOf` says so), it keeps its name through
+arithmetic, each result tested against the condition (with
+`I32 = (n : Int) | -2147483648 <= n && n <= 2147483647`, `(2000000000 : I32) * 2`
+is an error, never a wrapped number), and `isType Positive 3` is `False` for
+the plain `3`, as `isType Int32 3` is. A typed pattern of it takes one of its
+values or a plain value its refinement holds (converted as the base's pattern
+converts it: `(c : Scalar)` takes `65` as `(c : UInt)` does), binding the plain
+value, as `(x : Int32)` takes `5`. Like any named type it is no subset of its
+base (`Positive <= Int` is `False`, as `Int32 <= Int` is); a refinement of it,
+`Small`, is a subtype of its own, taking a `Positive` or a plain value.
+
+Any other refinement (of a list type, `Ordered`, or one a type function gives,
+`Bounded 1 10`) is the set of its base's values for which the condition holds:
+`typeOf ([1,2] : Ordered)` is `[Int,Int]`, `isType Ordered [1,2]` is `True`,
+and it is within its base (`Ordered <= [Int,Int]`), while nothing is within it
+but itself and its own refinements (conditions are not compared). Ascription,
+typed patterns, constructor fields and unions test the condition on every
+refinement; the static check decides it on values it knows (`f -3` above is a
+static error) and leaves the rest to the run.
 
 ## Function types
 
@@ -1901,7 +1913,8 @@ Falsy values are `False`, numeric zero (including complex zero), floating NaN,
 empty strings, empty lists, empty records, empty HashMaps, and null pointers.
 Everything else is truthy, including type constructors, non-nullary functions,
 and every variant constructor (`None` and zero-ordinal enum cases included).
-Mutable cells use their current contents. Nullary actions run under the usual
+Mutable cells use their current contents, and a named subtype's value its base's
+(`Flag = Bool` makes `(False : Flag)` falsy). Nullary actions run under the usual
 demand rules. A list check inspects only its first cell, not its elements or
 remaining tail; infinite nonempty lists are truthy.
 

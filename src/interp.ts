@@ -70,8 +70,7 @@ const IO_RESULTS: Record<string, string> = {
     entropy: "Int", currentTime: "Int", zoneOffset: "Int",
 };
 
-// Scalar types := names a subtype of (Money := Float): not aggregates.
-// The scalar types: a name for one is an alias whose values cannot carry it.
+// The scalar types.
 const AGGREGATE_NUMERIC = new Set(["Number", "Real", "Integer", "Exact", "Inexact"]);
 const SCALAR_NAMES = new Set([...NUMERIC_TYPES.filter(t => !["Number", "Real", "Integer", "Exact", "Inexact"].includes(t)), "String", "Bool", "Char"]);
 
@@ -248,6 +247,17 @@ export class Interpreter {
         if (!bound || this.loadingPrelude) return true;
         if (PRELUDE_TYPES.has(name)) return bound === this.preludeBindings.get(name);
         return bound.kind === "type" && bound.name === name && !bound.family;
+    }
+    // Whether a refinement's base is a scalar type (through refinements and
+    // named subtypes): naming one names a subtype.
+    private scalarRefinement(t: Value): boolean {
+        for (let base = t; ; ) {
+            base = this.reference(base);
+            if (base.kind !== "type") return false;
+            if (base.refine) { base = base.choices![0]; continue; }
+            if (base.family?.base) { base = base.family.base; continue; }
+            return SCALAR_NAMES.has(base.name) && !base.family && !base.alias && !base.arguments?.length && !base.variable;
+        }
     }
     // (p : T), T a refinement: the value as its base's pattern takes it
     // (converted: (c : Scalar) takes 65 as (c : UInt) does), its condition
@@ -661,6 +671,17 @@ export class Interpreter {
                         // (Sized 2 is Vect 2 Int); where a type is expected, it
                         // reads as a function type.
                         const value = this.reference(this.eval(clauses[0].body));
+                        // A scalar type names a subtype: Money = Float. A Money is
+                        // a Float wherever one is accepted, but keeps its name,
+                        // and (x : Money) takes a Money or a Float it converts.
+                        if (value.kind === "type" && SCALAR_NAMES.has(value.name) && !value.family && !value.alias && !value.arguments?.length && !value.variable) {
+                            return { kind: "type", name, family: { name, base: value } };
+                        }
+                        // So does a refinement of one (Int32 = (n : Int) | ...), its
+                        // values those of the refinement.
+                        if (value.kind === "type" && value.refine && this.scalarRefinement(value)) {
+                            return { kind: "type", name, family: { name, base: { ...value, name } } };
+                        }
                         return this.remembered(name, [], value);
                     } finally { this.env = caller; }
                 });
@@ -917,7 +938,7 @@ export class Interpreter {
     // (Choosing the instance may meet the value again, in an instance's own
     // typed pattern: there it is not converted.)
     private builtinValue(name: string, v: Value): Value | undefined {
-        if (v.kind !== "variant" || !v.family || !this.makes(name)) return undefined;
+        if (v.kind !== "variant" || !v.family || v.family.base || !this.makes(name)) return undefined;
         const made = this.declaredConversion({ kind: "type", name }, v);
         return made && this.dataValue(made);
     }
@@ -1334,6 +1355,8 @@ export class Interpreter {
         const family = v.family;
         if (path.some(type => this.sameType(type, v))) throw new APNError("runtime", `${v.name} has no finite default; supply a value explicitly`);
         if (path.length >= 128) throw new APNError("runtime", "default initialization is too deeply recursive; supply a value explicitly");
+        if (family.base) return { kind: "variant", tag: family.name, family,
+            v: [this.defer(() => this.defaultField(family.base!, [...path, v]))] };
         const choices = [...family.fields ?? []];
         const choice = choices.find(([, fields]) => !fields.length) ?? choices[0];
         if (!choice) throw new APNError("runtime", `${v.name} has no default constructor`);
@@ -1921,6 +1944,20 @@ export class Interpreter {
             if (callable(l)) return this.iterate(r, l);
         }
         if (op === "==" || op === "!=") return mkBool(this.equals(l, r) === (op === "=="));
+        // A named subtype keeps its name through arithmetic with itself or a
+        // plain value (Money 1 + 1.0 is a Money); two names do not mix.
+        const named = (v: Value) => v.kind === "variant" && v.family?.base ? v.family : undefined;
+        const ln = named(l), rn = named(r);
+        if (ln || rn) {
+            if (ln && rn && ln !== rn) throw new APNError("runtime", `cannot combine ${ln.name} and ${rn.name}`, { hint: "convert one explicitly, as in `Money (amount distance)`" });
+            const family = (ln ?? rn)!;
+            const a = this.demand(ln ? (l as Extract<Value, { kind: "variant" }>).v[0] : l), b = this.demand(rn ? (r as Extract<Value, { kind: "variant" }>).v[0] : r);
+            if (["+", "-", "*", "/", "%", "^"].includes(op)) {
+                return this.conform({ kind: "type", name: family.name, family }, this.operate(op, a, b));
+            }
+            if (["<", ">", "<=", ">="].includes(op)) return this.operate(op, a, b);
+            throw new APNError("runtime", `operator '${op}' cannot use a ${family.name} here`);
+        }
         const promoted = this.promote(op, l, r);
         if (promoted) return promoted;
         if (["+", "-", "*", "/", "%", "^"].includes(op)) {
@@ -1976,6 +2013,7 @@ export class Interpreter {
 
     private arrayNegate(value: Value): Value {
         const v = this.arithmeticValue(value);
+        if (v.kind === "variant" && v.family?.base) return this.conform({ kind: "type", name: v.family.name, family: v.family }, this.arrayNegate(v.v[0]));
         if (isNumeric(v)) return v.typeName ? castNumeric(v.typeName, negate(v)) : negate(v);
         if (this.isList(v)) return this.defer(() => {
             const cell = this.cell(v);
@@ -2126,6 +2164,12 @@ export class Interpreter {
             const fields = new Map(b.v);
             return a.v.length === b.v.length && a.v.every(([key, value]) => fields.has(key) && this.equals(value, fields.get(key)!));
         }
+        // A named subtype equals a plain value of its base by payload
+        // (Money 1.2 == 1.2); two different names are never equal.
+        const named = (v: Value) => v.kind === "variant" && !!v.family?.base;
+        if (named(a) !== named(b) && !(a.kind === "variant" && b.kind === "variant")) {
+            return this.equals(named(a) ? (a as Extract<Value, { kind: "variant" }>).v[0] : a, named(b) ? (b as Extract<Value, { kind: "variant" }>).v[0] : b);
+        }
         if (a.kind !== b.kind) return false;
         switch (a.kind) {
             case "int": return a.v === (b as any).v;
@@ -2143,7 +2187,7 @@ export class Interpreter {
             }
             case "variant": {
                 const bv = b as any;
-                return a.tag === bv.tag && a.family?.name === bv.family?.name &&
+                return a.tag === bv.tag && a.family?.name === bv.family?.name && (!(a.family?.base || bv.family?.base) || a.family === bv.family) &&
                     this.equals({ kind: "list", v: a.v }, { kind: "list", v: bv.v });
             }
             case "closure": case "clauseFn": case "native": case "contract":
@@ -3070,7 +3114,7 @@ export class Interpreter {
     // Both converting is ambiguous; neither leaves the operator's own error.
     private promote(op: string, l: Value, r: Value): Value | undefined {
         if (!["+", "-", "*", "/", "%", "^", "<", ">", "<=", ">="].includes(op) || !this.instances.has("to")) return undefined;
-        const family = (v: Value) => v.kind === "variant" && v.family ? v.family : undefined;
+        const family = (v: Value) => v.kind === "variant" && v.family && !v.family.base ? v.family : undefined;
         const lf = family(l), rf = family(r);
         if (!lf && !rf || lf === rf) return undefined;
         // Converted to the other's type, as a to instance for it is written.
@@ -3490,6 +3534,9 @@ export class Interpreter {
             } else if (v.kind === "pending") {
                 // Inside another value it shows as its source (return "a").
                 emit(this.undecidedText(v, ancestors.size > 1), "pending");
+            } else if (v.kind === "variant" && v.family?.base && v.v.length === 1) {
+                // A named subtype's value is its base's (5 : Count prints 5).
+                this.render(v.v[0], emit, raw, ancestors);
             } else if (v.kind === "variant") {
                 // Arguments show as source writes them: Some (Some 1).
                 emit(v.tag, "variant");
@@ -3553,8 +3600,14 @@ export class Interpreter {
         if (given && (given.kind === "type" || given.kind === "functionType" || this.isList(given) && this.isTypeValue(given))) {
             return this.sameType(closed!, given) ? 40 : this.within(given, closed!) ? 38 : -1000;
         }
+        // A named subtype's own pattern outranks its base's: (Money x) first.
         // Only a constructor pattern looks at its argument.
         if (pattern.p !== "constr") return 0;
+        const named = this.reference(arg);
+        if (named.kind === "variant" && named.family?.base) {
+            if (pattern.tag === named.family.name) return 35;
+            if (this.builtinType(pattern.tag)) arg = named.v[0];
+        }
         const binding = this.env.get(pattern.tag);
         if (binding && this.counted(this.reference(binding))) return this.isList(this.dataValue(arg)) ? 30 : -1000;
         if (!this.builtinType(pattern.tag)) return 0;
@@ -3586,6 +3639,10 @@ export class Interpreter {
         return pattern.p === "constr" && this.builtinType(pattern.tag) ? 30 : 0;
     }
 
+    // A named subtype's value as its base: Money 1.2 is 1.2 to builtins.
+    private baseValue(v: Value): Value {
+        return v.kind === "variant" && v.family?.base ? this.dataValue(v.v[0]) : v;
+    }
 
     // Nothing named the type an undecided value should have.
     ambiguous(v: Extract<Value, { kind: "pending" }>): never {
@@ -3740,6 +3797,19 @@ export class Interpreter {
             let actual = type.name === "Type" ? this.demand(value) : this.dataValue(value);
             // A pending monadic value takes this type's monad (Option Int { return 42 }).
             if (actual.kind === "pending" && (type.family || actual.step.op === "call")) actual = this.dataValue(this.realize(actual, type));
+            if (type.family?.base) {
+                // A named refinement's base may be named too (Small = (n : Positive)
+                // | n < 10): a value of it, which its refinement takes, is held as
+                // the plain value under it.
+                const refined = this.reference(type.family.base);
+                if (actual.kind === "variant" && actual.family?.base && (actual.family === type.family || !(refined.kind === "type" && refined.refine))) {
+                    if (actual.family !== type.family) throw new APNError("runtime", `${type.name} requires explicit unwrapping of ${actual.family.name}`);
+                    return actual;
+                }
+                let held = this.conform(type.family.base, actual);
+                while (held.kind === "variant" && held.family?.base) held = this.dataValue(held.v[0]);
+                return { kind: "variant", tag: type.family.name, family: type.family, v: [held] };
+            }
             if (type.family) {
                 if (actual.kind !== "variant" || actual.family !== type.family) throw new APNError("runtime", `${type.name} expects a ${type.name} variant`);
                 // An indexed family's value has the arguments its constructors made.
@@ -4215,7 +4285,7 @@ export class Interpreter {
     // Int, Box Int); a constructor taking fields, unapplied, is a function, and
     // a nullary one a value (None), unless it is its type's own name (JSON).
     sharedType(v: Value): Extract<Value, { kind: "type" }> | undefined {
-        if (v.kind !== "variant" || !v.family) return undefined;
+        if (v.kind !== "variant" || !v.family || v.family.base) return undefined;
         const type: Extract<Value, { kind: "type" }> = { kind: "type", name: v.family.name, family: v.family };
         if (!v.v.length) return v.family.name === v.tag ? type : undefined;
         let args: Value[];
@@ -4462,6 +4532,8 @@ export class Interpreter {
     truthy(value: Value): boolean {
         const v = this.dataValue(value);
         if (v.kind === "bool") return v.v;
+        // A named subtype's value has its base's truthiness (Money 0 is zero).
+        if (v.kind === "variant" && v.family?.base) return this.truthy(v.v[0]);
         if (v.kind === "io" || v.kind === "pending") throw new APNError("runtime", "an action is not a condition", { hint: "run it first: `x <- action`" });
         if (isNumeric(v)) {
             if (v.kind === "complex") return this.truthy(v.re) || this.truthy(v.im);
@@ -4769,7 +4841,7 @@ export class Interpreter {
             return mkList([...map.entries.values()].map((entry) => entry[name === "keys" ? 0 : 1]));
         }
         if (NUMBER_NATIVES.some(([n]) => n === name)) {
-            let args = argsIn.map((x) => this.dataValue(x));
+            let args = argsIn.map((x) => this.baseValue(this.dataValue(x)));
             if (name === "expt" && isNumeric(args[0]) && isNumeric(args[1])) return typedPower(args[0], args[1]);
             if (args.length === 2 && isNumeric(args[0]) && isNumeric(args[1]) &&
                 ["min", "max", "gcd", "lcm", "quotient", "remainder", "modulo", "makeRectangular"].includes(name)) {
@@ -4873,6 +4945,8 @@ export class Interpreter {
         const a = args[0];
         // An undecided value reaching a builtin that needs a plain value.
         if (!SHOWS_UNDECIDED.has(name)) for (const x of args) if (x.kind === "pending") this.ambiguous(x);
+        // A named subtype is its base to builtins: sqrt (Money 4.0) is 2.0.
+        if (!SHOWS_UNDECIDED.has(name)) args.forEach((x, n) => { args[n] = this.baseValue(x); });
         switch (name) {
             // Output actions yield [] (nothing), as print does in Haskell.
             case "print":
@@ -5529,7 +5603,7 @@ export class Interpreter {
         // A constructor names its type here (Box x = _ is tag Box Box [x]).
         if ((given.kind === "native" && given.tag || given.kind === "variant") && given.family) return given.family;
         const owner = given;
-        if (owner.kind === "type" && owner.family) return owner.family;
+        if (owner.kind === "type" && owner.family && !owner.family.base) return owner.family;
         const key = owner.kind === "type" ? owner.alias : owner.kind === "clauseFn" ? owner.clauses : undefined, name = this.ownerName(owner);
         if (!key || !name || !/^[A-Z]/.test(name)) {
             throw new APNError("runtime", "tag's owner must be a type the program defines", { hint: "Some a = tag Option Some [a]" });
@@ -5686,10 +5760,17 @@ export class Interpreter {
             try { return this.constructType("Dynamic", this.reference(arg)); }
             finally { this.dynamicDepth--; }
         }
-        const value = this.demand(arg);
+        let value = this.demand(arg);
+        // A base type applied to a named value unwraps it: Float (Money 1.2).
+        if (!f.family && !f.alias && SCALAR_NAMES.has(f.name)) value = this.baseValue(value);
         if (!f.family && ["Float", "Float32", "Float64"].includes(f.name)) {
             if (!isNumeric(value)) throw new APNError("runtime", `${f.name} expects a number`);
             return castNumeric(f.name, value, true);
+        }
+        // Applying a named subtype applies its base, as written:
+        // F .1 with F = Float32 is F (Float32 .1).
+        if (f.family?.base && !(value.kind === "variant" && value.family?.base)) {
+            return this.conform(f, this.apply(f.family.base, value));
         }
         return this.conform(f, value);
     }
@@ -6046,6 +6127,16 @@ export class Interpreter {
                     const input = type.kind === "record" ? this.recordPatternInput(type, actual) : this.isList(actual) ? actual : null;
                     return input !== null && this.matchPattern(p.args[0], this.conform(type, input), binds);
                 }
+                // A named subtype's takes one of its values, or a plain value it
+                // converts (as (x : Int32) takes 5 and (x : Float) takes 1),
+                // either binding the plain value; never another name's.
+                if (type.kind === "type" && type.family?.base && p.args.length === 1 && !parameters) {
+                    const actual = this.dataValue(v);
+                    if (actual.kind === "variant" && actual.family === type.family) return this.matchPattern(p.args[0], actual.v[0], binds);
+                    if (actual.kind === "variant" && actual.family?.base) return false;
+                    const member = this.refinedMember(type, v);
+                    return member?.kind === "variant" && this.matchPattern(p.args[0], member.v[0], binds);
+                }
                 // A type without parameters takes its value: (Color c) takes Red,
                 // and (b : Box) what a to Box instance makes of another value.
                 if (type.kind === "type" && type.family) {
@@ -6055,7 +6146,7 @@ export class Interpreter {
                         if (made) actual = this.dataValue(made);
                     }
                     return p.args.length === 1 && !parameters && actual.kind === "variant" && actual.family === type.family &&
-                        this.matchPattern(p.args[0], this.conform(type, actual), binds);
+                        this.matchPattern(p.args[0], type.family.base ? actual.v[0] : this.conform(type, actual), binds);
                 }
                 if (type.kind === "functionType") {
                     const f = this.force(v);
@@ -6067,14 +6158,15 @@ export class Interpreter {
             const ref = this.reference(v);
             return ref.kind === "mutable" && p.args.length === 1 && this.matchPattern(p.args[0], ref, binds);
         }
-        // A program's own type matches a builtin's pattern by what its to
-        // instance makes: (Int i) takes East.
+        // A named subtype matches its base's patterns: (Float x) takes Money 1.2;
+        // another type of the program's, what its to instance makes: (Int i) takes East.
+        if (p.p === "constr" && this.builtinType(p.tag) && !["Type", "Mutable", "Dynamic"].includes(p.tag)) v = this.baseValue(this.reference(v));
         if (p.p === "constr" && SCALAR_TYPES.has(p.tag)) v = this.builtinValue(p.tag, this.dataValue(v)) ?? v;
         v = p.p === "typeBind" || (p.p === "constr" && p.tag === "Type") ? this.demand(v) : this.dataValue(v);
         switch (p.p) {
             case "typeBind": {
                 const type = this.callNative("typeOf", [v]);
-                return this.matchPattern(p.name === "_" ? { p: "wildcard" } : { p: "var", name: p.name }, type, binds) && this.matchPattern(p.value, isNumeric(v) ? numericPayload(v) : v, binds);
+                return this.matchPattern(p.name === "_" ? { p: "wildcard" } : { p: "var", name: p.name }, type, binds) && this.matchPattern(p.value, isNumeric(v) ? numericPayload(v) : this.baseValue(v), binds);
             }
             case "int": return isNumeric(v) && equalNumbers(v, integer(p.v));
             case "bool": return v.kind === "bool" && v.v === p.v;

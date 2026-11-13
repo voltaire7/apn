@@ -9,7 +9,7 @@ import { charLiteral, itemsText, stringLiteral } from "./separators.ts";
 // ---------------- Types & values ----------------
 
 // results: an indexed family's constructors' result types (Cons ... -> Vec (S k) a).
-export interface VariantFamily { name: string; parameters?: string[]; fields?: Map<string, Expr[]>; env?: Env; results?: Map<string, Expr>; }
+export interface VariantFamily { base?: Value; name: string; parameters?: string[]; fields?: Map<string, Expr[]>; env?: Env; results?: Map<string, Expr>; }
 
 export type Type = string; // lightweight: we represent types as printable strings
 
@@ -148,8 +148,9 @@ export function valueToString(v: Value): string {
         }
         case "record":
             return `[${v.v.map(([k, val]) => fieldSource(k, valueToString(val), slotField(v, k, known(val)))).join(", ")}]`;
-        // A constructor's value shows it (UserId 5).
-        case "variant": return v.tag + v.v.map(argumentText).join("");
+        // A named subtype's value is its base's (5 : Count prints 5); a
+        // constructor's shows it (UserId 5).
+        case "variant": return v.family?.base && v.v.length === 1 ? valueToString(v.v[0]) : v.tag + v.v.map(argumentText).join("");
         case "closure": return functionSource(v);
         case "thunk": return "...";
         case "native": return functionSource(v);
@@ -167,7 +168,8 @@ export function valueToString(v: Value): string {
 // A constructor argument as source writes it: Some (Some 1), Some -1.
 export function compoundArgument(v: Value): boolean {
     switch (v.kind) {
-        case "variant": return v.v.length > 0;
+        // A named subtype's value shows as its base's (Count 2 is 2).
+        case "variant": return v.family?.base && v.v.length === 1 ? compoundArgument(v.v[0]) : v.v.length > 0;
         case "pending": return v.step.op === "return" || v.step.op === "throw";
         case "io": case "closure": case "clauseFn": case "contract": case "functionType": return true;
         case "native": return v.applied.length > 0;

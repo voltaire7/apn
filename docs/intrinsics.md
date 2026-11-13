@@ -74,24 +74,20 @@ positive, so every fraction has one spelling; a `Fraction` whose denominator is
 `ComplexExact [re : Fraction, im : Fraction]` with the same care.
 
 The sized integers (`Int8` ... `Int128`, `UInt8` ... `UInt128`) are `Int`
-restricted to a range, a [refinement type](semantics.md#refinement-types), each
-a type of its own over it (an alias would be the plain `Int`s):
+restricted to a range, a [refinement type](semantics.md#refinement-types):
 
 ```apn
-Range8 = (n : Int) | -128 <= n && n <= 127
-Int8 (n : Range8) = _
-to Int (Int8 n) = n
-to Int8 (n : Int) = Int8 n
-Int8 a + Int8 b = Int8 (a + b)    # and -, *, %, ^ alike
-to String (Int8 n) = to String n
+Int8 = (n : Int) | -128 <= n && n <= 127
+UInt8 = (n : UInt) | n <= 255
 ```
 
-So `typeOf (1 : Int8)` is `Int8`, it prints as its number, and the range is
-checked where a value becomes one and on each result, as the constructor's
-field is (`300 : UInt8` and `(200 : UInt8) + (100 : UInt8)` are errors), never
-by wrapping around. An `Int` joins an `Int8` through `to Int8` (`(1 : Int8) +
-2` is an `Int8`), and two different sized types, with no conversion between
-them declared, do not mix (`(1 : Int8) + (2 : Int16)` is an error).
+A capitalized name for a type names a subtype of it
+([named types](type-and-resource-rules.md#distinct-types)), so an `Int8` keeps its
+name (`typeOf (1 : Int8)` is `Int8`, printed as its number) through arithmetic
+with itself or a plain `Int` (`(1 : Int8) + 2` is an `Int8`), and the range is
+checked where a value becomes one and on each result (`300 : UInt8` and
+`(200 : UInt8) + (100 : UInt8)` are errors), never by wrapping around. Two
+different names do not mix (`(1 : Int8) + (2 : Int16)` is an error).
 
 ## Inexact numbers
 

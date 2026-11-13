@@ -427,9 +427,10 @@ an `Int`.
 ## Constructor functions
 
 A capitalized definition computes: applied, it gives what its body gives, a
-type (`Sized n = Vect n Int`: `Sized 2` is `Vect 2 Int`) or any value; a type
-it names is an alias (`Count = Int`: `5 : Count` is an `Int`). A body of `_`
-makes a constructor instead, a type of its own (see
+type (`Sized n = Vect n Int`: `Sized 2` is `Vect 2 Int`) or any value. A scalar
+type it names is kept as a
+[named subtype](type-and-resource-rules.md#distinct-types) (`Count = Int`:
+`5 : Count` is a `Count`). A body of `_` makes a constructor instead (see
 [variants](#variants-parameters-and-distinct-wrappers)).
 
 One that gives any other type (a type or a schema, not a constructor) gives,

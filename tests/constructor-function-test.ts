@@ -18,10 +18,11 @@ function failure(source: string, checked: boolean): string {
 const PAIRS = "Pairs n a = Vect (n * 2) a\n";
 for (const checked of [true, false]) {
     for (const [source, expected] of [
-        // X = T is an alias: the same values, the name a second one for them.
-        ["Count = Int\n[(5 : Count), typeOf (5 : Count), Count <= Int, Int <= Count]", "[5,Int,True,True]"],
+        // = names a scalar type transparently: a Count is an Int wherever one
+        // is accepted, and keeps its name when a result fits.
+        ["Count = Int\n[(5 : Count), typeOf (5 : Count)]", "[5,Count]"],
         ["Count = Int\n[(5 : Count) + 1, (5 : Count) * 2 == 10, ((5 : Count) : Int), sqrt (4 : Count)]", "[6,True,5,2]"],
-        ["Count = Int\nAge = Int\n(1 : Count) + (2 : Age)", "3"],
+        ['Count = Int\nf (c : Count) = "count"\nf (n : Int) = "int"\n[f (1 : Count), f 1]', '["count","int"]'],
         ["Count = Int\ng (n : Int) = n + 1\ng (5 : Count)", "6"],
         // (e : T), to T e and a typed pattern (x : T) are one operation:
         // e if it is a T, else what a to T instance makes of it.
@@ -51,12 +52,19 @@ for (const checked of [true, false]) {
         ["Point = [x : Float, y : Float]\np = Point [x = 1, y = 2]\nq = p\nq.x = 5\n[typeOf p, typeOf q, (Point : Type), p == [x = 1.0, y = 2.0]]",
             "[Point, Point, [x : Float, y : Float], True]"],
         ["Point = [x : Float, y : Float]\ntypeOf ([pt : Point] []).pt", "Point"],
+        // (c : Count) takes a plain Int as (x : Int32) does, binding it; an
+        // Int's own clause, exact, is chosen first.
+        ["Count = Int\nf (c : Count) = typeOf c\n[f 5, f (5 : Count)]", "[Int,Int]"],
+        ["Count = Int\nk (c : Count) = \"count\"\nk (n : Int) = \"int\"\n[k 5, k (5 : Count)]", '["int","count"]'],
         ["Meters = Float\nd (x : Meters) = x * 2\nd 2", "4.0"],
     ] as const) Deno.test(`capitalized definitions (checked=${checked}): ${source}`, () => {
         const actual = run(source, checked);
         if (actual !== expected) throw new Error(`${actual} != ${expected}`);
     });
     for (const [source, message] of [
+        // Two names never mix: (c : Count) takes no Age.
+        ["Count = Int\nAge = Int\n(1 : Count) + (2 : Age)", "cannot combine Count and Age"],
+        ["Count = Int\nAge = Int\nf (c : Count) = c\nf (2 : Age)", checked ? "cannot use Age where Count is required" : "no clause"],
         [PAIRS + "([1,2,3] : Pairs 2 Int)", checked ? "length mismatch: expected 4, got 3" : "Vect length mismatch: expected 4, got 3"],
         ["UserId := Int\n1", "APN defines with =, not :="],
         ["x = 5 : Bool\nx", checked ? "cannot use Int where Bool is required" : "Int is not a Bool"],

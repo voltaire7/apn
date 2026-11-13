@@ -4,24 +4,40 @@ These features use ordinary definitions. There are no new keywords.
 
 ## Distinct types
 
-`=` names a type: `Count = Int` makes `Count` another name for `Int`, the
-same values (`Count <= Int` and `Int <= Count` are both `True`), so a
-`(5 : Count)` is an `Int` and arithmetic on it gives one.
+A capitalized name defined as a type (`X = T`) names a subtype of it. A scalar
+type's (a numeric type's, `String`'s, `Bool`'s or `Char`'s) values keep the
+name: a `Count` is an `Int` wherever one is accepted, keeps its name when a
+result fits, and does not mix with another name. A list's, a record's or any
+other type's keep it where a value is given it (`typeOf ([1,2,3] : Row)` is
+`Row` with `Row = Vect 3 Int`), being the type's values.
 
 ```apn
 Count = Int
 
-(5 : Count) + 1             # 6
-typeOf (5 : Count)          # Int
-(1 : Count) + (2 : Age)     # 3, with Age = Int: both are Ints
+(5 : Count) + 1             # 6, a Count: a Count and a plain Int give a Count
+((5 : Count) : Int)         # 5
+sqrt (4 : Count)            # 2: builtins and (x : Int) patterns see the Int
+(5 : Count) == 5            # True
+(1 : Count) + Age 2         # error: cannot combine Count and Age (Age = Int)
 ```
 
-A type of its own is a constructor (see
-[variants](templates-and-types.md#variants-parameters-and-distinct-wrappers)):
-`UserId (id : Int) = _` declares `UserId`, whose one field is an `Int`. It has
-none of an `Int`'s operations, only those its clauses and instances define: a
-`to Int` instance lets it stand wherever an `Int` is needed (a typed parameter,
-a builtin, arithmetic with a plain number), as `to` does for any type.
+Applying `Count` or a list type (`([1,2] : List Count)`) makes one. Its typed
+pattern, `(c : Count)`, takes a `Count` or a plain value it converts, as
+`(x : Int32)` takes `5` and `(x : Float)` takes `1`, binding the plain value;
+never another name's (`(2 : Age)`). Given a plain `5`, an `Int`'s own clause,
+an exact match, is chosen first: with `k (c : Count) = "count"` and
+`k (n : Int) = "int"`, `k 5` is `"int"` and `k (5 : Count)` is `"count"`. A
+refinement of a scalar named so (`Positive = (n : Int) | n > 0`) is a named
+subtype too, whose values also hold its condition (see
+[refinement types](semantics.md#refinement-types)).
+
+A constructor makes a distinct type instead (see
+[variants](templates-and-types.md#variants-parameters-and-distinct-wrappers)),
+when a value must not pass for its contents: `UserId (id : Int) = _` declares
+`UserId`, whose one field is an `Int`. It has none of an `Int`'s operations,
+only those its clauses and instances define: a `to Int` instance lets it stand
+wherever an `Int` is needed (a typed parameter, a builtin, arithmetic with a
+plain number), as `to` does for any type.
 
 ```apn
 UserId (id : Int) = _
@@ -46,13 +62,6 @@ Given its field's type it is its own type where a type is expected: an omitted
 record slot (`[id : UserId Int] []` is `[id = UserId 0]`), another constructor's
 field (`Order (u : UserId Int) (n : Int) = _`), `isType (UserId Int)`,
 `List (UserId Int)`.
-
-```apn
-to Int (UserId n) = n
-double (n : Int) = n * 2
-double (UserId 4)           # 8
-UserId 9 + 1                # 10: + takes the Int to Int gives
-```
 
 ## Variant list indexes
 
