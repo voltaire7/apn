@@ -1917,16 +1917,7 @@ export class Interpreter {
             };
         }
         if (op === "++") {
-            // A record and a record of fields: a copy with them, as field
-            // assignment sets them (model ++ [name = n] is { model.name = n;
-            // model }); [] is the record of none. Other code joins it.
-            const record = this.dataValue(lThunk);
-            if (record.kind === "record") {
-                const given = this.dataValue(rThunk);
-                if (given.kind === "record") return this.assignFields(record, given.v.map(([key, value]) => [key, this.demand(value)]));
-                if (this.isList(given) && this.cell(given) === null) return record;
-            }
-            const l = this.code(record);
+            const l = this.code(this.dataValue(lThunk));
             const r = rThunk;
             if (this.isList(l)) return this.appendCode(l, r);
             const right = this.dataValue(r);

@@ -17,8 +17,8 @@ Vector3                # Vector3; Type Vector3 is [x : Float, y : Float, z : Flo
 typeOf vec             # Vector3
 ```
 
-`++` with a record of fields is field assignment, as for any record
-([records](semantics.md#records)): `Vector3 ++ [z = 3]` is the template with
+Applying a template to fields is field assignment, as for any record
+([records](semantics.md#records)): `Vector3 [z = 3]` is the template with
 that slot set, `[x : Float, y : Float, z = 3.0]`.
 
 Supplied fields convert to their slots' types. Omitted type slots initialize to

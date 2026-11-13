@@ -1302,8 +1302,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return problem(`cannot compare ${text(a)} and ${text(b)}`);
         }
         if (t.op === "++") {
-            if (a.k === "record" && b.k === "list" && b.items?.length === 0) return a;
-            if (a.k === "record" && b.k === "record") return assignFields(a, [...b.fields].map(([key, type]) => [key, type, { t: "placeholder" }]), { t: "placeholder" });
             if (a.k === "list" && b.k === "list") return list(union([a.element, b.element]));
             if (a.k === "atom" && b.k === "atom" && a.name === "String" && b.name === "String") return a;
             return problem(`cannot append ${text(a)} and ${text(b)}`);
@@ -2759,11 +2757,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (op === "++") {
             // A record and a record of fields: a copy with them (as at runtime).
-            // A record and a record of fields: a copy with them (as at
-            // runtime); [] is the record of none. Other code joins it.
-            const record = resolve(a), fields = resolve(b);
-            if (record.k === "record" && fields.k === "record") return assignFields(record, [...fields.fields].map(([key, type]) => [key, type, e]), e);
-            if (record.k === "record" && fields.k === "list" && fields.items?.length === 0) return record;
             const x = asCode(resolve(a)), y = asCode(resolve(b));
             // Code joins code: the right's items see the left's bindings.
             if (x.k === "list" && y.k === "list" && x.formula && (y.formula || y.items)) {

@@ -260,7 +260,7 @@ print (zipWith add [1,2] [10,20])
 example("finite formatting still resolves nested list data", `
 print (enumerate [10,20])
 proto = [x = 0, y = 0]
-print (proto ++ [x = 1, y = 2])
+print (proto [x = 1, y = 2])
 print (to String [[1 + 1], [3]])
 print (format "% %" [1 + 2, [4 + 5]])
 `, ["[[0,10],[1,20]]", "[x = 1, y = 2]", "[[2],[3]]", "3 [9]"]);

@@ -15,7 +15,7 @@ for (const [source, expected] of [
     ['v = [] : [x : Float]; v "x" = 123; v.[x] = [456]; v.x', '456.0'],
     ['Id = Int; v = [id = (1 : Id)]; v.id = 2; [v.id, typeOf v.id]', '[2,Id]'],
     ['(identity : Int -> Int) <- return (x -> x); v = [f = identity]; v.f = x -> x + 1; v.f 2', '3'],
-    ['[x = 1] ++ [y = 2]', '[x = 1, y = 2]'],
+    ['[x = 1] [y = 2]', '[x = 1, y = 2]'],
 ] as const) Deno.test(`slot replacement: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

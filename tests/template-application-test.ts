@@ -22,13 +22,13 @@ for (const [source, expected] of [
     ['Characters = [Char,Char]\nCharacters."hi"', "['h','i']"],
     ['cast [Char,Char] "hi"', "['h','i']"],
     ['typeOf [Char,Char]."hi"', 'List a'],
-    ['[x = 0] ++ [x = 123]', '[x = 123]'], ['[x = (0 : Int)] ++ [x = floor .2]', '[x = 0]'], ['[x = (0 : Int32)] ++ [x = 123]', '[x = 123]'],
-    ['[x = "old"] ++ [x = "new"]', '[x = "new"]'], ['[x = False] ++ [x = True]', '[x = True]'], ["[x = 'a'] ++ [x = 'b']", "[x = 'b']"],
+    ['[x = 0] [x = 123]', '[x = 123]'], ['[x = (0 : Int)] [x = floor .2]', '[x = 0]'], ['[x = (0 : Int32)] [x = 123]', '[x = 123]'],
+    ['[x = "old"] [x = "new"]', '[x = "new"]'], ['[x = False] [x = True]', '[x = True]'], ["[x = 'a'] [x = 'b']", "[x = 'b']"],
     ['(* 2) * [1,2,3,4]', '[2,4,6,8]'],
     ['Int * [1,2,3,4]', '[1,2,3,4]'],
     ['[Int,String].[1,"hi"]', '[1,"hi"]'],
     ['[[(* 2), (* 2)], [(* 2), (* 2)]].[[1,2],[3,4]]', '[[2,4],[6,8]]'],
-    ['[x = 0, y = 0] ++ [x = 1, y = 2]', '[x = 1, y = 2]'],
+    ['[x = 0, y = 0] [x = 1, y = 2]', '[x = 1, y = 2]'],
     ['([x = 123] : [x = 0, y : Int])', '[x = 123, y = 0]'],
     ['([x = 123, y = 2] : [x : Int])', '[x = 123, y = 2]'],
     ['([x = [1,2]] : [x : [Int,Int]])', '[x = [1,2]]'],
@@ -42,8 +42,8 @@ for (const [source, expected] of [
     ['take 2 [Int,Int,Int].[1,2,missing]', '[1,2]'],
     ['head [x -> 42].[missing]', '42'],
     // A record of values is updated as by field assignment: its function is replaced.
-    ['length ([x = [0]] ++ [x = [missing]]).x', '1'],
-    ['[x = 1.1] ++ [x = 10]', '[x = 10.0]'],
+    ['length ([x = [0]] [x = [missing]]).x', '1'],
+    ['[x = 1.1] [x = 10]', '[x = 10.0]'],
     ['([Int] : [type : Type])', '[type = Int]'],
     // A field bound to a type is a value, not a slot: no template, no type.
     ['([x = 1] : [x = Float])', '[x = 1]'],
@@ -68,7 +68,7 @@ for (const [source, expected] of [
     ['Option a = Some a | None\n[(Option [Int] : Type) == (Option [Int] : Type), (Option [Int] : Type) == (Option [Float] : Type)]', '[True,False]'],
     ['UserId = | MkUserId Int\n[isType UserId (MkUserId 123), isType UserId 123]', '[True,False]'],
 
-    ['Point = [x : Float, y : Float]\n[Point ++ [x = 1], ([x = 1] : Point)]', '[[x = 1.0, y : Float], [x = 1.0, y = 0.0]]'],
+    ['Point = [x : Float, y : Float]\n[Point [x = 1], ([x = 1] : Point)]', '[[x = 1.0, y : Float], [x = 1.0, y = 0.0]]'],
     ['Numbers = [Int]\nNumbers.[1]', '[1]'],
     ['Numbers = [Int]\nf (Numbers xs) = head xs\nf [123]', '123'],
     ['f (xs : [Int]) = head xs\nf [123]', '123'],
@@ -90,14 +90,14 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const [source, error] of [
-    ['[x = (0 : Int)] ++ [x = (.2 : Float)]', 'lossy conversion'],
-    ['[x = (0 : Int8)] ++ [x = 128]', 'out of range'],
-    ['[x = 0] ++ [x = "hi"]', 'cannot use String where Int is required'],
+    ['[x = (0 : Int)] [x = (.2 : Float)]', 'lossy conversion'],
+    ['[x = (0 : Int8)] [x = 128]', 'out of range'],
+    ['[x = 0] [x = "hi"]', 'cannot use String where Int is required'],
     ['f (t : Type) = t\nf [a = Int]', 'no clause of'],
-    ['[x = False] ++ [x = 1]', 'cannot use Int where Bool is required'],
-    ['[x = 1] ++ [x = 2.5]', 'lossy conversion'],
+    ['[x = False] [x = 1]', 'cannot use Int where Bool is required'],
+    ['[x = 1] [x = 2.5]', 'lossy conversion'],
     ['([1,2.5] : [x : Int, y = 0])', 'lossy conversion'],
-    ['[x = 0, y = (*2)] ++ [x = 1, y = 2]', 'cannot use Int where'],
+    ['[x = 0, y = (*2)] [x = 1, y = 2]', 'cannot use Int where'],
     ['v = [x = (*2)]\nv.x = 3', 'cannot use Int where'],
     ['[Int,Int].[1]', 'same length'],
     ['[Int,Int].[1,2,3]', 'same length'],
@@ -134,16 +134,15 @@ for (const assignment of ['v.x = .2 : Float', 'v "x" = .2 : Float', 'v.[x,y] = [
         if (!failed || actual !== '[x = 1, y = 2]') throw new Error(actual);
     });
 }
-// r ++ [f = v] is { r.f = v; r } for a record of values, and for a type
+// r [f = v] is { r.f = v; r } for a record of values, and for a type
 // given types. Checked and not, the same.
 for (const [application, block, expected] of [
-    ['model = [name = "a", n = 1]\nmodel ++ [name = "b"]', 'model = [name = "a", n = 1]\n{ model.name = "b"; model }', '[name = "b", n = 1]'],
     ['model = [name = "a", n = 1]\nmodel [name = "b"]', 'model = [name = "a", n = 1]\n{ model.name = "b"; model }', '[name = "b", n = 1]'],
     ['[x = 1.1] [10]', '{ r = [x = 1.1]; r.x = 10; r }', '[x = 10.0]'],
-    ['r = [f = (* 2)]\n(r ++ [f = (+ 1)]).f 1', 'r = [f = (* 2)]\n{ r.f = (+ 1); r }.f 1', '2'],
-    ['Vector3 = [x : Float, y : Float, z : Float]\nVector3 ++ [x : Int]', 'Vector3 = [x : Float, y : Float, z : Float]\n{ Vector3.x = Int; Vector3 }', '[x : Int, y : Float, z : Float]'],
-    ['Vector3 = [x : Float, y : Float, z : Float]\nV2 = Vector3 ++ [z : Int]\n([x = 1, z = 2] : V2)', 'Vector3 = [x : Float, y : Float, z : Float]\nV2 = { Vector3.z = Int; Vector3 }\n([x = 1, z = 2] : V2)', '[x = 1.0, y = 0.0, z = 2]'],
-] as const) Deno.test(`++ and application are field assignment: ${application}`, () => {
+    ['r = [f = (* 2)]\n(r [f = (+ 1)]).f 1', 'r = [f = (* 2)]\n{ r.f = (+ 1); r }.f 1', '2'],
+    ['Vector3 = [x : Float, y : Float, z : Float]\nVector3 [x : Int]', 'Vector3 = [x : Float, y : Float, z : Float]\n{ Vector3.x = Int; Vector3 }', '[x : Int, y : Float, z : Float]'],
+    ['Vector3 = [x : Float, y : Float, z : Float]\nV2 = Vector3 [z : Int]\n([x = 1, z = 2] : V2)', 'Vector3 = [x : Float, y : Float, z : Float]\nV2 = { Vector3.z = Int; Vector3 }\n([x = 1, z = 2] : V2)', '[x = 1.0, y = 0.0, z = 2]'],
+] as const) Deno.test(`record application is field assignment: ${application}`, () => {
     for (const checked of [false, true]) {
         const run = (source: string) => {
             const i = new Interpreter();
