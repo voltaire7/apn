@@ -9,6 +9,8 @@ import { fieldSource, keySource } from "./record-keys.ts";
 import typeSource from "../lib/std/type.apn" with { type: "text" };
 import doSource from "../lib/std/do.apn" with { type: "text" };
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
+import { captureSnapshot } from "./snapshot.ts";
+import { buildExecutable } from "./compile.ts";
 import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
 import { NATIVE_EXPORTS, RETIRED_NATIVES } from "./native-exports.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
@@ -63,10 +65,10 @@ class TailLoad {
 }
 
 // Natives with effects: applying one builds an IO action; running it performs them.
-export const IO_NATIVES = new Set(["intrinsics.import", "intrinsics.readFileFrom", "print", "echo", "emit", "repl", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
+export const IO_NATIVES = new Set(["intrinsics.import", "intrinsics.readFileFrom", "compile", "print", "echo", "emit", "repl", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
 // What the actions of IO builtins yield, for showing their types (IO []).
 const IO_RESULTS: Record<string, string> = {
-    "intrinsics.import": "Module", "intrinsics.readFileFrom": "String", print: "[]", echo: "[]", emit: "[]", repl: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
+    "intrinsics.import": "Module", "intrinsics.readFileFrom": "String", compile: "[]", print: "[]", echo: "[]", emit: "[]", repl: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
     entropy: "Int", currentTime: "Int", zoneOffset: "Int",
 };
 
@@ -89,7 +91,7 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 export const NATIVES: Array<[string, number]> = [
     ...NUMBER_NATIVES,
     ["assert", 2], ["intrinsics.match", 2], ["set", 2], ["while", 2], ["for", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
-    ["print", 1], ["echo", 1], ["repl", 0], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
+    ["print", 1], ["echo", 1], ["repl", 0], ["compile", 2], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
     ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["use", 1],
@@ -455,6 +457,18 @@ export class Interpreter {
         this.loadingPrelude = false;
         this.env = this.programEnv = outer;
         for (const [name, value] of this.preludeBindings) outer.setLocal(name, value);
+        this.initialBindings = new Map(outer.map);
+        this.initialInstances = new Map([...this.instances].map(([method, fns]) => [method, fns.length]));
+    }
+    // What the interpreter starts with (its natives, types and prelude), and its
+    // instances then: compile carries only what a program adds (see snapshot.ts).
+    initialBindings = new Map<string, Value>();
+    private initialInstances = new Map<string, number>();
+    addedInstances(): Array<[string, Value[]]> {
+        return [...this.instances].map(([method, fns]): [string, Value[]] => [method, fns.slice(this.initialInstances.get(method) ?? 0)]).filter(([, fns]) => fns.length);
+    }
+    addInstance(method: string, fn: Value): void {
+        this.registerInstance(method, fn, fn.kind === "clauseFn" ? fn.clauses : []);
     }
 
     // A type declaration (Color = Red | Green), at the top level or in a block,
@@ -5132,6 +5146,16 @@ export class Interpreter {
                 const source = this.force(args[0]);
                 if (source.kind !== "string") throw new APNError("runtime", "parse expects source text");
                 return this.parseCode(source);
+            }
+            // compile entry opts writes an executable running entry, a
+            // snapshot of it and what it reaches (docs/runtime-compilation.md).
+            case "compile": {
+                const options = this.reference(this.demand(argsIn[1]));
+                const fields = new Map(options.kind === "record" ? options.v : []);
+                const text = (key: string): string | undefined => { const v = fields.get(key); const s = v && this.reference(this.demand(v)); return s?.kind === "string" ? s.v : undefined; };
+                const snapshot = captureSnapshot(this, argsIn[0]);
+                buildExecutable(snapshot, { name: text("name") ?? "main", target: text("target") ?? "native" });
+                return mkList([]);
             }
             case "intrinsics.import": {
                 const path = this.force(args[0]);

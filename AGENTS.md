@@ -169,6 +169,7 @@ Read the relevant doc and its tests before changing an area:
 | Metacircular evaluator | `docs/metacircular-evaluator.md` | `tests/metacircular-test.ts`; also run `deno run --allow-read examples/metacircular-self.ts` |
 | Browser HTML / p5.js | `docs/browser-html.md`, `docs/p5.md` | `tests/html-test.ts`, `tests/p5-test.ts`, `tests/elm-examples-test.ts`, `tests/p5js-examples-test.ts`; also `deno check src/browser-runtime.ts src/editor.ts` |
 | C interop (FFI) | `docs/c-interop.md` | `tests/c-interop-test.ts`; also run `./tests/run-c-interop-tests` |
+| Runtime compilation (`compile`, prototype) | `docs/runtime-compilation.md` | `tests/compile-test.ts`; also run it with `--allow-all` |
 
 Per-feature invariants (record keys, eager `<-` binding, tail calls, `use`/
 `import`, resources, dotted patterns, selection assignment, and more)

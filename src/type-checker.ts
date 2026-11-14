@@ -7503,6 +7503,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const empty = list(variable(), constant(0n));
     for (const name of ["print", "echo", "emit"]) native(name, [variable()], io(empty));
     native("repl", [], io(empty));
+    native("compile", [variable(), variable()], io(empty));
     { const held = variable(); native("assert", [variable(), held], held); }
     native("isType", [variable(), variable()], bool);
     native("parse", [str], explicitDynamic);
