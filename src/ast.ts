@@ -464,6 +464,47 @@ export type PatternHead = { kind: "type"; arity: number } | { kind: "constructor
 // (b : Box Int) the pattern b.(Box (_ : Int)) and (x : None) x.None; given
 // fewer, the function type of the rest, (x : Some) is (x : a -> Some a).
 // Another value is the schema (p : T args).
+// What a name is bound to, as the run and the checker each see it, in the
+// terms the rules reading patterns use: those rules are written once, here
+// (readPatterns), and each side only says what its names are bound to.
+// data: a constructor of so many fields, or a value one made (made: Some 1);
+// cons and nil: the list's own (the prelude's Cons and Nil); type: a type
+// taking so many parameters (computed: one a definition with parameters
+// computes, SizedInts n = Vect n Int); written: read as the type it spells
+// (a function, or a list or record of types); value: anything else.
+export type Binding =
+    | { kind: "free" } | { kind: "cons" } | { kind: "nil" } | { kind: "written" } | { kind: "value" }
+    | { kind: "data"; tag: string; fields: number; made: boolean }
+    | { kind: "type"; arity: number; computed: boolean };
+// A statement's patterns read by what their names are bound to where it runs.
+export function readPatterns(s: unknown, bound: (name: string) => Binding): void {
+    withinScope(s, () => {
+        rewriteListConstructors(s, tag => bound(tag).kind === "cons");
+        knownTypeArguments(s, tag => { const b = bound(tag); return b.kind === "type" && b.computed; });
+        resolveHeads(s, name => headKind(bound(name)));
+        rewriteTypedPatterns(s, tag => patternHead(bound(tag)));
+    });
+}
+// The list's own constructor a name is, if one (see listAlternatives).
+export function listRole(b: Binding): "cons" | "nil" | undefined {
+    return b.kind === "cons" || b.kind === "nil" ? b.kind : undefined;
+}
+function headKind(b: Binding): HeadKind {
+    switch (b.kind) {
+        case "free": return "free";
+        case "data": return { data: b.tag };
+        case "type": case "written": case "cons": return "type";
+        default: return "other";
+    }
+}
+function patternHead(b: Binding): PatternHead | undefined {
+    switch (b.kind) {
+        case "data": return b.made && b.fields ? { kind: "schema" } : { kind: "constructor", fields: b.fields };
+        case "type": return { kind: "type", arity: b.arity };
+        case "written": return { kind: "schema" };
+        default: return undefined;
+    }
+}
 export function rewriteTypedPatterns(node: unknown, head: (tag: string) => PatternHead | undefined): void {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) { node.forEach(x => rewriteTypedPatterns(x, head)); return; }

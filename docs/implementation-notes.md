@@ -510,13 +510,15 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
   (`parseDefinition`): one whose body holds `_` as a value (`holdsPlaceholder`,
   not a type's `List _`) is a constructor declaration, any other a clause whose
   body is ascribed `T` (`typedClauses`).
-- A statement's patterns are read once, where it runs (`readPatterns`, at
-  runtime and in the checker): at the top level, and in a block that declares
-  names as each of its statements runs; `withinScope` keeps an outer pass out
-  of such blocks.
+- A statement's patterns are read once, where it runs (`readPatterns` in
+  `ast.ts`): at the top level, and in a block that declares names as each of
+  its statements runs; `withinScope` keeps an outer pass out of such blocks.
+  Its rules are written once, against a `Binding` (what a name is bound to);
+  the run (`Interpreter.binding`) and the checker (`boundAs`) only describe
+  their names in those terms, so the two cannot read a pattern differently.
 - A lowercase name applied in a pattern parses as a head (`constr` with
-  `head`); `resolveHeads` decides it where the statement runs, by binding, at
-  runtime (`headKind`) and in the checker (`constructorNames` keeps a name's
+  `head`); `resolveHeads` decides it where the statement runs, by binding
+  (the checker's `constructorNames` keeps a name's
   constructor, NewBox = Box): data drops the mark, a free name
   becomes the typed run it was, anything else keeps it, and matching it is an
   error (`headError`) unless the definition assigns an item (`assignmentKey`).

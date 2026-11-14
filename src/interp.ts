@@ -17,7 +17,7 @@ import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWit
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, type HeadKind, resolveHeads, declaresNames, withinScope, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, knownTypeArguments, rewriteTypedPatterns, type PatternHead, rewriteListConstructors, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, type Binding, listRole, readPatterns, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, declaresNames, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, isUse } from "./ast.ts";
@@ -458,11 +458,7 @@ export class Interpreter {
     // declared for its whole scope (scope), as a new name is. A union of
     // existing types is a definition instead: the value it makes.
     private declare(def: DataDef, scope: Env): Value | undefined {
-        def = listAlternatives(def, tag => {
-            if (this.namesCons(tag)) return "cons";
-            const bound = this.env.get(tag), value = bound && this.reference(bound);
-            return value && this.isList(value) && this.cell(value) === null ? "nil" : undefined;
-        });
+        def = listAlternatives(def, tag => listRole(this.binding(tag)));
         if (listUnion(def)) { scope.setLocal(def.name, { kind: "type", name: "List" }); return undefined; }
         if (def.variants.some(v => v.result && (v.tag === "[]" || v.tag === "::"))) return this.evalDef(def.name, listClauses(def.variants));
         // Constructors declared into a type declared before join it.
@@ -701,7 +697,7 @@ export class Interpreter {
             // clause is a binding of its own.
             if (this.isConstructorName(name)) {
                 let last: Value = { kind: "list", v: [] };
-                for (const clause of clauses) last = this.evalPatBinding({ pattern: constructorPattern(name, clause.params, this.namesCons(name)), value: clause.body });
+                for (const clause of clauses) last = this.evalPatBinding({ pattern: constructorPattern(name, clause.params, this.binding(name).kind === "cons"), value: clause.body });
                 return last;
             }
             const arity = clauses[0].params.length;
@@ -4415,25 +4411,6 @@ export class Interpreter {
         };
         return rangeValue(real(lo), second && real(second), hi && real(hi));
     }
-    // Whether a name is bound to a type a definition with parameters computes
-    // (SizedInts n = Vect n Int; see knownTypeArguments).
-    private computedType(name: string): boolean {
-        const bound = this.env.get(name), t = bound && this.reference(bound);
-        return t?.kind === "type" && !!t.alias && !(t.alias.run.kind === "clauseFn" && isUnionBody(t.alias.run.clauses[0].body));
-    }
-    // What a typed pattern's type name is here (see rewriteTypedPatterns): a
-    // constructor with so many fields, a type taking so many parameters, or
-    // another value read as a type (a function type).
-    private patternHead(name: string): PatternHead | undefined {
-        const bound = this.env.get(name);
-        if (!bound) return undefined;
-        const t = this.reference(bound);
-        if (t.kind === "native" && t.tag) return { kind: "constructor", fields: t.arity - t.applied.length };
-        if (t.kind === "variant") return t.v.length ? { kind: "schema" } : { kind: "constructor", fields: 0 };
-        // A function type, or a list or record of types: a type read as written.
-        if (t.kind === "closure" || t.kind === "functionType" || (this.isList(t) || t.kind === "record") && this.isTypeValue(t)) return { kind: "schema" };
-        return t.kind === "type" ? { kind: "type", arity: this.typeArity(t) } : undefined;
-    }
     // Whether a type is any (_ given to a type).
     private isAny(t: Value): boolean {
         const x = this.reference(t);
@@ -4444,25 +4421,30 @@ export class Interpreter {
         const f = this.reference(this.force(head));
         return f.kind === "type" || f.kind === "native" && !!f.tag;
     }
-    // What a name applied in a pattern is here (see resolveHeads).
-    private headKind(name: string): HeadKind {
+    // What a name is bound to here, in the terms the pattern rules use (see
+    // Binding): a type a definition with parameters computes is computed.
+    private binding(name: string): Binding {
         const bound = this.env.get(name);
-        if (bound === undefined) return "free";
+        if (bound === undefined) return { kind: "free" };
         const value = this.reference(bound);
-        if (value.kind === "native" && value.tag || value.kind === "variant") return { data: value.tag! };
-        return this.typeVariableName(name, this.env) ? "other" : "type";
+        if (value.kind === "native" && value.tag) return { kind: "data", tag: value.tag, fields: value.arity - value.applied.length, made: false };
+        if (value.kind === "variant") return { kind: "data", tag: value.tag, fields: value.v.length, made: true };
+        if (value.kind === "native" && value.name === "intrinsics.cons" && !value.applied.length) return { kind: "cons" };
+        if (this.isList(value) && this.cell(value) === null) return { kind: "nil" };
+        if (value.kind === "type") {
+            const computed = !!value.alias && !(value.alias.run.kind === "clauseFn" && isUnionBody(value.alias.run.clauses[0].body));
+            return { kind: "type", arity: this.typeArity(value), computed };
+        }
+        const written = value.kind === "functionType" || value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native"
+            || (this.isList(value) || value.kind === "record") && this.isTypeValue(value);
+        return { kind: written ? "written" : "value" };
     }
     // A statement's patterns read by what their names are bound to here: at
     // the top level, and in a block declaring names, as each statement runs.
     private readPatterns(s: unknown): void {
         if (this.patternsRead.has(s as object)) return;
         this.patternsRead.add(s as object);
-        withinScope(s, () => {
-            rewriteListConstructors(s, tag => this.namesCons(tag));
-            knownTypeArguments(s, tag => this.computedType(tag));
-            resolveHeads(s, name => this.headKind(name));
-            rewriteTypedPatterns(s, tag => this.patternHead(tag));
-        });
+        readPatterns(s, name => this.binding(name));
     }
     private patternsRead = new WeakSet<object>();
     // How many parameters a type still takes (List 1, List Int 0).
@@ -4472,10 +4454,6 @@ export class Interpreter {
         return Math.max(0, takes - (t.arguments?.length ?? 0));
     }
     // Whether a name is bound to the list's cons (the prelude's Cons).
-    private namesCons(name: string): boolean {
-        const bound = this.env.get(name), cons = bound && this.reference(bound);
-        return cons?.kind === "native" && cons.name === "intrinsics.cons" && !cons.applied.length;
-    }
     // Whether :: here is the prelude's (or not bound yet), so a written list
     // is the list it writes rather than its expansion (a :: b :: []).
     private preludeCons(): boolean {
@@ -6035,7 +6013,7 @@ export class Interpreter {
     // destructures).
     private isConstructorName(name: string): boolean {
         const bound = this.env.get(name);
-        return !!bound && ((bound.kind === "native" && !!bound.tag) || bound.kind === "variant" || this.namesCons(name));
+        return !!bound && ((bound.kind === "native" && !!bound.tag) || bound.kind === "variant" || this.binding(name).kind === "cons");
     }
 
     // How many parameters the type a name is bound to takes: List a one,

@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, extendedDeclaration, headError, resolveHeads, declaresNames, withinScope, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, rewriteListConstructors, rewriteTypedPatterns, knownTypeArguments, isUnionBody, type PatternHead, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, type Binding, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -5298,12 +5298,27 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A statement's patterns read by what their names are bound to in scope,
     // as at runtime (Interpreter.readPatterns).
     function readPatterns(s: unknown, scope: Scope): void {
-        withinScope(s, () => {
-            rewriteListConstructors(s, tag => listConstructor(tag, scope) === "cons");
-            knownTypeArguments(s, tag => { const t = resolve(scope.get(tag)?.type ?? dynamic); return t.k === "alias" && !isUnionBody(t.body); });
-            resolveHeads(s, name => { const entry = scope.get(name); return !entry ? "free" : isConstructor(entry) ? { data: constructorNames.get(name) ?? entry.ownTag ?? name } : describing(resolve(entry.type)) || resolve(entry.type).k === "fn" ? "type" : "other"; });
-            rewriteTypedPatterns(s, tag => patternHead(tag, scope));
-        });
+        readStatementPatterns(s, name => boundAs(name, scope));
+    }
+    // What a name is bound to in scope, in the terms the pattern rules use, as
+    // at runtime (Interpreter.binding).
+    function boundAs(name: string, scope: Scope): Binding {
+        const entry = scope.get(name);
+        if (!entry) return { kind: "free" };
+        const t = resolve(entry.type);
+        if (isConstructor(entry)) {
+            let fields = 0;
+            for (let f = t; f.k === "fn"; f = resolve(f.output)) fields++;
+            return { kind: "data", tag: constructorNames.get(name) ?? entry.ownTag ?? name, fields, made: false };
+        }
+        if (builtinOperator(t) === "::") return { kind: "cons" };
+        if (t.k === "list" && t.items?.length === 0) return { kind: "nil" };
+        // A lambda read as the function type it spells (Handler = a -> Int).
+        if (t.k === "fn" || t.k === "type" && resolve(t.value).k === "fn") return { kind: "written" };
+        if (t.k === "factory") return { kind: "type", arity: 2, computed: false };
+        if (t.k === "alias") return { kind: "type", arity: t.params.length - t.args.length, computed: !isUnionBody(t.body) };
+        if (t.k === "type") return { kind: "type", arity: typeParameters(t), computed: false };
+        return { kind: describing(t) ? "written" : "value" };
     }
     // Names bound to a constructor: its own tag (NewBox = Box).
     const constructorNames = new Map<string, string>();
@@ -7018,8 +7033,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function defineClauses(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
         // An existing constructor destructures (Some v = Some 123), also one
         // imported, which the parser cannot see; as at runtime (evalDef).
-        if (/^[A-Z]/.test(name) && (isConstructor(scope.get(name)) || listConstructor(name, scope) === "cons")) {
-            for (const c of clauses) infer({ t: "patDef", pattern: constructorPattern(name, c.params, listConstructor(name, scope) === "cons"), value: c.body }, scope);
+        const cons = boundAs(name, scope).kind === "cons";
+        if (/^[A-Z]/.test(name) && (isConstructor(scope.get(name)) || cons)) {
+            for (const c of clauses) infer({ t: "patDef", pattern: constructorPattern(name, c.params, cons), value: c.body }, scope);
             return;
         }
         // One whose length its index makes is known by that length, as at runtime.
@@ -7555,33 +7571,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     });
     // A type declaration (Color = Red | Green), at the top level or in a block
     // (scope), as at runtime.
-    // What a typed pattern's type name is here, as at runtime
-    // (Interpreter.patternHead): a constructor or a function type, or a type
-    // taking so many parameters.
-    function patternHead(name: string, scope: Scope): PatternHead | undefined {
-        const entry = scope.get(name);
-        if (!entry) return undefined;
-        const t = resolve(entry.type);
-        if (isConstructor(entry)) {
-            let fields = 0;
-            for (let f = t; f.k === "fn"; f = resolve(f.output)) fields++;
-            return { kind: "constructor", fields };
-        }
-        // A lambda read as the function type it spells (Handler = a -> Int).
-        if (t.k === "fn" || t.k === "type" && resolve(t.value).k === "fn") return { kind: "schema" };
-        if (t.k === "factory") return { kind: "type", arity: 2 };
-        if (t.k === "alias") return { kind: "type", arity: t.params.length - t.args.length };
-        return t.k === "type" ? { kind: "type", arity: typeParameters(t) } : undefined;
-    }
-    // What a name is bound to, if the list's own constructor: the empty list
-    // or the list's cons (the prelude's Nil and Cons).
-    function listConstructor(tag: string, scope: Scope): "nil" | "cons" | undefined {
-        const entry = scope.get(tag), t = entry && resolve(entry.type);
-        if (builtinOperator(t) === "::") return "cons";
-        return t?.k === "list" && t.items?.length === 0 ? "nil" : undefined;
-    }
     function declare(written: DataDef, scope: Scope): void {
-        written = listAlternatives(written, tag => listConstructor(tag, scope));
+        written = listAlternatives(written, tag => listRole(boundAs(tag, scope)));
         if (listUnion(written)) { scope.set(written.name, { type: { k: "type", value: atom("List") } }); return; }
         if (written.variants.some(v => v.result && (v.tag === "[]" || v.tag === "::"))) {
             const clauses = listClauses(written.variants);
