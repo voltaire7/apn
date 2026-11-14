@@ -860,7 +860,9 @@ the REPL echoing a list holding one (run it first: `x <- readFile "f"`, then `pr
 The check reports it before the run where it sees the action. `typeOf` gives its type:
 `typeOf (print 1)` is `IO []`, and a do-block yields what its last statement does,
 known without running it when that statement reads no name the block binds (`typeOf
-{ print 1; return 5 }` is `IO Int`; `{ x <- readFile "f"; return x }` is `IO a`). `probe`
+{ print 1; return 5 }` is `IO Int`), and otherwise the type the check inferred (`{ x <-
+readFile "f"; return x }` is `IO String`; `IO a` where it inferred none, as in the body of
+a function generic in what it returns). `probe`
 shows code, a list's items as written (`probe [print "hi"]` is `[print "hi"]`).
 
 Actions run in exactly two places:

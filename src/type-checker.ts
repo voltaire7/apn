@@ -214,6 +214,7 @@ export type TypeScope = Map<string, Entry>;
 export interface TypeBridge {
     fits(target: unknown, actual: unknown): boolean;
     concrete(type: unknown): boolean;
+    text(type: unknown): string;
 }
 /** A name of explicit Dynamic type: its uses are checked at run time. */
 export const dynamicEntry = (): Entry => ({ type: explicitDynamic });
@@ -7188,11 +7189,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         } finally { choosing--; requirements.length = saved; }
     }
     // A value's type for the run (see CheckOptions.valueTypes): a list's or a
-    // variant's, whose element or arguments typed patterns decide by.
+    // variant's, whose element or arguments typed patterns decide by; a
+    // do-block action's, whose result typeOf names before it runs.
     function recordValueType(e: Expr, t: Ty): void {
         if (!options.valueTypes) return;
         const r = resolve(t);
-        if (r.k === "list" || r.k === "variant" && r.args.length && !isIO(r) && !isPending(r)) recordType(options.valueTypes, e, t);
+        if (r.k === "list" || r.k === "variant" && r.args.length && (e.t === "block" || !isIO(r)) && !isPending(r)) recordType(options.valueTypes, e, r);
     }
     // Recorded once per source position; a position inferred as two types
     // (a generic body at different calls) decides nothing (null).
@@ -7677,6 +7679,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return succeeds(() => convert(copy(wanted), copy(a), at, false, new Map(), true));
         },
         concrete: type => !variables(resolve(type as Ty)).size,
+        text: type => text(type as Ty),
     });
     // A type declaration (Color = Red | Green), at the top level or in a block
     // (scope), as at runtime.

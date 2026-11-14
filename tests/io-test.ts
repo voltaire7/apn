@@ -36,9 +36,11 @@ for (const [name, source, expected] of [
     // An action is shown only as code a list keeps, and by its type.
     ["an action is shown by probe and typeOf", 'probe [print "hi", echo [1,2]]\nprint (typeOf (print 1))',
         ['[print "hi", echo [1,2]]', "IO []"]],
-    // A do-block yields what its last statement does, unless that reads a bound name.
-    ["a do-block's type is its last statement's", 'n = 7\nprint [typeOf { print 1; print 2 }, typeOf { print 1; return n }]\nprint (typeOf { print 1; s <- return "a"; return s })',
-        ["[IO [], IO Int]", "IO a"]],
+    // A do-block yields what its last statement does; one reading a bound
+    // name, what the check inferred: nothing in a generic function's body.
+    ["a do-block's type is its last statement's", 'n = 7\nprint [typeOf { print 1; print 2 }, typeOf { print 1; return n }]\n' +
+        'print (typeOf { print 1; s <- return "a"; return s })\ng y = { print y; z <- return y; return z }\nprint (typeOf (g 5))',
+        ["[IO [], IO Int]", "IO String", "IO a"]],
     ["a block with an action statement is an action", 'f n = { print n; return (n * 2) }\ny <- f 3\nprint y', ["3", "6"]],
     ["a block of bindings stays a value", "f n = { m = n + 1; m * 2 }\nprint (f 3 + 1)", ["9"]],
     ["a discarded unit keeps a block pure", "f n = { []; n * 2 }\nprint (f 3)", ["6"]],

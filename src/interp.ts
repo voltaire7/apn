@@ -3280,6 +3280,14 @@ export class Interpreter {
         return value?.kind === "type" && value.family ? value : undefined;
     }
     private checkedHeads = new WeakMap<Expr, string>();
+    // An IO do-block's result as the checker inferred it: "a" when it did not,
+    // or inferred more than one (a generic function's body).
+    private checkedResult(block: Expr): string {
+        const session = this.types, bridge = session?.bridge;
+        const type = bridge && this.recordedType(block, session.valueTypes) as { k: string; args?: unknown[] } | null;
+        const result = type?.args?.[0];
+        return result !== undefined && bridge!.concrete(result) ? bridge!.text(result) : "a";
+    }
     clauseHead(clause: DefClause, env: Env): string | undefined {
         return this.checkedHead(clause) ?? headOfDescription(describeType({ kind: "clauseFn", name: "<clause>", clauses: [clause], arity: clause.params.length, env, applied: [] }), clause.params.length);
     }
@@ -3448,14 +3456,13 @@ export class Interpreter {
     // reads no name the block binds: { print 1; return 5 } yields an Int, its
     // last statement evaluated (an action made, never run) where the block runs.
     // A definition last yields []; one reading a bound name (x <- e; return x)
-    // is known only by running it.
+    // yields what the checker inferred, when it inferred one type.
     private blockResult(block: Extract<Expr, { t: "block" }>, here: Env, start: number): () => string {
         return () => {
             const last = block.stmts[block.stmts.length - 1];
             if (!last || last.t === "stmDef" || last.t === "typeDef" || last.t === "patDef" && !last.eager) return "[]";
-            if (last.t === "patDef") return "a";
             const bound = new Set(block.stmts.slice(start).flatMap(s => s.t === "patDef" ? patternVariables(s.pattern) : s.t === "stmDef" ? [s.name] : []));
-            if (mentions(last, bound)) return "a";
+            if (last.t === "patDef" || mentions(last, bound)) return this.checkedResult(block);
             const caller = this.env;
             this.env = here;
             try {
