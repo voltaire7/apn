@@ -33,6 +33,8 @@ get = intrinsics.get
 # truthy x: x's truth, which conditions read (c ? a : b, !x, a guard):
 # False, zero, empty and null values are False, anything else True.
 truthy = intrinsics.truthy
+# A guard that always holds: the last of a definition's guards (| else = ...).
+else = True
 # A Bool applied to two values is one of them: True a b is a, False a b is b
 # (c ? a : b is truthy c a b).
 get True a = _ -> a

@@ -3989,8 +3989,11 @@ export class Interpreter {
         }
         return undefined;
     }
+    // A lambda read as the function type it spells: (Int -> Int), (a -> b),
+    // (n : Float) -> Float, its typed parameter's type the input; a guard
+    // refines it ((n : Float) | n > 0 -> Float), as X = (n : Float) | n > 0 does.
     private readFunctionType(f: Extract<Value, { kind: "closure" | "clauseFn" }>, variables: Map<string, Value>): Value | undefined {
-        if (f.kind === "closure" ? f.applied?.length : f.applied.length || f.clauses.length !== 1 || f.clauses[0].guard) return undefined;
+        if (f.kind === "closure" ? f.applied?.length : f.applied.length || f.clauses.length !== 1) return undefined;
         const scope = new Env(f.env);
         const variable = (name: string): Value => {
             if (name === "_") return { kind: "type", name: "_", variable: true };
@@ -4014,7 +4017,8 @@ export class Interpreter {
                         const bound = scope.get(p.tag);
                         let type = bound && this.reference(bound);
                         if (!type || type.kind !== "type") return undefined;
-                        for (const arg of p.args) {
+                        // (n : Float): the type before its value's pattern, which names nothing here.
+                        for (const arg of p.typed ? p.args.slice(0, -1) : p.args) {
                             const argument = pattern(arg);
                             if (!argument) return undefined;
                             type = this.reference(this.apply(type, argument));
@@ -4041,6 +4045,11 @@ export class Interpreter {
             const params = f.kind === "closure" ? f.params.map((name): Pattern => ({ p: "var", name })) : f.clauses[0].params;
             const inputs = params.map(pattern);
             if (!inputs.every(x => x)) return undefined;
+            const guard = f.kind === "clauseFn" ? f.clauses[0].guard : undefined;
+            if (guard) {
+                if (params.length !== 1 || params[0].p !== "constr" || !params[0].typed) return undefined;
+                inputs[0] = this.refined(params[0], inputs[0]!, guard, scope);
+            }
             const body = f.kind === "closure" ? f.body : f.clauses[0].body;
             // Any other lowercase name the body uses is a type variable too,
             // unless it names a type or a function (a type built by one).
@@ -4052,6 +4061,22 @@ export class Interpreter {
             if (error instanceof APNError) return undefined;
             throw error;
         } finally { this.env = caller; }
+    }
+    // The values of a type matching a pattern for which a condition holds,
+    // as the refinement X = (p : T) | condition makes them (Parser.refinement).
+    private refined(p: Pattern, type: Value, condition: Expr, scope: Env): Value {
+        const local = new Env(scope), value = "$refined";
+        local.setLocal("$type", type);
+        const arms: Expr = { t: "list", v: [
+            { t: "patternLambda", params: [p], body: condition },
+            { t: "patternLambda", params: [{ p: "wildcard" }], body: { t: "bool", v: false } },
+        ] };
+        const test: Expr = { t: "lambda", params: [value], body: { t: "app", f: { t: "app", f: { t: "var", name: "~" }, a: { t: "var", name: value } }, a: arms } };
+        const refine: Expr = { t: "recordAccess", rec: { t: "var", name: "intrinsics" }, field: "refine" };
+        const caller = this.env;
+        this.env = local;
+        try { return this.reference(this.demand(this.eval({ t: "app", f: { t: "app", f: refine, a: { t: "var", name: "$type" } }, a: test }))); }
+        finally { this.env = caller; }
     }
     // Whether a lowercase name in a type is a type variable: it is unless it
     // names a type (a list or record of types too), or a function (which builds one).

@@ -195,6 +195,22 @@ A function's clauses are a match (`~`) on its arguments: `len` is
 `f a b = [a,b] ~ [[p,q] -> ...]`; either spelling runs and checks the same
 (the one exception: clauses with equivalent patterns and different result types
 are an overload the context chooses: [overloading on the result type](#overloading-on-the-result-type)).
+As an alternative takes a guard (`n | n > 0 -> n`), so does a clause, after its
+parameters: `f x | x >= 0 = "pos"`. Several guards of the same parameters are
+written one per line, each a clause of them, tried as written, and `else` (the
+prelude's `True`) is the guard that always holds:
+
+```apn
+sign n : Int
+    | n > 0 = 1
+    | n < 0 = -1
+    | else = 0
+```
+
+A guard is a choice: when it fails the next clause is tried. A condition in a
+type is a requirement instead: `func : (n : Float) | n > 0 -> Float` takes only
+positive Floats, a call given another failing (see
+[refinements](#refinement-types)).
 Literal patterns (integers, floats, strings, characters, `True`, `False`) are
 tried before other clauses ([ranking](#clause-ranking)); numeric literal patterns compare numerically, so
 `2` and `2.0` match each other. Integer ranges (`[1..9]`) are also patterns.
@@ -1933,6 +1949,14 @@ converts it: `(c : Scalar)` takes `65` as `(c : UInt)` does), binding the plain
 value, as `(x : Int32)` takes `5`. Like any named type it is no subset of its
 base (`Positive <= Int` is `False`, as `Int32 <= Int` is); a refinement of it,
 `Small`, is a subtype of its own, taking a `Positive` or a plain value.
+
+A refinement is a type wherever one is written, unnamed: `x : (n : Int) | n > 0
+= 5`, and in a function type, whose parameter it refines: `(n : Float) | n > 0
+-> Float` is a guarded lambda read as the function type it spells, taking the
+Floats the guard holds for. Followed by `->` it is that lambda, else the
+refinement. A function's declared result is converted as a value is, so `func :
+(n : Float) | n > 0 -> Float` then `func = sqrt` checks that each result is a
+Float when it runs (`sqrt` gives a `Number`, a `Complex` for a negative).
 
 Any other refinement (of a list type, `Ordered`, or one a type function gives,
 `Bounded 1 10`) is the set of its base's values for which the condition holds:

@@ -13,7 +13,7 @@ operator (`(+) = intrinsics.add`, ...; the `intrinsics` record holds the
 functions APN cannot define) and its fixity, `negate` and `not` (the functions
 `-x` and `!x` are), `enumFrom`, `enumFromThen`, `enumFromTo` and
 `enumFromThenTo` (the functions ranges are: `[a..]` is `enumFrom a`),
-`probe`, `reduce`, `fail` (code still to write: `fail "todo"`), `toAST` and
+`probe`, `reduce`, `else` (the guard that always holds), `fail` (code still to write: `fail "todo"`), `toAST` and
 `parse` (see [code](semantics.md#code)), `import`
 and `load` (see [module imports](semantics.md#module-imports)),
 and the Functor, Applicative

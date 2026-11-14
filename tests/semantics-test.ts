@@ -37,6 +37,18 @@ function failure(name: string, source: string, message: string) {
     });
 }
 
+// A condition in a type is a requirement: a call failing it is an error,
+// where a failing guard would try the next clause.
+failure("a refinement in a function type rejects a call", "func : (n : Float) | n > 0 -> Float\nfunc = sqrt\nfunc -4.0", "is not in the refinement");
+failure("a definition's guards end with lines starting with |", "k n\n    | n > 0 = 1\n    print 2", "each line of a definition's guards starts with |");
+example("a definition's guards, one per line", `
+func x : IO []
+    | x >= 0 = print "positive"
+    | else = print "negative"
+func 123
+func -123
+`, ["positive", "negative"]);
+
 example("definitions defer their bodies", `
 unused = missing + 1
 action = print "unexpected"

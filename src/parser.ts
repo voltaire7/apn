@@ -1784,6 +1784,54 @@ class Parser {
     // definition? Recognizes  name = expr  and the Haskell-style
     // name p1 p2 p3 = expr  where each pi is a PATTERN
     // (in `[x, y]`, `(x :: rest)`, `[]`, `(Some x)`, a literal, a bare var, ...).
+    // A definition's guards, after its parameters: | on the same line, or on
+    // each line of the indented block that follows.
+    // (A guard's line has its = and body: a union, Int | String, has none.)
+    guardsFollow(): boolean {
+        const [a, b, c] = [this.peek(), this.peek(1), this.peek(2)];
+        const at = a.k === "sym" && a.v === "|" ? this.i : a.k === "newline" && b.k === "indent" && c.k === "sym" && c.v === "|" ? this.i + 2 : -1;
+        if (at < 0) return false;
+        for (let j = at + 1, depth = 0; j < this.toks.length; j++) {
+            const t = this.toks[j];
+            if (t.k === "eof" || !depth && (t.k === "newline" || t.k === "indent" || t.k === "dedent")) return false;
+            if (t.k !== "sym") continue;
+            if (["(", "[", "{"].includes(t.v)) depth++;
+            else if ([")", "]", "}"].includes(t.v)) { if (!depth--) return false; }
+            else if (!depth && t.v === "=") return true;
+        }
+        return false;
+    }
+    guardedClauses(params: Pattern[]): DefClause[] {
+        const block = !this.isSym("|");
+        if (block) { this.next(); this.next(); }
+        const clauses: DefClause[] = [];
+        const outerIndent = this.statementIndent, level = this.lineIndent(this.peek());
+        // Each guard's line is a statement's: a deeper line continues its body,
+        // one at its level starts the next guard.
+        if (block) this.statementIndent = level;
+        try {
+            for (;;) {
+                this.expectSym("|");
+                let guard: Expr;
+                this.noLambda++;
+                try { guard = this.parsePipe(); } finally { this.noLambda--; }
+                const equals = this.next() as { v: string };
+                if (equals.v !== "=") { this.seen = equals as Token; throw new Error("Parser: a guard is followed by = and the clause's body (| x > 0 = ...)"); }
+                clauses.push({ params, guard, body: this.parseDefBody("=") });
+                if (!block) return clauses;
+                // The next guard: past the line breaks (and the ends of any lines
+                // continuing this body) to a | at the guards' level.
+                let j = this.i;
+                while (this.toks[j] && (this.toks[j].k === "newline" || this.toks[j].k === "dedent")) j++;
+                const next = this.toks[j];
+                if (next?.k === "sym" && next.v === "|" && this.lineIndent(next) === level) { this.i = j; continue; }
+                if (next && next.k !== "eof" && this.lineIndent(next) >= level) { this.seen = next; throw new Error("Parser: each line of a definition's guards starts with |"); }
+                break;
+            }
+        } finally { this.statementIndent = outerIndent; }
+        // The block's end is the statement's, as a continued line's is.
+        return clauses;
+    }
     isDef(): boolean {
         const save = this.i;
         try {
@@ -1793,7 +1841,7 @@ class Parser {
             while (this.startsParam(this.peek()) || this.negativeLiteral()) this.parseConsPattern();
             // f x : T = e: the type of f x, then its definition.
             if (this.eatSym(":")) this.i = this.typeEnd("statement").end;
-            return this.isSym("=") || this.isSym(":=");
+            return this.isSym("=") || this.isSym(":=") || this.guardsFollow();
         } catch {
             return false;
         } finally {
@@ -1939,6 +1987,9 @@ class Parser {
         // f x : T = e: T is the type of f x, what its = gives, as x : T = v
         // is v's (f x : Int -> Int = ... gives a function).
         const result = this.eatSym(":") ? this.typeExpr(this.typeEnd("statement").end) : undefined;
+        // f x | guard = body, or f x [: T] with a line for each | guard = body:
+        // clauses of the same parameters (and type), tried as written.
+        if (this.guardsFollow()) return { name, clauses: this.guardedClauses(params), result };
         const equals = this.next() as { v: string; pos: number };
         if (equals.v === ":=") {
             throw new APNError("parse", "APN defines with =, not :=", { pos: equals.pos,
@@ -2014,7 +2065,13 @@ class Parser {
             pattern = typedPattern(p, type);
         } catch { this.i = start; return undefined; }
         this.next();
-        const condition = this.parseExpr(), value = this.freshName();
+        // Its condition is a guard's, which no lambda continues: followed by
+        // ->, the whole is a guarded lambda ((p : T) | condition -> body).
+        let condition: Expr;
+        this.noLambda++;
+        try { condition = this.parsePipe(); } finally { this.noLambda--; }
+        if (this.isSym("->")) { this.i = start; return undefined; }
+        const value = this.freshName();
         const intrinsic = (field: string): Expr => ({ t: "recordAccess", rec: { t: "var", name: "intrinsics" }, field });
         const arms: Expr = { t: "list", v: [
             { t: "patternLambda", params: [pattern], body: condition },
@@ -2049,7 +2106,9 @@ class Parser {
         const last = this.toks[end - 1];
         const sub = new Parser([...this.toks.slice(this.i, end), { k: "eof", pos: last.pos + tokLen(last) } as Token], this.source, this.file);
         let type: Expr;
-        try { type = sub.parseExpr(); } catch (error) { this.seen = sub.seen; throw error; }
+        // A refinement is a type anywhere one is written ((n : Int) | n > 0),
+        // as on a declaration's right side.
+        try { type = sub.refinement() ?? sub.parseExpr(); } catch (error) { this.seen = sub.seen; throw error; }
         if (sub.peek().k !== "eof") { this.seen = sub.peek(); throw new Error("Parser: unexpected token in a type"); }
         this.i = end;
         return typeOperators(type);

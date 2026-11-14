@@ -201,6 +201,17 @@ for (const checked of [true, false]) for (const [source, expected] of [
     ['Shape = Circle Float | Square Float\nf (s : Shape) = 1\nf (Circle r) = "c"\ng (s : String) = s\nh (n : Int) = n\n[g (f (Circle 1.0)), h (f (Square 1.0))]', '["c",1]'],
     ['Pos = (n : Int) | n > 0\nf (x : Int) = 1\nf (x : Pos) = "p"\ng (s : String) = s\nh (n : Int) = n\n[g (f (3 : Pos)), h (f 3)]', '["p",1]'],
     ['Pos = (n : Int) | n > 0\nSmall = (n : Pos) | n < 10\nf (x : Int) = "i"\nf (x : Pos) = "p"\nf (x : Small) = "s"\n[f 3, f (3 : Pos), f (3 : Small)]', '["i","p","s"]'],
+    // A clause takes a guard, as an alternative does; else always holds.
+    ['f x | x >= 0 = "pos"\nf x = "neg"\n[f 1, f -1]', '["pos","neg"]'],
+    ['sign n : Int\n    | n > 0 = 1\n    | n < 0 = -1\n    | else = 0\n[sign 5, sign -5, sign 0]', '[1,-1,0]'],
+    ['h n : String\n    | n > 0 = "pos"\n        ++ "!"\n    | else = "non"\n[h 1, h 0]', '["pos!","non"]'],
+    ['b = {\n    s n\n        | n > 0 = 1\n        | else = 0\n    s 4\n}\nb', '1'],
+    // A refinement is a type wherever written; in a function type, it refines
+    // the parameter, a requirement on callers; a result converts as a value does.
+    ['func : (n : Float) | n > 0 -> Float\nfunc = sqrt\nfunc 4.0', '2.0'],
+    ['func : (n : Float) -> Float\nfunc = sqrt\nf (g : (n : Float) -> Float) = g 9.0\n[func 4.0, f sqrt]', '[2.0,3.0]'],
+    ['x : (n : Int) | n > 0 = 5\nh = (n : Float) | n > 0 -> n\n[x, h 4.0]', '[5,4.0]'],
+    ['func : Float -> Int\nfunc = sqrt\nfunc 4.0', '2'],
     // A repeated name is a test the run makes, deciding no type.
     ['f x x = True\nf x y = False\n[f 1 1, f 1 2, f 1 "a"]', '[True,False,False]'],
     ['same (x : t) (y : t) = True\nsame x y = False\n[same 1 2, same 1 True]', '[True,False]'],

@@ -1850,6 +1850,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 case "list": return { k: "list", items: p.v.map(pattern), element: union(p.v.map(() => variable())), length: constant(BigInt(p.v.length)) };
                 case "constr": {
+                    // (n : Float): the type before its value's pattern, whose name is
+                    // a value of it (for a guard, (n : Float) | n > 0, which the run checks).
+                    if (p.typed) {
+                        const type = pattern({ ...p, args: p.args.slice(0, -1), typed: undefined }), value = p.args[p.args.length - 1];
+                        if (value?.p === "var") local.set(value.name, { type, mono: true });
+                        return type;
+                    }
                     const args = p.args.map(arg => {
                         if (arg.p === "var") { typeVariable(arg.name); return { t: "var", name: arg.name } as Expr; }
                         if (arg.p === "wildcard") return { t: "placeholder" } as Expr;
@@ -2724,6 +2731,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             while (call.t === "block" && call.style === "(" && call.stmts.length === 1 && call.stmts[0].t !== "stmDef" && call.stmts[0].t !== "patDef") call = call.stmts[0] as Expr;
             const payload = asUsed(t.args.length === 1 && call.t === "app" ? call.a : e);
             t.args.forEach((arg, n) => convert(arg, a.args[n], payload, false, seen, runtimeProjection || explicitFloat));
+            return target;
+        }
+        // A function's result converts as a value does: a Number where a Float
+        // is declared (func : Float -> Float; func = sqrt) is checked as it
+        // runs. Its input is the declared one, as unify has it.
+        if (t.k === "fn" && a.k === "fn" && !t.binder && !a.binder) {
+            if (a.coerce && !t.coerce && resolve(t.input).k === "atom" && resolve(a.input).k === "atom") convert(a.input, t.input, e);
+            else unify(a.input, t.input, e);
+            convert(t.output, a.output, e, false, seen, runtimeProjection || explicitFloat);
             return target;
         }
         unify(target, actual, e);

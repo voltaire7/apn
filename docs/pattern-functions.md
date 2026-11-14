@@ -35,7 +35,8 @@ reused; `~` itself can be passed (`(~)`) or rebound. Binding loosest, it takes
 a computed value as it is written: `head xs ~ handlers`.
 
 Literals, lists, constructors, type patterns, and wildcards can be lambda
-parameters. A guard follows the parameters, e.g. `n | n > 0 -> n`. A falsy guard
+parameters. A guard follows the parameters, e.g. `n | n > 0 -> n`, as one follows
+a clause's (`f n | n > 0 = n`, see [functions](semantics.md#functions-and-conditionals)). A falsy guard
 is a mismatch; guards use the same truthiness rules as conditions. Multiple parameter lambdas are curried,
 but `~`'s alternatives must have exactly one remaining argument.
 
