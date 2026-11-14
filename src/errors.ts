@@ -5,6 +5,12 @@ import type { Token } from "./lexer.ts";
 // Every user-facing failure: parse/lex errors carry a source POSITION (the
 // offending token) so the reporter can draw a caret; runtime errors carry an
 // optional hint ("did you mean ...?").
+// An action where a value is shown (print, echo, emit, toString, the REPL's
+// echo): it has no value until it runs, as in Haskell.
+export const ACTION_SHOWN = {
+    message: "an action has no value to show until it runs",
+    hint: "run it, then show what it gives: x <- readFile \"f\", then print x",
+};
 // _ where it means nothing: it is data as a body (f x = _), any type as a
 // type's argument (List _) and any value in a pattern.
 export function placeholderError(): APNError {

@@ -4,10 +4,12 @@ import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
 import { IMPORT_ONE, standardModule } from "./modules.ts";
+// The natives that show a value, which no action has.
+const SHOWN_NATIVES = new Set(["print", "echo", "emit", "toString"]);
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { builtinContains, castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, numericWithin, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
-import { APNError, didYouMean, formatFileReadError, placeholderError, typeApplied, withArticle } from "./errors.ts";
+import { ACTION_SHOWN, APNError, didYouMean, formatFileReadError, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import { bindingItem, DEFAULT_FIXITY, getPreludeUsed, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
 import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
@@ -2197,6 +2199,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : module ? `${openHint(module)} to use \`${name}\`` : undefined;
     }
 
+    // Whether a value of a type is, or holds, an action (a function giving one
+    // holds none: it shows as its source).
+    function holdsAction(type: Ty, seen = new Set<Ty>()): boolean {
+        const t = resolve(type);
+        if (seen.has(t)) return false;
+        seen.add(t);
+        if (t.k === "variant") return t.name === "IO" || t.args.some(arg => holdsAction(arg, seen));
+        if (t.k === "list") return (t.items ?? [t.element]).some(item => holdsAction(item, seen));
+        if (t.k === "record") return [...t.fields.values()].some(field => holdsAction(field, seen));
+        if (t.k === "mutable") return holdsAction(t.value, seen);
+        return false;
+    }
     // The builtin an expression names, itself or through a name bound to it
     // (g = typeOf): its typing rule is the value's, whatever it is called.
     function denotes(e: Expr, scope: Scope): string | undefined {
@@ -4018,6 +4032,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // _ given to a type or a constructor is any type, as at runtime.
                 let argumentType = a.t === "placeholder" && (resolved.k === "type" || resolved.k === "fn" && resolved.constructs)
                     ? { k: "type", value: variable() } as Ty : infer(a, scope);
+                // What is shown holds no action, which has no value until it runs.
+                if (e.t === "app" && rule && SHOWN_NATIVES.has(rule) && holdsAction(argumentType)) return problem(ACTION_SHOWN.message, a, ACTION_SHOWN.hint);
                 // List takes only a type: given anything else, it is the value.
                 const value = (given: Ty) => !["type", "var", "factory", "alias", "dynamic"].includes(given.k) && !describing(given)
                     && !(given.k === "list" && given.items?.length === 0) && !isExplicit(given);

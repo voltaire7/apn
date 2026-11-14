@@ -909,9 +909,9 @@ debug $ step 1 halt          # => exit 0
 #   print $ step 1 halt
 
 # a use inside a { } block stays in the block's scope
-scoped = {
+scoped <- {
     use numbers
-    sq 6
+    return (sq 6)
 }
 print scoped                # => 36
 
@@ -1585,7 +1585,7 @@ print (onlyOne (vowelOrPair (vowelIfShort (take (counterAtFirstUse - 2) [7,8,9])
 # An action kept in a cell runs where a later statement runs it.
 pendingBox = Mutable [set mutableCounter $ 0]
 set pendingBox [set mutableCounter $ 2]
-print pendingBox                              # [IO []] (storing it runs nothing)
+print (length pendingBox)                     # 1 (storing it runs nothing)
 head pendingBox                               # runs the stored action
 print (onlyOne (vowelOrPair (vowelIfShort (take (mutableCounter - 1) [7,8,9]))))  # 1
 # map builds a list of actions; do runs them in order.

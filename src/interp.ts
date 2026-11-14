@@ -17,13 +17,13 @@ import { parseLiteral, textNatives } from "./text-natives.ts";
 import { bundledText, IMPORT_ONE, loadPath, type ModuleFile, readLoad, resolveModule, sourcePath, unknownModule } from "./modules.ts";
 import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
-import { APNError, didYouMean, placeholderError, typeApplied, withArticle } from "./errors.ts";
+import { ACTION_SHOWN, APNError, didYouMean, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { type Alternative, type Binding, clausePlaces, listRole, readPatterns, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, declaresNames, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, isUse } from "./ast.ts";
-import { canonicalTypeText, compoundArgument, slotField, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
+import { canonicalTypeText, ioTypeText, compoundArgument, slotField, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
 import { bindingItem, getPreludeUsed, parse, parseDocument, exprToSource, patternSource, patternVariables, isOperatorName, PRIMITIVE_OPERATORS, DEFAULT_FIXITY, type Fixity, fixitiesOf, getLooseSpacing, preludeFixity, regroup, setLooseSpacing } from "./parser.ts";
@@ -3619,6 +3619,10 @@ export class Interpreter {
                 emit(this.residualText(v), v.kind);
             } else if (this.methodOf(v)) {
                 emit(this.methodText(this.methodOf(v)!), v.kind);
+            } else if (v.kind === "io") {
+                // An action has no value to show until it runs, as in Haskell:
+                // showing it is a mistake (print (readFile "f") for its text).
+                throw new APNError("runtime", ACTION_SHOWN.message, { hint: ACTION_SHOWN.hint });
             } else emit(raw ? rawString(v) : valueToString(v), v.kind);
         } finally {
             ancestors.delete(v);
@@ -4943,7 +4947,7 @@ export class Interpreter {
             const value = this.demand(ref);
             const declared = this.declaredTypes.get(value);
             if (declared && this.asWritten.has(declared)) return declared;
-            if (value.kind === "io") return { kind: "type", inspect: true, name: "IO", description: valueToString(value) };
+            if (value.kind === "io") return { kind: "type", inspect: true, name: "IO", description: ioTypeText(value) };
             // An undecided value: return x is m T for the monad m the context
             // decides; a call of result overloads is one of their results.
             if (value.kind === "pending") {

@@ -157,7 +157,8 @@ export function valueToString(v: Value): string {
         case "native": return functionSource(v);
         case "clauseFn": return functionSource(v);
         case "nomatch": return "nomatch";
-        // An action shows its type: running it is the only way to see its result.
+        // An action is named by its type in messages; print, the REPL and
+        // toString refuse to show one (Interpreter.render).
         case "io": return ioTypeText(v);
         // An undecided return shows its value; a >>= or do-block cannot be
         // shown without running it.

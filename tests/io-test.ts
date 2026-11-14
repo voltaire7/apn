@@ -33,6 +33,9 @@ for (const [name, source, expected] of [
     ["IO T is a type that checks an action", 'sayHello = { print "hello" } : IO []\nsayHello', ["hello"]],
     ["return x is the action yielding x", "x <- return 42\nprint x", ["42"]],
     ["IO types describe actions", "print (IO [])\nprint (IO Int)", ["IO []", "IO Int"]],
+    // An action is shown only as code a list keeps, and by its type.
+    ["an action is shown by probe and typeOf", 'probe [print "hi", echo [1,2]]\nprint (typeOf (print 1))',
+        ['[print "hi", echo [1,2]]', "IO []"]],
     ["a block with an action statement is an action", 'f n = { print n; return (n * 2) }\ny <- f 3\nprint y', ["3", "6"]],
     ["a block of bindings stays a value", "f n = { m = n + 1; m * 2 }\nprint (f 3 + 1)", ["9"]],
     ["a discarded unit keeps a block pure", "f n = { []; n * 2 }\nprint (f 3)", ["6"]],
@@ -72,7 +75,17 @@ for (const [source, message, kind] of [
     ['sayHello = IO { print "hello" }', "IO is a type constructor", "type"],
     ["x = IO 5", "IO is a type constructor", "type"],
     ['x = print 1 : IO Int', "where Int is required", "type"],
+    // An action has no value to show until it runs, wherever it is held.
+    ['print (print "hi")', "an action has no value to show until it runs", "type"],
+    ['print [print "hi"]', "an action has no value to show until it runs", "type"],
+    ['g n = print n\necho [x = g 1]', "an action has no value to show until it runs", "type"],
 ] as const) Deno.test(`IO rejects: ${JSON.stringify(source)}`, () => fails(source, message, kind));
+// Where the check cannot see it (Dynamic), the run refuses it.
+Deno.test("showing an action is a runtime error past a Dynamic boundary", () => {
+    let message = "";
+    try { run('xs = ([print "hi"] : Dynamic)\nprint xs', false); } catch (error) { message = String(error); }
+    if (!message.includes("an action has no value to show until it runs")) throw new Error(message || "accepted");
+});
 Deno.test("IO: an action is not a condition", () => {
     try { run("x = print 1\nprint (x ? 1 : 2)", false); } catch (e) { if (String(e).includes("not a condition")) return; throw e; }
     throw new Error("accepted");

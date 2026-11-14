@@ -1041,13 +1041,13 @@ for (const [source, expected] of [
     // is forced (once) where a later statement forces it. An uncertain
     // statement only affects the cells and values it can reach.
     ['counter = Mutable 0; xs <- return [set counter 9, 1]; g (f (r (counter + 0 == 0)))', '0'],
-    ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nprint box\ng (f (r (counter + 0 == 0)))', '0'],
+    ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nprint (length box)\ng (f (r (counter + 0 == 0)))', '0'],
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nhead box\ng (f (r (counter + 0 == 3)))', '0'],
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nhead box\nset counter 8\nhead box\ng (f (r (counter + 0 == 3)))', '0'],
     ['counter = Mutable 0\nother = Mutable 7\nm = HashMap [["a",1]]\nhas "a" m ? set counter 5 : return []\ng (f (r (other + 0 == 7)))', '0'],
     // Lazily computed elements run where the program forces them: map's
     // elements when used, filter's predicate as its cells are reached.
-    ['counter = Mutable 0; print (map (x -> set counter x) [1,2]); g (f (r (counter + 0 == 0)))', '0'],
+    ['counter = Mutable 0; print (length (map (x -> set counter x) [1,2])); g (f (r (counter + 0 == 0)))', '0'],
     ['counter = Mutable 0; do (map (x -> set counter x) [1,2]); g (f (r (counter + 0 == 2)))', '0'],
     ['counter = Mutable 0\nbump x = set counter (counter + 1)\nxs = map (x -> bump x) [1,2]\nprint (length xs)\ng (f (r (counter + 0 == 0)))', '0'],
     ['counter = Mutable 0\nbump x = set counter (counter + 1)\nhead (map (x -> bump x) [1,2])\ng (f (r (counter + 0 == 1)))', '0'],

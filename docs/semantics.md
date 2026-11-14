@@ -854,10 +854,12 @@ to do. `print "hi"` builds the action that prints `hi`; nothing is printed
 until the action runs. The effectful builtins all return actions: `print`,
 `echo`, `emit` and `repl` (yielding `[]`), `readFile`, `readStdin`, `getArgs`, `fetch`, `exit`,
 `set` (writing a `Mutable` cell), `bracket`, `withFile` and
-`ffi.withLibrary`. An action prints as its type, since only running it shows its result:
-`print (print 1)` prints `IO []`, an annotated `({ ... } : IO Int)` prints `IO Int`,
-and an action whose result is not known before it runs prints `IO a`.
-`typeOf` gives the same type.
+`ffi.withLibrary`. An action has no value to show until it runs, so showing one is an
+error, as in Haskell: `print (readFile "f")`, `print [print "hi"]`, `toString` of one, or
+the REPL echoing a list holding one (run it first: `x <- readFile "f"`, then `print x`).
+The check reports it before the run where it sees the action. `typeOf` gives its type:
+`typeOf (print 1)` is `IO []`, and `probe` shows code, a list's items as written (`probe
+[print "hi"]` is `[print "hi"]`).
 
 Actions run in exactly two places:
 
