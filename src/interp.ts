@@ -3870,11 +3870,14 @@ export class Interpreter {
             if (this.truthy(this.demand(this.apply(read.refine, member)))) return member;
             throw new APNError("runtime", `${this.renderString(member)} is not in ${read.name || "the refinement"}`);
         }
+        // A union's value is one of its types' values, as applying it checks.
+        if (read.kind === "type" && read.choices && !read.choices.some(c => this.listShaped(this.reference(c)))) return this.typeMember(read, value);
         const written = this.asWritten.get(read);
         if (written) return this.writtenValue(read, this.conform(written.made, value));
         const type = read.kind === "closure" || read.kind === "clauseFn" ? this.asType(read) ?? read : read !== given ? read : typeIn;
-        // A type variable not decided by a call takes any value.
-        if (type.kind === "type" && type.variable) return value;
+        // A type variable not decided by a call takes any value, as does one a
+        // pattern read off a list (readElementType).
+        if (type.kind === "type" && type.variable || this.readElementTypes.has(read)) return value;
         if (type.kind === "type" && this.counted(type)) {
             const [size, element] = this.vectorParts(type);
             const values = this.vectorElements(this.dataValue(value), size, type.name);
@@ -5549,10 +5552,10 @@ export class Interpreter {
 
     // Empty unannotated vectors carry no evidence for their element type.
     // Keep that binder open until another parameter supplies the evidence.
-    private vectorTypeHoles = new WeakMap<Map<string, Value>, Set<string>>();
 
     // (F n a xs) for a type function of lists: n is read back from the
     // length, which F makes c * n + d (see countingOf).
+    private vectorTypeSources = new WeakMap<Map<string, Value>, Map<string, Value[]>>();
     private matchVectorPattern(family: Extract<Value, { kind: "type" }>, args: Pattern[], input: Value, binds: Map<string, Value>): boolean {
         const value = this.dataValue(input), counts = family.counts!;
         if (!this.isList(value)) return false;
@@ -5570,6 +5573,10 @@ export class Interpreter {
             const type: Value = { ...family, arguments: [fixed, requested] };
             return this.converts(type, value) && this.matchPattern(args[2], this.conform(type, value), binds);
         }
+        // A type variable (Vect n a) or _ reads no element, as List a's does:
+        // a is the elements' type, computed only if used, and the checker's
+        // to compare; a written type (Vect n Int) is every element's.
+        const typePattern = args[1], free = typePattern.p === "var" || typePattern.p === "wildcard";
         if (value.kind === "list" && value.schema?.kind === "type" && this.counted(value.schema)) {
             [size, element] = this.vectorParts(value.schema);
         } else {
@@ -5580,9 +5587,11 @@ export class Interpreter {
                 const cell = this.cell(rest);
                 if (!cell) break;
                 if (limit !== undefined && size >= limit) return false;
-                const current = this.callNative("typeOf", [cell.head]);
-                if (element && !this.sameType(element, current)) return false;
-                element = current;
+                if (!free) {
+                    const current = this.callNative("typeOf", [cell.head]);
+                    if (element && !this.sameType(element, current)) return false;
+                    element = current;
+                }
                 size++;
                 rest = cell.tail;
             }
@@ -5590,18 +5599,21 @@ export class Interpreter {
         if (limit !== undefined && size !== limit || size < counts.offset || (size - counts.offset) % counts.scale) return false;
         const index = (size - counts.offset) / counts.scale;
         if (!this.matchPattern(args[0], mkInt(index), binds)) return false;
-        const typePattern = args[1];
         if (typePattern.p === "var") {
-            const holes = this.vectorTypeHoles.get(binds) ?? new Set<string>();
-            this.vectorTypeHoles.set(binds, holes);
-            if (element) {
-                if (holes.delete(typePattern.name)) binds.set(typePattern.name, element);
-                else if (!this.matchPattern(typePattern, element, binds)) return false;
-            } else if (!binds.has(typePattern.name)) {
-                holes.add(typePattern.name);
-                binds.set(typePattern.name, { kind: "type", name: "$any", description: typePattern.name });
+            // Of several lists sharing a, the first with elements gives it
+            // (inspect [] [1,2] has a = Int).
+            const sharing = this.vectorTypeSources.get(binds) ?? new Map<string, Value[]>();
+            this.vectorTypeSources.set(binds, sharing);
+            if (binds.has(typePattern.name)) sharing.get(typePattern.name)?.push(value);
+            else {
+                const lists = [value];
+                sharing.set(typePattern.name, lists);
+                binds.set(typePattern.name, element ?? this.defer(() => {
+                    const source = lists.find(list => this.cell(list) !== null) ?? value;
+                    return this.readElementType(source.kind === "list" && source.schema?.kind === "type" && this.counted(source.schema) ? this.vectorParts(source.schema)[1] : this.elementType(source));
+                }));
             }
-            element = binds.get(typePattern.name)!;
+            element = undefined;
         } else if (typePattern.p === "constr" && typePattern.args.length === 0) {
             const binding = this.env.get(typePattern.tag);
             if (!binding) return false;
@@ -6236,7 +6248,7 @@ export class Interpreter {
             if (!this.isList(list)) return false;
             if (args[0].t === "var") {
                 const name = args[0].name;
-                binds.set(name, this.defer(() => this.elementType(list)));
+                binds.set(name, this.defer(() => this.readElementType(this.elementType(list))));
             }
             return this.matchPattern(p.value, list, binds);
         }
@@ -6263,6 +6275,15 @@ export class Interpreter {
             if (!this.sameIndex(wanted, indices[n])) return false;
         }
         return this.matchPattern(value, actual, binds);
+    }
+    // A type a pattern's variable read off a list's elements (List a, Vect n
+    // a): what reading the variable gives, which a conversion does not check
+    // against (a type variable is the checker's to compare).
+    private readElementTypes = new WeakSet<Value>();
+    private readElementType(type: Value): Value {
+        const copy = { ...type } as Value;
+        this.readElementTypes.add(copy);
+        return copy;
     }
     // The type typeOf describes for a list's elements: Int for [1,2].
     private elementType(list: Value): Value {

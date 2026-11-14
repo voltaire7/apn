@@ -32,10 +32,20 @@ for (const [source, expected] of [
     const actual = run(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
+// A type variable is the checker's to compare: the run reads no element for
+// it (a is the elements' type, computed if used), so mixed lists match.
+for (const [source, expected] of [
+    ['f (xs : Vect n a) = n; f [1,True]', '2'],
+    ['f (xs : Vect n a) (ys : Vect m a) = n; f [1] [True]', '1'],
+    ['f (xs : Vect n a) = n; f [fail "unread", 2]', '2'],
+    ['f (xs : Vect n _) = n; f [fail "unread", 2]', '2'],
+    ['f (xs : Vect n a) = a; f [[1],[1,2]]', 'List Int'],
+] as const) Deno.test(`Vect pattern reads no element for a type variable: ${source}`, () => {
+    const actual = run(source);
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});
 for (const source of [
-    'f (xs : Vect n a) = xs; f [1,True]',
     'f (xs : Vect n Int) = xs; f [True]',
-    'f (xs : Vect n a) (ys : Vect m a) = xs; f [1] [True]',
     'f (xs : Vect n a) (ys : Vect n a) = xs; f [1] [2,3]',
     'f (xs : Vect 2 a) = xs; f [1]',
     'f (xs : Vect n a) = xs; f 1',

@@ -5,7 +5,7 @@ repeat x = x :: repeat x
 replicate n x = take n (repeat x)
 cycle xs = null xs ? [] : xs ++ cycle xs
 zip xs ys = zipWith pair xs ys
-zipWithIndex xs = zipWith pair [0..] xs
+zipWithIndex (xs : Vect n a) : Vect n [Int,a] = (zipWith pair [0..] xs : Dynamic)
 concat xss = foldr (++) [] xss
 concatMap f xs = concat (map f xs)
 flatten xss = concat xss
@@ -37,8 +37,9 @@ sortOn project xs = sortBy (on compare project) xs
 minimum xs = null xs ? None : Some (foldl min (head xs) (tail xs))
 maximum xs = null xs ? None : Some (foldl max (head xs) (tail xs))
 
-# Prepending into a strict left fold reverses in linear time.
-reverse (xs : List _) = foldl (acc, x -> x :: acc) [] xs
+# Prepending into a strict left fold reverses in linear time. The length a
+# fold or a merge keeps is checked as the result is made (: Dynamic).
+reverse (xs : Vect n a) : Vect n a = (foldl (acc, x -> x :: acc) [] xs : Dynamic)
 reverse (text : String) = from (List Char) (reverse (to (List Char) text))
 
 _prepend x xs = x :: xs
@@ -61,11 +62,13 @@ _mergeSorted compare left right = null left ? right : (null right ? left
     : (_order (compare (head left) (head right)) <= 0
     ? _prepend (head left) (_mergeSorted compare (tail left) right)
     : _prepend (head right) (_mergeSorted compare left (tail right))))
-sortBy compare xs = {
+_mergeSort compare xs = {
     n = 0 + length xs
     mid = quotient n 2
-    n < 2 ? xs : _mergeSorted compare (sortBy compare (take mid xs)) (sortBy compare (drop mid xs))
+    n < 2 ? xs : _mergeSorted compare (_mergeSort compare (take mid xs))
+        (_mergeSort compare (drop mid xs))
 }
+sortBy compare (xs : Vect n a) : Vect n a = (_mergeSort compare xs : Dynamic)
 
 # Force finite accumulator elements between simulation steps, not whole trees.
 forceList xs = seq (foldl (_, x -> seq x []) [] xs) xs

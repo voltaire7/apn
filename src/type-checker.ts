@@ -641,11 +641,6 @@ const QUICK_BUDGET = 2000;
 const DATA_KINDS = new Set(["list", "record", "variant", "map", "atom"]);
 // Inference work (unification steps) per top-level statement.
 const STATEMENT_BUDGET = 250000;
-// Standard-library functions that return a list as long as their final list
-// argument, which the checker cannot derive from their code (they rebuild the
-// list with a fold or a merge sort). tests/stdlib-length-test.ts verifies each
-// one at runtime. sort, sortOn and forceList are inferred from these.
-export const DECLARED_KEEPS_LENGTH = new Set(["reverse", "sortBy", "zipWithIndex"]);
 function instantiate(entry: Entry): Ty {
     return entry.mono
         ? entry.type
@@ -2260,9 +2255,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     bind(p.value, expected, scope, e, bound);
                     return;
                 }
+                const free = freeListType(p.type, scope);
                 const t = typeExpr(p.type, scope, bound);
                 if (!choosing) options.patternTypes?.set(p.type, t);
-                application({ k: "fn", input: t, output: t, coerce: true, pattern: p }, { type: expected }, e);
+                // A list type of free names alone (List a, Vect n a) takes a list
+                // as it is: it converts nothing, as a type variable does not.
+                if (free) unify(t, expected, e);
+                else application({ k: "fn", input: t, output: t, coerce: true, pattern: p }, { type: expected }, e);
                 bind(p.value, t, scope, e, bound);
                 return;
             }
@@ -3128,6 +3127,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 unify(element, payload, e);
                 element = payload;
             }
+            // A written list of types ([Int,a]) is the positional type it writes.
+            if (element.k === "list" && element.items?.length && element.items.every(item => resolve(item).k === "type")) {
+                const items = element.items.map(item => (resolve(item) as Extract<Ty, { k: "type" }>).value);
+                element = { k: "type", value: { k: "list", element: union(items), items, length: constant(BigInt(items.length)) } };
+            }
             if (element.k !== "type" && element.k !== "dynamic") problem(`${f.name} element must be a type`, e);
             // A length evaluation could not decide (it depends on input, or ran
             // past the evaluation budget) is checked at runtime.
@@ -3330,6 +3334,27 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     else convert(instantiated.input, argument.type, e, false, new Map(), !!f.coerce, !!f.coerce);
                     return instantiated.output;
                 }
+            }
+            // One whose length is not known: a free n takes it, as a type
+            // variable takes any type, and n's other uses forget theirs. The
+            // run checks what n still says (c * n + d, or n named again).
+            if (expected.k === "list" && actual.k === "list" && expected.length?.terms.size === 1 && !actual.length && !actual.items) {
+                const [name, coefficient] = [...expected.length.terms][0];
+                const instantiated = copy(f, new Map([...variables(f)].map(t => [t, t]))) as Extract<Ty, { k: "fn" }>;
+                let again = false;
+                const forget = (t: Ty, seen: Set<Ty>, input: boolean): void => {
+                    t = resolve(t);
+                    if (seen.has(t)) return;
+                    seen.add(t);
+                    if (t.k === "list" && t.length?.terms.has(name)) { if (input) again = true; t.length = undefined; }
+                    if (t.k === "fn") { forget(t.input, seen, input || t !== instantiated); forget(t.output, seen, input); return; }
+                    for (const child of children(t)) forget(child, seen, input);
+                };
+                forget(instantiated, new Set(), false);
+                if (again || coefficient !== 1n || expected.length.constant !== 0n) runtimeChecks++;
+                if (options.strict && !f.coerce) unify(instantiated.input, argument.type, e);
+                else convert(instantiated.input, argument.type, e, false, new Map(), !!f.coerce, !!f.coerce);
+                return instantiated.output;
             }
             try {
                 if (options.strict && !f.coerce) unify(f.input, argument.type, e);
@@ -5618,6 +5643,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         } else if (p.p === "constr" && p.tag === "S" && p.args.length === 1) {
             const n = naturalArgument(p, value);
             if (n !== undefined && n > 0n) bindKnown(p.args[0], { number: { kind: "int", v: n - 1n, typeName: "UInt" } }, env, refutable);
+        } else if (p.p === "schema" && p.type.t === "app" && p.type.f.t === "app" && p.type.f.f.t === "var" && p.type.f.f.name === "Vect"
+            && [p.type.f.a, p.type.a].every(x => x.t === "placeholder" || x.t === "var" && /^[a-z]/.test(x.name) && !refutable.has(x.name))) {
+            // (xs : Vect n a), n and a free: the whole list, n its length if known.
+            bindKnown(p.value, value, env, refutable);
+            const size = p.type.f.a, items = demand(value)?.items;
+            if (size.t === "var" && items) env.set(size.name, { index: constant(BigInt(items.length)) });
         } else if (wholeList(p)) {
             bindKnown(p.value, value, env, refutable);
         } else if (p.p === "typeBind") {
@@ -6142,6 +6173,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return d && !d.action && given.length === 1 ? indexed(d, given[0], at ? args[at - 1] : head, inferred.get(args[at]), depth) : undefined;
         };
         if (head.t === "block" && head.stmts.length === 1 && head.style === "(") head = head.stmts[0];
+        // (e : Dynamic) is e's value, its type only checked later, and so is
+        // (e : List a) or (e : Vect n a): a list's conversion keeps its items.
+        const keeps: Record<string, number> = { Dynamic: 1, List: 2, Vect: 3 };
+        if (e.ascribed && head.t === "var" && args.length === keeps[head.name] && !env.has(head.name) && scope.get(head.name)?.builtin) {
+            return new Tail(args[args.length - 1], env, scope, depth);
+        }
         // An operator's intrinsic called (intrinsics.add a b) is its builtin meaning.
         const intrinsic = head.t === "recordAccess" && !head.scoped && (!head.argument || head.argument.t === "var" && head.argument.name === head.field) && head.rec.t === "var" && head.rec.name === "intrinsics"
             && !env.has("intrinsics") && scope.get("intrinsics")?.builtin ? PRIMITIVE_OPERATORS.get(`intrinsics.${head.field}`) : undefined;
@@ -6746,7 +6783,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     function patternConverts(p: Pattern, scope: Scope): boolean {
         switch (p.p) {
-            case "schema": case "int": return true;
+            // A list type of free names alone (List a, Vect n _) takes any list as it is.
+            case "schema": return !freeListType(p.type, scope);
+            case "int": return true;
             case "constr": {
                 if (naturalPattern(p, scope)) return true;
                 const constructor = resolve(scope.get(p.tag)?.type ?? dynamic);
@@ -6760,6 +6799,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "typeBind": return patternConverts(p.value, scope);
             default: return false;
         }
+    }
+    // A name in it is free unless it names a type: a type variable, or a
+    // length, is one whether or not an earlier pattern bound it.
+    function freeListType(type: Expr, scope: Scope): boolean {
+        const args: Expr[] = [];
+        let head = type;
+        for (; head.t === "app"; head = head.f) args.unshift(head.a);
+        const free = (x: Expr) => {
+            if (x.t === "placeholder") return true;
+            if (x.t !== "var" || !/^[a-z]/.test(x.name)) return false;
+            const entry = scope.get(x.name), value = entry && resolve(entry.type);
+            return !entry || !!entry.index?.terms.size || value?.k === "type" && resolve(value.value).k === "var";
+        };
+        return head.t === "var" && (head.name === "List" && args.length === 1 || head.name === "Vect" && args.length === 2)
+            && !!scope.get(head.name)?.builtin && args.every(free);
     }
     // An index written with the names the program bound to its terms (m for
     // the length a typed pattern bound), as indexText writes the rest.
@@ -7086,16 +7140,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const entry = scope.get(name);
         if (previous && entry) scope.set(name, { ...entry, type: { k: "overload", choices: [entry.type, previous], name } });
         if (previous && (name === "get" || name === "with")) extendedFunctions.set(name, scope.get(name)!.type);
-        if (options.library && entry && DECLARED_KEEPS_LENGTH.has(name)) declareKeepsLength(entry.type);
-    }
-    // The result is a list as long as the final argument, for each overload
-    // choice that takes a list.
-    function declareKeepsLength(type: Ty): void {
-        const t = resolve(type);
-        if (t.k === "overload") { t.choices.forEach(declareKeepsLength); return; }
-        let count = 0, last: Ty = t;
-        for (let x: Ty = t; x.k === "fn"; x = resolve(x.output)) { count++; last = x; }
-        if (count && last.k === "fn" && resolve(last.input).k !== "atom") setShape(t, { length: { param: count - 1 } });
     }
     // A value's type that applies as get gives it (not a function's).
     function gotten(t: Ty): boolean {

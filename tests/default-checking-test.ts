@@ -447,8 +447,12 @@ for (const source of [
     'keep xs = xs * x -> x\ndrop1 xs = tail xs\npick b = b ? keep : drop1\ng [a,b,c] = a\ng (pick False [1,2,3])',
     'keep xs = xs * x -> x\ndrop1 xs = tail xs\nh = False ? keep : drop1\ng [a,b,c] = a\ng (h [1,2,3])',
     'keep xs = xs * x -> x\ndrop1 xs = tail xs\nfs = [keep,drop1]\ng [a,b,c] = a\ng (fs 1 [1,2,3])',
-    'std <- import "std"; use std.sequence; p = sortBy compare; g [a,b] = a; g (p [2,1])',
 ]) Deno.test(`checker does not assume lengths: ${source}`, () => rejected(session(), source));
+// A length a type declares is the function's, applied partially too.
+Deno.test("a declared length survives partial application", () => {
+    const actual = run(session(), 'std <- import "std"; use std.sequence; p = sortBy compare; g [a,b] = a; g (p [2,1])');
+    if (actual !== "1") throw new Error(actual);
+});
 // An empty-list pattern rejects a list known to be non-empty (it would fail at
 // runtime), while lists of unknown length still reach it, as recursion needs.
 // Empty-list and cons clauses are separate overload choices.

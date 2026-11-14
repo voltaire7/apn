@@ -1,11 +1,9 @@
 import { Interpreter } from "../src/interp.ts";
 import { parse } from "../src/parser.ts";
-import { DECLARED_KEEPS_LENGTH } from "../src/type-checker.ts";
 
-// The checker trusts DECLARED_KEEPS_LENGTH in src/type-checker.ts: these
-// standard-library functions return a list as long as their list argument.
-// Verify that claim at runtime (unchecked, so the claim itself is not assumed),
-// together with the functions the checker infers from them.
+// lib/std/sequence.apn declares that these return a list as long as their
+// list argument (reverse (xs : Vect n a) : Vect n a), which their runs check;
+// so do the functions the checker infers from them. Each keeps it, unchecked.
 const calls: Record<string, string> = {
     reverse: "reverse xs",
     sortBy: "sortBy compare xs",
@@ -26,7 +24,3 @@ for (const [name, call] of Object.entries(calls)) {
         }
     });
 }
-Deno.test("every declared length-preserving function is verified here", () => {
-    const missing = [...DECLARED_KEEPS_LENGTH].filter(name => !(name in calls));
-    if (missing.length) throw new Error(`add runtime checks for: ${missing.join(", ")}`);
-});

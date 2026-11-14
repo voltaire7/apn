@@ -659,7 +659,8 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   definition's clauses (`define`) or a function's parameters (`inferFunction`),
   and `bind` reads one met anywhere else, so every checker pass sees one form;
   the runtime applies the same `flatTypedPattern` when it matches, except that
-  it takes `(xs : Vect n a)` apart itself (a mismatch fails the match).
+  it takes `(xs : Vect n a)` apart itself (a length mismatch fails the match;
+  a type variable reads no element, see `matchVectorPattern`).
   `tests/vect-pattern-test.ts`.
 - A `match` alternative's input starts from `patternInput` (the scrutinee's
   length at cons positions, fresh elsewhere), so its patterns still only test.
@@ -879,8 +880,9 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   only in callee position of a direct call to a definition or builtin
   (`callees`, `trustsShape`); every other reference, and any partial
   application leaving its chain, goes through `withoutShapes`.
-  `DECLARED_KEEPS_LENGTH` marks library functions `shapeOf` cannot analyse; add
-  each to `tests/stdlib-length-test.ts`, which verifies the claim at runtime.
+  A library function `shapeOf` cannot analyse declares the length it keeps
+  (`reverse (xs : Vect n a) : Vect n a`, its body `: Dynamic`), as a program's
+  can; `tests/stdlib-length-test.ts` exercises each.
 - Keep implicit unknowns separate from explicit `Dynamic`: a concrete type
   requires a runtime constructor/contract or an actually converting pattern,
   never a silently inserted conversion.

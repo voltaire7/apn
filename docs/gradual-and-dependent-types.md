@@ -218,12 +218,18 @@ appendOne n (values : Ints n) (value : Int) = values ++ [value] : Ints (n + 1)
 ```
 
 A name a typed pattern's type does not know yet is bound by the value:
-`(Vect n a) xs` binds `n` to the length and `a` to the element type (the same
-as `(xs : Vect n a)`), and `(List a) xs` binds `a` to the elements' type, computed
-only if it is used, so `first (x::_ : List _) = x` works on `[1..]` (`_` binds
-nothing, as in any pattern; lint warns about a bound name nothing uses). A name
-bound earlier must agree: `h ((Vect n a) xs) ((Vect n a) ys)` requires equal
-lengths, statically where they are known. Which names a pattern binds follows
+`(xs : Vect n a)` binds `n` to the length and `a` to the elements' type, and
+`(xs : List a)` binds `a`, so `first (x::_ : List _) = x` works on `[1..]` (`_`
+binds nothing, as in any pattern; lint warns about a bound name nothing uses).
+A type variable is the checker's: the run reads no element for it (`a` is
+computed only if the body uses it, from the first of the lists sharing it that
+has elements), compares it with nothing, and a conversion to a type naming it
+checks nothing against it. So `(xs : Vect n a)` takes `[1, "s"]` and never
+evaluates `head [missing, 2]`'s `missing`, and `reverse (xs : Vect n a) :
+Vect n a` declares only that the length is kept. A free `n` takes a list whose
+length the check cannot find, as a type variable takes any type. A length
+bound earlier must agree: `h (xs : Vect n a) (ys : Vect n a)` requires equal
+lengths, statically where they are known and when it runs otherwise. Which names a pattern binds follows
 the rule for written function types: a name an earlier parameter bound is
 that value; a name bound to a type or function keeps it; any other lowercase
 name in a type position is bound by the pattern. A length, being a value, is
