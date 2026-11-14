@@ -53,7 +53,7 @@ export function highlightTokens(source: string, natives: Set<string>, ternaries 
         }
         const word = source.slice(i).match(/^[A-Za-z_][A-Za-z0-9_']*/)?.[0];
         if (word) {
-            take(word.length, ["import", "load", "use", "do", "return", "True", "False"].includes(word) ? "keyword"
+            take(word.length, ["import", "load", "use", "do", "return", "else", "True", "False"].includes(word) ? "keyword"
                 : natives.has(word) ? "function" : /^[A-Z]/.test(word) ? "type" : undefined);
             continue;
         }
