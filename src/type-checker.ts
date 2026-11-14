@@ -2177,7 +2177,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : module ? `${openHint(module)} to use \`${name}\`` : undefined;
     }
 
-    function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr, bound = new Set<string>()): void {
+    // Names a parameter list binds; tests: its repeats only test (see bind).
+    type Bound = Set<string> & { tests?: boolean };
+    // Set while a clause of several is read: its repeated names only test.
+    let repeatsTest = false;
+    function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr, bound: Bound = new Set<string>()): void {
         switch (p.p) {
             case "as": {
                 bind(p.left, expected, scope, e, bound);
@@ -2193,9 +2197,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "wildcard":
                 return;
+            // A name met again (f x x, (x : t) (y : t)) is a test the run makes:
+            // in one of several clauses it decides no type, as the call may go to
+            // another clause; in the only one, it must hold.
             case "var":
-                if (bound.has(p.name)) unify(scope.get(p.name)!.type, expected, e);
-                else { bound.add(p.name); scope.set(p.name, { type: expected, mono: true }); }
+                if (!bound.has(p.name)) { bound.add(p.name); scope.set(p.name, { type: expected, mono: true }); }
+                else if (!(bound as Bound).tests) unify(scope.get(p.name)!.type, expected, e);
                 return;
             case "int":
             case "range": {
@@ -6829,6 +6836,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             !!length && (length.t === "placeholder" || length.t === "var" && /^[a-z]/.test(length.name) && !scope.has(length.name));
     }
     function inferFunction(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr, given?: Ty[]): Ty {
+        const tests = repeatsTest;
+        repeatsTest = false;
         params = params.map(p => typed(p, parent));
         // A body that is a lambda (f = x -> y -> e is the clause f x = y -> e)
         // is checked with the clause's parameters, as f x y = e is: the same
@@ -6842,7 +6851,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         }
         const scope = new Map(parent), inputs: { type: Ty; binder?: string; coerce: boolean }[] = [];
-        const bound = new Set<string>(recursiveName ? [recursiveName] : []);
+        const bound: Bound = Object.assign(new Set<string>(recursiveName ? [recursiveName] : []), { tests });
         const patternStart = requirements.length;
         const open: boolean[] = [];
         for (const [n, p] of params.entries()) {
@@ -7251,7 +7260,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const definition: Definition = { name, clauses };
         const firstKey = new Map<string, string>();
         for (const [index, c] of clauses.entries()) {
+            repeatsTest = clauses.length > 1;
             const t = inferDefinition(definition, false, () => functionType(c.params, c.body, scope, name));
+            repeatsTest = false;
             const head = resultHead(t, c.params.length);
             if (head) recordHead(c.body, head);
             let key = `${c.params.some(bindsSelf) ? "self:" : ""}${domain(t)}`, existing = groups.get(key);

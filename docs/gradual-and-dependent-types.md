@@ -475,7 +475,11 @@ Within one parameter list, the first occurrence binds and subsequent occurrences
 compare using APN equality. This also applies inside list and record patterns.
 The names shadow outer bindings; separate nested lambdas introduce separate
 scopes. `_` is always an independent wildcard, so `(_, _ -> 1) 2 3` returns 1.
-The checker requires compatible types; equal values are still checked at runtime.
+A repeat is a test the run makes. In a function's only clause the checker
+requires compatible types, as no other clause could take the call (`f x x = x;
+f 1 True` is an error); in one of several it decides no type, as values of
+different types are unequal and the next clause is tried (`f x x = True; f x y =
+False` gives `False` for `f 1 "a"`), as with a repeated type, `(x : t) (y : t)`.
 Comparing infinite lists may not terminate. Function equality retains APN's
 existing behavior; repeated patterns do not prove function equivalence.
 

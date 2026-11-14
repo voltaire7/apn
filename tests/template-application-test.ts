@@ -172,6 +172,15 @@ for (const checked of [true, false]) for (const [source, expected] of [
     ['t = [Int,Int]\nf (ys : t) = 1\nf _ = 0\n[f [5,6], f "ab", f 7]', '[1,0,0]'],
     ['a = Int\ng = typeOf\nf (x : a) = 1\nf _ = 0\nh (y : g 1) = 1\nh _ = 0\n[f 1, f "s", h 2, h "s"]', '[1,0,1,0]'],
     ['h = a -> a\nf (g : h) = 1\nf _ = 0\n[f (x -> x), f 2]', '[1,0]'],
+    // A typed pattern takes what e : T makes of the value, and fails where it
+    // fails: [Int,Int] is Vect 2 Int, a record type converts each field.
+    ['f (ys : [Int,Int]) = ys\nf _ = 0\n[f [1], f ["a","b"], f [1,2], f [1.0,2], f [1,2.5]]', '[0,0,[1,2],[1,2],0]'],
+    ['f (ys : Vect 2 Int) = ys\nf _ = 0\n[f [1], f ["a","b"], f [1,2], f [1.0,2], f [1,2.5]]', '[0,0,[1,2],[1,2],0]'],
+    ['g (ys : [Float,Float]) = ys\nh (ys : Vect 2 Float) = ys\n[g [1,2], h [1,2]]', '[[1.0,2.0],[1.0,2.0]]'],
+    ['p = [x : Int]\nf (v : p) = v.x\nf _ = 0\n[f [x = 3], f [x = "a"], f 5, f [x = 2.0]]', '[3,0,0,2]'],
+    // A repeated name is a test the run makes, deciding no type.
+    ['f x x = True\nf x y = False\n[f 1 1, f 1 2, f 1 "a"]', '[True,False,False]'],
+    ['same (x : t) (y : t) = True\nsame x y = False\n[same 1 2, same 1 True]', '[True,False]'],
 ] as const) Deno.test(`list type ranges (checked=${checked}): ${source}`, () => {
     const i = new Interpreter();
     if (checked) i.enableChecking();

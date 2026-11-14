@@ -4430,7 +4430,8 @@ export class Interpreter {
         const t = this.reference(bound);
         if (t.kind === "native" && t.tag) return { kind: "constructor", fields: t.arity - t.applied.length };
         if (t.kind === "variant") return t.v.length ? { kind: "schema" } : { kind: "constructor", fields: 0 };
-        if (t.kind === "closure" || t.kind === "functionType") return { kind: "schema" };
+        // A function type, or a list or record of types: a type read as written.
+        if (t.kind === "closure" || t.kind === "functionType" || (this.isList(t) || t.kind === "record") && this.isTypeValue(t)) return { kind: "schema" };
         return t.kind === "type" ? { kind: "type", arity: this.typeArity(t) } : undefined;
     }
     // Whether a type is any (_ given to a type).
@@ -5443,6 +5444,41 @@ export class Interpreter {
     }
 
     // Check positional shape without forcing elements or traversing an unbounded list.
+    // Whether e : T converts a value, which (p : T) in a pattern needs: a
+    // positional type ([Int,Float], Vect 2 Int) a list of as many, each item
+    // converting; a record type each field; else the conversion itself. An
+    // item still to compute (not a literal) is left to convert as it is used,
+    // as for List Int.
+    private converts(typeIn: Value, value: Value): boolean {
+        const literal = value.kind === "thunk" && ["int", "float", "bool", "string", "char", "list", "record"].includes(value.body.t);
+        if ((value.kind === "thunk" || value.kind === "deferred") && value.value === undefined && !literal) return true;
+        const type = this.reference(typeIn);
+        let items: Value[] | undefined;
+        if (this.isList(type) && !this.repeatedType(type)) items = [...this.elements(type)];
+        else if (type.kind === "type" && this.counted(type)) { const [size, element] = this.vectorParts(type); items = Array.from({ length: Number(size) }, () => element); }
+        if (items) {
+            let rest = this.dataValue(value);
+            if (!this.isList(rest)) return false;
+            for (const item of items) {
+                const cell = this.cell(rest);
+                if (!cell || !this.converts(item, cell.head)) return false;
+                rest = cell.tail;
+            }
+            return this.cell(rest) === null;
+        }
+        const given = this.demand(value);
+        if (type.kind === "record" && this.isTypeValue(type)) {
+            const input = this.recordPatternInput(type, given);
+            if (input === null) return false;
+            const fields = input.kind === "record" ? new Map(input.v) : undefined, positional = fields ? [] : [...this.elements(input)];
+            return type.v.every(([key, field], n) => {
+                const held = fields ? fields.get(key) : positional[n];
+                return held === undefined || this.converts(field, held);
+            });
+        }
+        try { this.demand(this.conform(type, given)); return true; }
+        catch (error) { if (error instanceof APNError && error.kind === "runtime") return false; throw error; }
+    }
     recordPatternInput(type: Extract<Value, { kind: "record" }>, value: Value): Value | null {
         if (value.kind === "record") return value;
         if (!this.isList(value)) return null;
@@ -5472,6 +5508,14 @@ export class Interpreter {
         const fixed = sizePattern.p === "int" ? mkInt(sizePattern.v) : known && this.dataValue(known);
         if (fixed && (fixed.kind !== "int" || fixed.v < 0n)) return false;
         const limit = fixed?.kind === "int" ? counts.scale * fixed.v + counts.offset : undefined;
+        // Its length and element type both given (Vect 2 Float), it is the
+        // positional type it makes, which takes what converts to it.
+        const named = args[1].p === "constr" && !args[1].args.length && this.env.get(args[1].tag);
+        const requested = named && this.reference(named);
+        if (fixed?.kind === "int" && requested && this.isTypeValue(requested)) {
+            const type: Value = { ...family, arguments: [fixed, requested] };
+            return this.converts(type, value) && this.matchPattern(args[2], this.conform(type, value), binds);
+        }
         if (value.kind === "list" && value.schema?.kind === "type" && this.counted(value.schema)) {
             [size, element] = this.vectorParts(value.schema);
         } else {
@@ -6284,7 +6328,7 @@ export class Interpreter {
             try { type = this.schemaPatternType(p.type, true); } finally { this.env = caller; }
             type = this.asType(type) ?? type;
             if (type.kind === "type" && this.counted(type)) {
-                return this.matchPattern(p.value, this.conform(type, v), binds);
+                return this.converts(type, v) && this.matchPattern(p.value, this.conform(type, v), binds);
             }
             if (!this.isTypeValue(type)) throw new APNError("runtime", "pattern expects a type description");
             let actual = this.reference(v);
@@ -6326,7 +6370,7 @@ export class Interpreter {
             }
             if (type.kind === "record") {
                 const input = this.recordPatternInput(type, this.demand(actual));
-                if (input === null) return false;
+                if (input === null || !this.hasSchemaCapture(type) && !this.converts(type, input)) return false;
                 const converted = this.conform(type, input);
                 const captured = this.hasSchemaCapture(type) ? this.captureSchema(type, converted, binds) : converted;
                 return captured !== null && this.matchPattern(p.value, captured, binds);
@@ -6335,6 +6379,9 @@ export class Interpreter {
             // An endless type ([Int..]) takes no list of written items: what the
             // checker typed the value decides, as for (List Int xs).
             if (this.repeatedType(type) && (this.demand(actual).kind === "list" || !this.staticallyFits(p.type, v))) return false;
+            // A written list of types ([Int,Int], which is Vect 2 Int) takes what
+            // converts to it; another does not match.
+            if (this.isList(type) && !this.repeatedType(type) && !this.hasSchemaCapture(type) && !this.converts(type, actual)) return false;
             const converted = this.conform(type, actual);
             const captured = this.hasSchemaCapture(type) ? this.captureSchema(type, converted, binds) : converted;
             return captured !== null && this.matchPattern(p.value, captured, binds);

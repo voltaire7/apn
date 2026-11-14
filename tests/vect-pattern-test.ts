@@ -118,6 +118,6 @@ Deno.test("a computed type's pattern with known arguments tests a plain value", 
     const source = "SizedInts n = Vect n Int\ncopy n (xs : SizedInts n) = xs\n";
     if (run(source + "copy 3 [1,2,3]") !== "[1,2,3]") throw new Error("a fitting list did not match");
     let rejected = false;
-    try { run(source + "copy 2 [1,2,3]"); } catch (error) { rejected = String(error).includes("length mismatch"); }
+    try { run(source + "copy 2 [1,2,3]"); } catch (error) { rejected = /length mismatch|no clause/.test(String(error)); }
     if (!rejected) throw new Error("a list of another length was accepted");
 });
