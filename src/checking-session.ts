@@ -3,7 +3,7 @@ import { parse } from "./parser.ts";
 import { loadPath, readLoad, resolveModule, unknownModule } from "./modules.ts";
 import { type CheckOptions, checkTypes, copyTypeScope, dynamicEntry, isModuleType, mayMutate, moduleType, type TypeBridge, type TypeScope } from "./type-checker.ts";
 import { readsModule, type Expr, type TopLevel } from "./ast.ts";
-import { NATIVE_EXPORTS } from "./native-exports.ts";
+import { NATIVE_EXPORTS } from "./natives.ts";
 
 /** Static state is separate from evaluation: checking never runs an APN action. */
 export class CheckingSession {

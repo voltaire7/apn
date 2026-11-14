@@ -1,4 +1,5 @@
-import { Interpreter, NATIVES } from "../src/interp.ts";
+import { Interpreter } from "../src/interp.ts";
+import { NATIVES } from "../src/natives.ts";
 import { parseDocument } from "../src/parser.ts";
 
 function result(source: string): string {

@@ -2,10 +2,15 @@ import { type Numeric, type Real, isNumeric, integer, floating, toReal, toExact,
 import { APNError } from "./errors.ts";
 import type { Pattern } from "./ast.ts";
 
-export const NUMERIC_TYPES = ["Int", "UInt", ...[8, 16, 32, 64, 128].flatMap((n) => [`Int${n}`, `UInt${n}`]), "Float", "Float32", "Float64", "Fraction", "Complex", "ComplexExact", "Number", "Real", "Integer", "Exact", "Inexact"];
+// The numeric classes: sets of numbers of several types, none a value's own
+// type (Integer holds an Int and a UInt8).
+export const NUMERIC_CLASSES = new Set(["Number", "Real", "Integer", "Exact", "Inexact"]);
+export const NUMERIC_TYPES = ["Int", "UInt", ...[8, 16, 32, 64, 128].flatMap((n) => [`Int${n}`, `UInt${n}`]), "Float", "Float32", "Float64", "Fraction", "Complex", "ComplexExact", ...NUMERIC_CLASSES];
 // The built-in types a value of a type the program defines converts to through
 // its to instance where one is needed: an index, arithmetic, a typed pattern.
 export const SCALAR_TYPES = new Set([...NUMERIC_TYPES, "String", "Char", "Bool"]);
+// The scalar types a value has as its own (not a class).
+export const OWN_SCALAR_TYPES = new Set([...SCALAR_TYPES].filter(t => !NUMERIC_CLASSES.has(t)));
 export const TYPE_NAMES = [...NUMERIC_TYPES, "Dynamic", "Vect", "Mutable", "Pointer", "HashMap", "Bool", "String", "Char", "List", "Record", "Function", "Type", "Variant", "IO"];
 // Types that are their own constructors: HashMap [...] builds a map, Mutable 0 a
 // cell, Pointer an address. Every other type is given a value only ascribed.
@@ -62,7 +67,7 @@ export function matchesType(name: string, value: Numeric): boolean {
 export function castNumeric(name: string, value: Numeric, explicit = false): Numeric {
     const annotation = name;
     name = canonical(name);
-    if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(name)) {
+    if (NUMERIC_CLASSES.has(name)) {
         if (!matchesType(name, value)) throw new APNError("runtime", `value does not belong to ${name}`);
         return value;
     }
@@ -161,7 +166,7 @@ export function typedArithmetic(op: string, a: Numeric, b: Numeric): Numeric {
     // Another typed number keeps its type with an untyped one or its own
     // ((1 : Float32) / 10 is a Float32), where both convert to it.
     let target = a.typeName && b.typeName ? (a.typeName === b.typeName ? a.typeName : canonical(a.typeName) === canonical(b.typeName) ? canonical(a.typeName) : undefined) : a.typeName ?? b.typeName;
-    if (target && !["Number", "Real", "Integer", "Exact", "Inexact"].includes(target)) {
+    if (target && !NUMERIC_CLASSES.has(target)) {
         try { a = castNumeric(target, a); b = castNumeric(target, b); } catch { target = undefined; }
     } else target = undefined;
     const [l, r] = implicitOperands(a, b), result = arithmetic(op, l, r);

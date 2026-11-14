@@ -11,11 +11,11 @@ import doSource from "../lib/std/do.apn" with { type: "text" };
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { captureSnapshot } from "./snapshot.ts";
 import { buildExecutable } from "./compile.ts";
-import { STANDARD_NATIVES, standardNative } from "./standard-natives.ts";
-import { NATIVE_EXPORTS, RETIRED_NATIVES } from "./native-exports.ts";
+import { standardNative } from "./standard-natives.ts";
+import { ACTIONS, NATIVE_EXPORTS, NATIVES, RETIRED_NATIVES, STANDARD_NATIVES, TAKES_UNDECIDED } from "./natives.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { bundledText, IMPORT_ONE, loadPath, type ModuleFile, readLoad, resolveModule, sourcePath, unknownModule } from "./modules.ts";
-import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
+import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_CLASSES, NUMERIC_TYPES, OWN_SCALAR_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { ACTION_SHOWN, APNError, didYouMean, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
@@ -64,20 +64,6 @@ class TailLoad {
     constructor(readonly code: Value, readonly env: Env) {}
 }
 
-// Natives with effects: applying one builds an IO action; running it performs them.
-export const IO_NATIVES = new Set(["intrinsics.import", "intrinsics.readFileFrom", "compile", "print", "echo", "emit", "repl", "exit", "set", "while", "for", "readFile", "readStdin", "getArgs", "fetch", "bracket", "withFile", "withLibrary", "entropy", "currentTime", "zoneOffset"]);
-// What the actions of IO builtins yield, for showing their types (IO []).
-const IO_RESULTS: Record<string, string> = {
-    "intrinsics.import": "Module", "intrinsics.readFileFrom": "String", compile: "[]", print: "[]", echo: "[]", emit: "[]", repl: "[]", exit: "[]", set: "[]", readFile: "String", readStdin: "String", getArgs: "[String]", fetch: "Record", env: "Record",
-    entropy: "Int", currentTime: "Int", zoneOffset: "Int",
-};
-
-// The scalar types.
-const AGGREGATE_NUMERIC = new Set(["Number", "Real", "Integer", "Exact", "Inexact"]);
-const SCALAR_NAMES = new Set([...NUMERIC_TYPES.filter(t => !["Number", "Real", "Integer", "Exact", "Inexact"].includes(t)), "String", "Bool", "Char"]);
-
-// Builtins that take an undecided value as it is: they show it or pass it on.
-const SHOWS_UNDECIDED = new Set(["print", "echo", "emit", "toString", "format", "typeOf", "isType", "debug", "seq", "Dynamic"]);
 
 // Operators whose builtin meaning does not demand both operands first.
 const LAZY_OPERATORS = new Set(["::", "++", "&&", "||", "$"]);
@@ -86,43 +72,6 @@ const CALLABLE_KINDS = new Set(["functionType", "contract", "mutable", "type", "
 
 const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 
-// Native registry: name -> arity. One source of truth for registration
-// and for REPL tab completion.
-export const NATIVES: Array<[string, number]> = [
-    ...NUMBER_NATIVES,
-    ["assert", 2], ["intrinsics.match", 2], ["set", 2], ["while", 2], ["for", 2], ["typeOf", 1], ["isType", 2], ["insert", 2], ["lookup", 2], ["has", 2], ["remove", 2], ["keys", 1], ["values", 1],
-    ["print", 1], ["echo", 1], ["repl", 0], ["compile", 2], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
-    ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
-    ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
-    ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["use", 1],
-    ["emit", 1], ["step", 2], ["intrinsics.syntax", 1], ["intrinsics.written", 1], ["intrinsics.binding", 1], ["intrinsics.yields", 1], ["intrinsics.runs", 1], ["intrinsics.bound", 2], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
-    ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
-    // Functor, Applicative and Monad, for actions, lists and Option-like variants.
-    ["intrinsics.bind", 2], ["intrinsics.negate", 1], ["intrinsics.range", 3], ["intrinsics.ap", 2], ["intrinsics.return", 1], ["intrinsics.throw", 1], ["intrinsics.source", 1],
-    // Natural numbers are UInt: Z is UInt 0, S n the next one.
-    ["S", 1],
-    // to T x writes x as a T; from T x reads it back (methods, like map).
-    ["to", 2], ["from", 2],
-    // tag owner ctor fields: a value made by ctor, belonging to owner.
-    ["intrinsics.tag", 3],
-    // get v k: what applying a value that is not a function gives (xs 2, r "x").
-    ["intrinsics.get", 2],
-    // with v k x: a copy of v with k set to x (xs 2 = x binds xs to with xs 2 x).
-    ["intrinsics.with", 3],
-    // The union and the intersection of sets: of types (Mixed = Int | String),
-    // or of values read as sets (see setOf): a | b, a & b.
-    ["intrinsics.union", 1],
-    ["intrinsics.intersection", 1],
-    // truthy x: x's truth, which conditions read.
-    ["intrinsics.truthy", 1],
-    // refine T p: the values of T for which p is True (Positive = (n : Int) | n > 0).
-    ["intrinsics.refine", 2],
-    // import path: an action reading a module, its record the result.
-    ["intrinsics.import", 1],
-    // readFileFrom path: an action reading a file beside the running one;
-    // parse source: the code it writes, its items in the scope parse runs in.
-    ["intrinsics.readFileFrom", 1], ["intrinsics.parse", 1],
-];
 // The names editors color as built-in functions (the natives, cast and do).
 // The names natives are bound by (each intrinsic is a field of intrinsics).
 export const NATIVE_NAMES = new Set(["cast", "do", ...NATIVES.map(([name]) => name.split(".")[0])]);
@@ -299,7 +248,7 @@ export class Interpreter {
             : e.t === "app" ? writtenType(e.f) : e.t === "list" ? e.v.every(writtenType) : e.t === "record" ? e.v.every(([, x]) => writtenType(x))
             : e.t === "block" && e.stmts.length === 1 ? writtenType(e.stmts[0]) : false;
         if (value.kind !== "type" && !((body.t === "record" || body.t === "list") && writtenType(body))) return value;
-        if (value.kind === "type" && SCALAR_NAMES.has(value.name) && !value.family && !value.alias && !value.arguments?.length && !value.variable) {
+        if (value.kind === "type" && OWN_SCALAR_TYPES.has(value.name) && !value.family && !value.alias && !value.arguments?.length && !value.variable) {
             return { kind: "type", name, family: { name, base: value } };
         }
         if (value.kind === "type" && value.refine && this.scalarRefinement(value)) {
@@ -315,7 +264,7 @@ export class Interpreter {
             if (base.kind !== "type") return false;
             if (base.refine) { base = base.choices![0]; continue; }
             if (base.family?.base) { base = base.family.base; continue; }
-            return SCALAR_NAMES.has(base.name) && !base.family && !base.alias && !base.arguments?.length && !base.variable;
+            return OWN_SCALAR_TYPES.has(base.name) && !base.family && !base.alias && !base.arguments?.length && !base.variable;
         }
     }
     // (p : T), T a refinement: the value as its base's pattern takes it
@@ -3735,7 +3684,7 @@ export class Interpreter {
         if (!NUMERIC_TYPES.includes(pattern.tag)) return this.matchesValueType(pattern.tag, value) ? 1 : -1000;
         if (!isNumeric(value)) return -1000;
         if (matchesType(pattern.tag, value)) return 1;
-        if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(pattern.tag)) return -1000;
+        if (NUMERIC_CLASSES.has(pattern.tag)) return -1000;
         try { castNumeric(pattern.tag, value); return 0; } catch { return -1000; }
     }
     // Whether a typed (or bare) type pattern takes every value another pattern
@@ -4806,18 +4755,18 @@ export class Interpreter {
         // Each run evaluates the expressions written in the call again, as a
         // do-block's statements are (set c (c + 1) run twice adds 2); a value
         // passed in (a name, a parameter) is the one it is.
-        if (!perform && IO_NATIVES.has(name)) {
+        if (!perform && ACTIONS.has(name)) {
             const fresh = (v: Value): Value => v.kind === "thunk" && v.env ? { kind: "thunk", body: v.body, env: v.env } : v;
             // A module read inside Dynamic is read unchecked wherever it runs.
             if (name === "intrinsics.import" || name === "intrinsics.readFileFrom") {
                 const depth = this.dynamicDepth;
-                return { kind: "io", result: IO_RESULTS[name], run: () => {
+                return { kind: "io", result: ACTIONS.get(name), run: () => {
                     const outer = this.dynamicDepth;
                     this.dynamicDepth = depth;
                     try { return this.callNative(name, argsIn.map(fresh), tag, true); } finally { this.dynamicDepth = outer; }
                 } };
             }
-            return { kind: "io", result: IO_RESULTS[name], run: () => this.callNative(name, argsIn.map(fresh), tag, true) };
+            return { kind: "io", result: ACTIONS.get(name), run: () => this.callNative(name, argsIn.map(fresh), tag, true) };
         }
         if (name === "assert") {
             const argument = argsIn[0];
@@ -5135,9 +5084,9 @@ export class Interpreter {
         const args = argsIn.map((x, index) => ["print", "echo", "emit", "toString", "format"].includes(name) || (name === "foldl" && index === 0) ? this.demand(x) : this.dataValue(x));
         const a = args[0];
         // An undecided value reaching a builtin that needs a plain value.
-        if (!SHOWS_UNDECIDED.has(name)) for (const x of args) if (x.kind === "pending") this.ambiguous(x);
+        if (!TAKES_UNDECIDED.has(name)) for (const x of args) if (x.kind === "pending") this.ambiguous(x);
         // A named subtype is its base to builtins: sqrt (Money 4.0) is 2.0.
-        if (!SHOWS_UNDECIDED.has(name)) args.forEach((x, n) => { args[n] = this.baseValue(x); });
+        if (!TAKES_UNDECIDED.has(name)) args.forEach((x, n) => { args[n] = this.baseValue(x); });
         switch (name) {
             // Output actions yield [] (nothing), as print does in Haskell.
             case "print":
@@ -5712,7 +5661,7 @@ export class Interpreter {
         return [name, ...args.map(arg => this.renderString(arg)).map(text => /\s/.test(text) && !/^\[.*\]$/.test(text) ? `(${text})` : text)].join(" ");
     }
     private remembered(name: string, args: Value[], made: Value): Value {
-        const remembers = made.kind === "type" ? !made.variable && !(SCALAR_NAMES.has(made.name) && !made.arguments?.length && !made.family)
+        const remembers = made.kind === "type" ? !made.variable && !(OWN_SCALAR_TYPES.has(made.name) && !made.arguments?.length && !made.family)
             : (made.kind === "record" || this.isList(made) && this.cell(made) !== null) && this.isTypeValue(made);
         if (!remembers) return made;
         // A union of list types is known by its name (Pairs Int), not its unread choices.
@@ -6201,7 +6150,7 @@ export class Interpreter {
         }
         let value = this.demand(arg);
         // A base type applied to a named value unwraps it: Float (Money 1.2).
-        if (!f.family && !f.alias && SCALAR_NAMES.has(f.name)) value = this.baseValue(value);
+        if (!f.family && !f.alias && OWN_SCALAR_TYPES.has(f.name)) value = this.baseValue(value);
         if (!f.family && ["Float", "Float32", "Float64"].includes(f.name)) {
             if (!isNumeric(value)) throw new APNError("runtime", `${f.name} expects a number`);
             return castNumeric(f.name, value, true);
@@ -6692,7 +6641,7 @@ export class Interpreter {
                     // aggregate ((x : Number)) the value as it is.
                     let converted: Value;
                     try { converted = castNumeric(p.tag, v); } catch { return false; }
-                    return this.matchPattern(p.args[0], AGGREGATE_NUMERIC.has(p.tag) ? v : converted, binds);
+                    return this.matchPattern(p.args[0], NUMERIC_CLASSES.has(p.tag) ? v : converted, binds);
                 }
                 // Z and S k take a natural number apart: 0, or k + 1 (k a UInt).
                 if (isNumeric(v) && (p.tag === "Z" && !p.args.length || p.tag === "S" && p.args.length === 1)) {

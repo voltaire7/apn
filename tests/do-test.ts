@@ -1,4 +1,5 @@
-import { Interpreter, NATIVES, setInterruptFlag } from "../src/interp.ts";
+import { Interpreter, setInterruptFlag } from "../src/interp.ts";
+import { NATIVES } from "../src/natives.ts";
 import { parseDocument } from "../src/parser.ts";
 
 for (const [source, expected, effects] of [

@@ -37,7 +37,8 @@ Key files:
 - `main.ts` — thin entry point (CLI dispatch); keep logic out of it
 - `apn` — sh launcher; checks the Deno version, sets permissions, no logic
 - `src/lexer.ts`, `src/parser.ts`, `src/ast.ts` — syntax
-- `src/interp.ts` — `Interpreter` (eval/apply/demand), `NATIVES` registry
+- `src/interp.ts` — `Interpreter` (eval/apply/demand)
+- `src/natives.ts` — every native and each fact about it (arity, effects, module)
 - `src/types.ts` — runtime `Value` union, `Env`, `valueToString`
 - `src/numbers.ts`, `src/type-system.ts` — numeric tower and numeric types
 - `src/type-checker.ts`, `src/checking-session.ts` — static checking (evaluates pure code, never performs effects)

@@ -12,7 +12,7 @@
 // and the program's own directory at BUNDLE_APP.
 
 import { parse, parseDocument } from "./parser.ts";
-import { NATIVE_EXPORTS } from "./native-exports.ts";
+import { NATIVE_EXPORTS } from "./natives.ts";
 import { type Expr, importedPath, isForTypes, METHOD_INTRINSICS, readsModule } from "./ast.ts";
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
 

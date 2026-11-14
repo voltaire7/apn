@@ -1,13 +1,12 @@
 import { fieldSource } from "./record-keys.ts";
 import { type Alternative, type Binding, clausePlaces, type Contains, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
-import { RETIRED_NATIVES } from "./native-exports.ts";
+import { EVALUATED_NATIVES, nativeArity, READS_CODE, RETIRED_NATIVES, SHOWS, STANDARD_NATIVES, STRICT_NATIVES } from "./natives.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
 import { IMPORT_ONE, standardModule } from "./modules.ts";
 // The natives that show a value, which no action has.
-const SHOWN_NATIVES = new Set(["print", "echo", "emit", "toString"]);
 import { parseLiteral, textNatives } from "./text-natives.ts";
-import { builtinContains, castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, numericWithin, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
+import { builtinContains, castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_CLASSES, NUMERIC_TYPES, OWN_SCALAR_TYPES, numericWithin, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
 import { ACTION_SHOWN, APNError, didYouMean, formatFileReadError, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import { bindingItem, DEFAULT_FIXITY, getPreludeUsed, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
@@ -25,7 +24,6 @@ class Tail { constructor(readonly e: Expr, readonly env: Map<string, Known>, rea
 const RANGE_FUNCTIONS = new Map([["enumFrom", 1], ["enumFromThen", 2], ["enumFromTo", 2], ["enumFromThenTo", 3]]);
 // The prelude's functions that read a list's code, not its values: an open
 // list may go to them (see closed).
-const READS_CODE = new Set(["probe", "toAST", "toLambda", "intrinsics.written", "intrinsics.syntax"]);
 // IO t: an action yielding t.
 function io(t: Ty): Ty { return { k: "variant", name: "IO", args: [t] }; }
 function isIO(t: Ty): boolean { return t.k === "variant" && t.name === "IO" && t.args.length === 1; }
@@ -38,7 +36,6 @@ function isPending(t: Ty): boolean { return t.k === "variant" && t.name === PEND
 // The methods, by the names the prelude binds them to (return, >>=, ...).
 const METHOD_NAMES = new Set(METHOD_INTRINSICS.values());
 // The scalar types; a name for one names a subtype (Count = Int).
-const NAMED_BASES = new Set([...NUMERIC_TYPES.filter(t => !["Number", "Real", "Integer", "Exact", "Inexact"].includes(t)), "String", "Bool", "Char"]);
 
 type Index = { constant: bigint; terms: Map<string, bigint> };
 type Ty =
@@ -628,19 +625,6 @@ function captured(scope: Scope): Set<Ty> {
     }
     return found;
 }
-// Builtins evaluated over lists whose size or elements are known.
-const LIST_NATIVES = ["filter", "map", "take", "drop", "zipWith"];
-// Builtins the checker evaluates on known values (all return).
-const EVALUATED_NATIVES = new Set([
-    ...LIST_NATIVES, "length", "head", "tail", "null", "foldl", "foldr", "iterate", "enumerate",
-    "chars", "fromChars", "upper", "lower", "toString", "intToString", "seq", "parse",
-    "print", "echo", "emit", "debug", "assert", "set", "readFile", "use",
-]);
-// Builtins that demand their arguments when called.
-const STRICT_NATIVES = new Set([
-    "head", "tail", "null", "length", "chars", "fromChars", "upper", "lower", "toString", "intToString",
-    "parse", "print", "echo", "emit", "debug", "assert", "set", "seq", "readFile", "use",
-]);
 // Static evaluation limits: nesting (recursion) depth, and work per root value
 // (apn --check-budget=N sets the work; none lifts both, so checking code that
 // never finishes never finishes either, though it still performs no effect).
@@ -1930,7 +1914,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // subtype of it, its base, which ends in a scalar.
         let scalar = base;
         if (type.k === "type" && type.refined) while (scalar?.k === "variant" && scalar.base) scalar = resolve(scalar.base);
-        if (scalar?.k !== "atom" || !NAMED_BASES.has(scalar.name)) return undefined;
+        if (scalar?.k !== "atom" || !OWN_SCALAR_TYPES.has(scalar.name)) return undefined;
         const refined = type.k === "type" && type.refined ? { refined: { ...type.refined, name } } : {};
         return { k: "type", value: { k: "variant", name, args: [], base }, ...refined };
     }
@@ -3208,7 +3192,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             // A base type applied to a named value unwraps it, as at runtime:
             // Float (Money 1.2), Int (Money 1.0) as Int 1.0 would.
-            if (t.k === "atom" && NAMED_BASES.has(t.name) && a.k === "variant" && a.base) return application(f, { ...argument, type: a.base }, e);
+            if (t.k === "atom" && OWN_SCALAR_TYPES.has(t.name) && a.k === "variant" && a.base) return application(f, { ...argument, type: a.base }, e);
             // Applying a named subtype applies its base, as at runtime: F .1 with
             // F = Float32 rounds like Float32 .1. Another name must be unwrapped.
             if (t.k === "variant" && t.base) {
@@ -4035,7 +4019,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 let argumentType = a.t === "placeholder" && (resolved.k === "type" || resolved.k === "fn" && resolved.constructs)
                     ? { k: "type", value: variable() } as Ty : infer(a, scope);
                 // What is shown holds no action, which has no value until it runs.
-                if (e.t === "app" && rule && SHOWN_NATIVES.has(rule) && holdsAction(argumentType)) return problem(ACTION_SHOWN.message, a, ACTION_SHOWN.hint);
+                if (e.t === "app" && rule && SHOWS.has(rule) && holdsAction(argumentType)) return problem(ACTION_SHOWN.message, a, ACTION_SHOWN.hint);
                 // List takes only a type: given anything else, it is the value.
                 const value = (given: Ty) => !["type", "var", "factory", "alias", "dynamic"].includes(given.k) && !describing(given)
                     && !(given.k === "list" && given.items?.length === 0) && !isExplicit(given);
@@ -4557,7 +4541,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function category(type: Ty): Category {
         const t = resolve(type);
         if (t.k === "atom" && NUMERIC_TYPES.includes(t.name)) {
-            return ["Number", "Real", "Integer", "Exact", "Inexact"].includes(t.name) ? undefined : { numeric: t.name === "Float64" ? "Float" : t.name };
+            return NUMERIC_CLASSES.has(t.name) ? undefined : { numeric: t.name === "Float64" ? "Float" : t.name };
         }
         if (t.k === "atom" && ["String", "Bool", "Char"].includes(t.name)) return { kind: t.name };
         if (t.k === "list") return { kind: "List" };
@@ -4596,7 +4580,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (c && "kind" in c) return [-1000, -1000];
         const name = c?.numeric;
         const int = name !== undefined && /^U?Int(8|16|32|64|128)?$/.test(name), float = name !== undefined && /^Float(32)?$/.test(name);
-        if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(tag)) {
+        if (NUMERIC_CLASSES.has(tag)) {
             if (!name) return [-1000, 1];
             const known: Record<string, boolean | undefined> = {
                 Number: true,
@@ -6321,7 +6305,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // The pure builtins, run on known arguments as the runtime runs them.
     function evaluateNative(name: string, args: (() => Known | undefined)[], depth: number, origin?: Origin): Known | undefined {
-        const arity = name === "foldl" || name === "foldr" || name === "zipWith" ? 3 : name === "set" || LIST_NATIVES.includes(name) || name === "iterate" || name === "seq" || name === "assert" ? 2 : 1;
+        const arity = nativeArity(name)!;
         if (args.length !== arity) return undefined;
         // Folds may apply f at other moments than here: a region. map, zipWith,
         // filter and iterate apply it where the runtime does (lazily for heads).
@@ -7513,7 +7497,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     ) scope.set(name, { type });
     // fail marks code still to write: the prelude's, as at runtime.
     scope.set("fail", { type: fn(atom("String"), variable()) });
-    const standardOnly = new Set(["seq", "chars", "fromChars", "upper", "lower", "readFile", "readStdin", "getArgs", "fetch", "toJson", "prettyJson", "fromJson", "entropy", "currentTime", "zoneOffset", "p5Object", "p5SketchType"]);
+    // A standard native is the standard library's own: a program reaches it through a module.
+    const standardOnly = new Set(STANDARD_NATIVES.map(([name]) => name));
     const native = (name: string, inputs: Ty[], output: Ty) => {
         if (name in RETIRED_NATIVES) return;
         if (!standardOnly.has(name) || options.library) scope.set(name, { type: inputs.reduceRight((result, input) => fn(input, result), output) });

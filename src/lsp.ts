@@ -3,10 +3,9 @@
 import { lint, position, type Range } from "./lint.ts";
 import { parseDocument, setLooseSpacing } from "./parser.ts";
 import { lex, KEYWORDS } from "./lexer.ts";
-import { NATIVES } from "./interp.ts";
 import { semanticTokens, TOKEN_TYPES } from "./highlight.ts";
 import { TYPE_NAMES } from "./type-system.ts";
-import { RETIRED_NATIVES, nativeModule } from "./native-exports.ts";
+import { NATIVES, RETIRED_NATIVES, nativeModule } from "./natives.ts";
 import { standardExports } from "./modules.ts";
 
 // A file URI's folder, where its imports resolve; "." for any other document.

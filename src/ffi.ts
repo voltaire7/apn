@@ -1,12 +1,10 @@
 import type { Interpreter } from "./interp.ts";
+import { FFI_NATIVES } from "./natives.ts";
 import { type Value, type NativePointer, mkStr, mkBool } from "./types.ts";
 import { APNError } from "./errors.ts";
 import { isNumeric } from "./numbers.ts";
 import { castNumeric } from "./type-system.ts";
 
-export const FFI_NATIVES: Array<[string, number]> = [
-    ["withLibrary", 3], ["allocate", 2], ["peek", 2], ["poke", 3], ["offset", 2], ["nullPointer", 1],
-];
 const abi: Record<string, Deno.NativeType | "void"> = {
     Int8: "i8", UInt8: "u8", Int16: "i16", UInt16: "u16", Int32: "i32", UInt32: "u32",
     Int64: "i64", UInt64: "u64", Float32: "f32", Float: "f64", Float64: "f64",
