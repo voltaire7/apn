@@ -1,4 +1,4 @@
-import { Interpreter, NATIVE_NAMES } from "./interp.ts";
+import { Interpreter } from "./interp.ts";
 import { parse } from "./parser.ts";
 import { BUNDLE_APP, BUNDLE_LIB, bundleProgram } from "./modules.ts";
 
@@ -64,7 +64,7 @@ export async function buildSite(sourceDirectory: string, outputDirectory: string
     const output = outputDirectory.replace(/\/?$/, "/");
     Deno.writeTextFileSync(`${output}index.html`, programPage(index, runtime));
     const editor = Deno.readTextFileSync(new URL("./editor.html", import.meta.url))
-        .replace("/*SITE*/", () => scriptJson({ examples, modules, data, natives: [...NATIVE_NAMES], style: PAGE_STYLE }))
+        .replace("/*SITE*/", () => scriptJson({ examples, modules, data, style: PAGE_STYLE }))
         .replace("/*RUNTIME*/", () => runtime)
         .replace("/*EDITOR*/", () => editorScript);
     Deno.writeTextFileSync(`${output}editor.html`, editor);

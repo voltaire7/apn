@@ -10,8 +10,24 @@ export const PALETTES: Record<"dark" | "light", Record<string, string>> = {
     light: { number: "#df8e1d", string: "#40a02b", comment: "#9ca0b0", keyword: "#8839ef", function: "#1e66f5", type: "#04a5e5", operator: "#fe640b", punctuation: "#8c8fa1" },
 };
 export interface HighlightToken { line: number; start: number; length: number; type: string; }
+const KEYWORDS = new Set(["import", "load", "use", "do", "return", "else", "loop", "for", "while", "True", "False"]);
+// A name is a function where it is applied: at the head of an application
+// (after what starts an expression, a line's start, ( [ { , ; = or an
+// operator), with an argument after it on its line: map and add in
+// map (add 1) xs, not add1 in map add1 xs, which is a value there.
+function applied(source: string, start: number, end: number): boolean {
+    let before = start - 1;
+    while (before >= 0 && (source[before] === " " || source[before] === "\t")) before--;
+    const p = before < 0 ? "\n" : source[before];
+    const heads = p === "\n" || "([{,;=.".includes(p) || "+-*/%^!<>$&|?\\`@~:".includes(p);
+    let after = end;
+    while (after < source.length && (source[after] === " " || source[after] === "\t")) after++;
+    const n = source[after] ?? "";
+    const argument = /[A-Za-z0-9_([{"']/.test(n) || n === "." && /[0-9]/.test(source[after + 1] ?? "");
+    return heads && argument;
+}
 // ternaries carries open ?: across calls, for text given a line at a time.
-export function highlightTokens(source: string, natives: Set<string>, ternaries = [0]): HighlightToken[] {
+export function highlightTokens(source: string, ternaries = [0]): HighlightToken[] {
     const tokens: HighlightToken[] = [];
     let i = 0, line = 0, column = 0;
     const take = (length: number, type?: string) => {
@@ -53,8 +69,8 @@ export function highlightTokens(source: string, natives: Set<string>, ternaries 
         }
         const word = source.slice(i).match(/^[A-Za-z_][A-Za-z0-9_']*/)?.[0];
         if (word) {
-            take(word.length, ["import", "load", "use", "do", "return", "else", "loop", "for", "while", "True", "False"].includes(word) ? "keyword"
-                : natives.has(word) ? "function" : /^[A-Z]/.test(word) ? "type" : undefined);
+            take(word.length, KEYWORDS.has(word) ? "keyword" : /^[A-Z]/.test(word) ? "type"
+                : applied(source, i, i + word.length) ? "function" : undefined);
             continue;
         }
         if ("([{".includes(c)) ternaries.push(0);
@@ -75,10 +91,10 @@ export function highlightTokens(source: string, natives: Set<string>, ternaries 
 
 // Source as HTML, each token a <span class="t-TYPE">: the text is escaped
 // after it is tokenized, so -> stays an arrow.
-export function highlightHtml(source: string, natives: Set<string>): string {
+export function highlightHtml(source: string): string {
     const escape = (text: string) => text.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
     const lines = source.split("\n"), html = lines.map(() => ""), ends = lines.map(() => 0);
-    for (const token of highlightTokens(source, natives)) {
+    for (const token of highlightTokens(source)) {
         const line = lines[token.line];
         html[token.line] += escape(line.slice(ends[token.line], token.start))
             + `<span class="t-${token.type}">${escape(line.slice(token.start, token.start + token.length))}</span>`;
@@ -87,10 +103,10 @@ export function highlightHtml(source: string, natives: Set<string>): string {
     return lines.map((line, n) => html[n] + escape(line.slice(ends[n]))).join("\n");
 }
 
-export function semanticTokens(source: string, natives: Set<string>): number[] {
+export function semanticTokens(source: string): number[] {
     let previousLine = 0, previousStart = 0;
     const data: number[] = [];
-    for (const token of highlightTokens(source, natives)) {
+    for (const token of highlightTokens(source)) {
         data.push(token.line - previousLine,
             token.line === previousLine ? token.start - previousStart : token.start,
             token.length, TOKEN_TYPES.indexOf(token.type), 0);

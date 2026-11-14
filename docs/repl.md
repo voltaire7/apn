@@ -51,7 +51,8 @@ shares its terminal setup and the input typed ahead. Interactive features:
   typed, by the tokenizer the language server and the web editor share
   (`src/highlight.ts`) (comments overlay0, strings/chars green, numbers yellow,
   keywords (`import`, `load`, `use`, `do`, `return`, `else`, `loop`, `for`, `while`) and bools mauve,
-  natives blue, capital idents sky,
+  a name applied to arguments blue (`map` and `add` in `map (add 1) xs`, not
+  `add1` in `map add1 xs`, a value there), capital idents sky,
   punctuation overlay1, operators peach); echoed values are colored by kind with
   gray structure (brackets, colons, commas; keys plain, variant tags sky);
   errors red.

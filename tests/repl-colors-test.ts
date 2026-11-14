@@ -116,7 +116,7 @@ Deno.test("REPL colors return as it colors import, load and use", () => {
 });
 
 Deno.test("the web editor's HTML escapes tokens after coloring them", () => {
-    const html = highlightHtml('f x = x ~ [\n    1 -> "<b>"\n]', new Set());
+    const html = highlightHtml('f x = x ~ [\n    1 -> "<b>"\n]');
     if (!html.includes('<span class="t-operator">-&gt;</span>') || !html.includes('<span class="t-string">"&lt;b&gt;"</span>')) throw new Error(html);
     if (!html.includes('<span class="t-operator">~</span>') || html.split("\n").length !== 3) throw new Error(html);
 });

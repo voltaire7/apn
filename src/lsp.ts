@@ -3,7 +3,7 @@
 import { lint, position, type Range } from "./lint.ts";
 import { parseDocument, setLooseSpacing } from "./parser.ts";
 import { lex, KEYWORDS } from "./lexer.ts";
-import { NATIVE_NAMES, NATIVES } from "./interp.ts";
+import { NATIVES } from "./interp.ts";
 import { semanticTokens, TOKEN_TYPES } from "./highlight.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { RETIRED_NATIVES, nativeModule } from "./native-exports.ts";
@@ -160,7 +160,7 @@ export class LanguageServer {
             }
             case "textDocument/didClose": this.documents.delete(p.textDocument.uri); publish(p.textDocument.uri); break;
             case "textDocument/semanticTokens/full":
-                reply({ data: semanticTokens(this.documents.get(p.textDocument.uri)?.text ?? "", NATIVE_NAMES) }); break;
+                reply({ data: semanticTokens(this.documents.get(p.textDocument.uri)?.text ?? "") }); break;
             case "textDocument/documentSymbol": reply(symbols(this.documents.get(p.textDocument.uri)?.text ?? "")); break;
             case "textDocument/completion": {
                 const text = this.documents.get(p.textDocument.uri)?.text ?? "";

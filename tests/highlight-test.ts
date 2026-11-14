@@ -5,7 +5,7 @@ function equal(a: unknown, b: unknown) {
 }
 function colors(source: string) {
     const lines = source.split("\n");
-    return highlightTokens(source, new Set(["print"])).map((t) => [lines[t.line].slice(t.start, t.start + t.length), t.type]);
+    return highlightTokens(source).map((t) => [lines[t.line].slice(t.start, t.start + t.length), t.type]);
 }
 Deno.test("editor numbers distinguish prefixes, exponents, complex and polar markers", () => {
     equal(colors("0xFF 0b10 0o77 2i 1e-3 -1 1/3 2@0"), [
@@ -22,23 +22,28 @@ Deno.test("editor ternary colons differ from record colons; cons is an operator"
         [["=", "punctuation"], [":", "punctuation"], [":", "operator"], ["::", "operator"]]);
     equal(colors('True ? False ? 1 : 2 : 3').filter(([text]) => text === ":"), [[":", "operator"], [":", "operator"]]);
 });
-Deno.test("editor colors keywords, builtins, constructors, strings and comments", () => {
+Deno.test("editor colors keywords, applied names, constructors, strings and comments", () => {
     equal(colors('import print Some True "hello" # comment'), [
-        ["import", "keyword"], ["print", "function"], ["Some", "type"], ["True", "keyword"],
+        ["import", "keyword"], ["Some", "type"], ["True", "keyword"],
         ['"hello"', "string"], ["# comment", "comment"],
     ]);
-    equal(colors("double' x = 'a'"), [["=", "punctuation"], ["'a'", "string"]]);
+    // A name is a function where it is applied, a value where it is passed.
+    equal(colors("double' x = 'a'"), [["double'", "function"], ["=", "punctuation"], ["'a'", "string"]]);
+    const applied = (source: string) => colors(source).filter(([, type]) => type === "function").map(([name]) => name);
+    equal(applied("map add1 [1,2]"), ["map"]);
+    equal(applied("map (add 1) [1,2]"), ["map", "add"]);
+    equal(applied("x = 5\nprint (sqrt x)\nfoldr map z xs"), ["print", "sqrt", "foldr"]);
     // return colors as import, load and use do.
     equal(colors("load use do return else loop for while"), [["load", "keyword"], ["use", "keyword"], ["do", "keyword"], ["return", "keyword"], ["else", "keyword"], ["loop", "keyword"], ["for", "keyword"], ["while", "keyword"]]);
 });
 Deno.test("highlighting tolerates incomplete strings and brackets with UTF-16 positions", () => {
     const source = '["😀\nhello';
-    equal(highlightTokens(source, new Set()), [
+    equal(highlightTokens(source), [
         { line: 0, start: 0, length: 1, type: "punctuation" },
         { line: 0, start: 1, length: 3, type: "string" },
         { line: 1, start: 0, length: 5, type: "string" },
     ]);
-    equal(semanticTokens(source, new Set()), [0, 0, 1, TOKEN_TYPES.indexOf("punctuation"), 0,
+    equal(semanticTokens(source), [0, 0, 1, TOKEN_TYPES.indexOf("punctuation"), 0,
         0, 1, 3, TOKEN_TYPES.indexOf("string"), 0, 1, 0, 5, TOKEN_TYPES.indexOf("string"), 0]);
 });
 Deno.test("range separators stay gray and decimal dots stay yellow", () => {

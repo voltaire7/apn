@@ -118,7 +118,7 @@ completion offers only the standard natives. Standard output is reserved for LSP
   and imported definitions are not resolved.
 - Syntax colors match the terminal and the web editor (one tokenizer and
   palette, `src/highlight.ts`): yellow numbers, green strings/chars, blue
-  built-ins, cyan constructors, mauve booleans/import, peach operators and
+  names where they are applied, cyan constructors, mauve booleans/import, peach operators and
   numeric markers, gray punctuation/assignment, and muted comments. Ternary
   colons are peach; record/cons colons are gray. Colors remain available on
   incomplete source, and are scoped to APN so your LazyVim theme is unchanged.

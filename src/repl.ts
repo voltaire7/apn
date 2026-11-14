@@ -220,7 +220,7 @@ export function renderColored(interp: Interpreter, value: Value, emit: (s: strin
 // carries open ?: from line to line.
 export function highlightLine(s: string, ternaries: number[] = [0]): string {
     let out = "", at = 0;
-    for (const token of highlightTokens(s, NATIVE_NAMES, ternaries)) {
+    for (const token of highlightTokens(s, ternaries)) {
         out += s.slice(at, token.start) + paint(T[token.type], s.slice(token.start, token.start + token.length));
         at = token.start + token.length;
     }

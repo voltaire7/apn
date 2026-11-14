@@ -5,10 +5,9 @@ import { highlightHtml, PALETTES, TOKEN_TYPES } from "./highlight.ts";
 import { BUNDLE_APP } from "./modules.ts";
 
 // data: the examples' data files, by the path a program names them with.
-type Site = { examples: Record<string, string>; modules: Record<string, string>; data: Record<string, string>; natives: string[]; style: string };
+type Site = { examples: Record<string, string>; modules: Record<string, string>; data: Record<string, string>; style: string };
 const site: Site = JSON.parse(document.getElementById("apn-site")!.textContent!);
 const runtime = document.getElementById("apn-runtime")!.textContent!;
-const natives = new Set(site.natives);
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const source = element<HTMLTextAreaElement>("source"), highlight = element("highlight"), gutter = element("gutter");
 const picker = element<HTMLSelectElement>("examples"), preview = element<HTMLIFrameElement>("preview");
@@ -51,7 +50,7 @@ for (const name of names) picker.add(new Option(titleOf(name), name));
 let current = names[0];
 
 function render(): void {
-    highlight.innerHTML = highlightHtml(source.value, natives) + "\n";
+    highlight.innerHTML = highlightHtml(source.value) + "\n";
     gutter.textContent = source.value.split("\n").map((_, n) => n + 1).join("\n");
     // The textarea grows with its text, so the panel scrolls both layers together.
     source.style.height = "0";

@@ -61,7 +61,7 @@ for (const source of ["print \\", "\\ 1"]) {
     });
 }
 Deno.test("composition gets operator highlighting", () => {
-    const token = highlightTokens(String.raw`print \ 1`, new Set()).find(t => t.start === 6);
+    const token = highlightTokens(String.raw`print \ 1`).find(t => t.start === 6);
     if (token?.type !== "operator") throw new Error(JSON.stringify(token));
 });
 
