@@ -18,7 +18,8 @@ functions APN cannot define) and its fixity, `negate` and `not` (the functions
 and `load` (see [module imports](semantics.md#module-imports)),
 and the Functor, Applicative
 and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
-`sequence`, `mapM`, `map2`–`map4`, `when`, `unless`, `loop`, `while`, `for`, `return`, `throw`, `empty`, `guard`), and is in scope in every file and module. See [operators](semantics.md#defining-and-overloading-operators).
+`sequence`, `mapM`, `map2`–`map4`, `when`, `unless`, `loop`, `while`, `for`, `return`, `throw`, `empty`, `guard`), and is in scope in every file and module
+(`apn --no-prelude` runs a file without it, from the intrinsics up). See [operators](semantics.md#defining-and-overloading-operators).
 
 The standard library is the folder `lib/std/`, imported as `std`: a record of
 its modules, each checked and run the first time it is used. `use std.[a,b]`

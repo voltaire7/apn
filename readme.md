@@ -99,7 +99,9 @@ open site/index.html
 Run `apn --lint file.apn` to check syntax and layout without executing the file.
 Spacing is strict (`x = 1`, `[1,2,3]`, `[x = 1, y = 2]`, `{ x }`) and lines hold at most 99
 characters; put `--loose`
-first (`apn --loose file.apn`) to relax it. `apn --version` prints the version.
+first (`apn --loose file.apn`) to relax it. `apn --no-prelude file.apn` runs (and
+checks) a file without the prelude: only `intrinsics.*` and what it defines, so even `+`
+is the program's to bind. `apn --version` prints the version.
 Try live diagnostics, completion, hover, and an outline in a temporary Neovim
 session with `./editors/neovim/try-apn examples/editor-playground.apn`.
 The launcher loads your usual Neovim/LazyVim setup; its configuration files stay untouched.

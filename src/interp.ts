@@ -24,7 +24,7 @@ import { enumerationPositions, isUse } from "./ast.ts";
 import { canonicalTypeText, compoundArgument, slotField, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
-import { bindingItem, parse, parseDocument, exprToSource, patternSource, patternVariables, isOperatorName, PRIMITIVE_OPERATORS, DEFAULT_FIXITY, type Fixity, fixitiesOf, getLooseSpacing, preludeFixity, regroup, setLooseSpacing } from "./parser.ts";
+import { bindingItem, getPreludeUsed, parse, parseDocument, exprToSource, patternSource, patternVariables, isOperatorName, PRIMITIVE_OPERATORS, DEFAULT_FIXITY, type Fixity, fixitiesOf, getLooseSpacing, preludeFixity, regroup, setLooseSpacing } from "./parser.ts";
 import { charLiteral, itemsText, spacedItem, stringLiteral } from "./separators.ts";
 
 // ---------------- Evaluator ----------------
@@ -442,13 +442,16 @@ export class Interpreter {
         const outer = this.env;
         this.env = new Env(outer);
         this.env.setLocal("fail", { kind: "native", name: "fail", arity: 1, applied: [] });
-        this.run(parseDocument(preludeSource));
-        // Bind each operator to its value itself, so evaluation finds the intrinsic.
-        // (fail, which marks code still to write, is the prelude's too.)
-        for (const [name, value] of this.env.bindings()) this.preludeBindings.set(name, this.reference(value));
-        this.run(parse(typeSource));
-        this.run(parse(doSource));
-        for (const name of ["cast", "do"]) this.preludeBindings.set(name, this.env.get(name)!);
+        // Without the prelude (apn --no-prelude) a program has only the intrinsics.
+        if (getPreludeUsed()) {
+            this.run(parseDocument(preludeSource));
+            // Bind each operator to its value itself, so evaluation finds the intrinsic.
+            // (fail, which marks code still to write, is the prelude's too.)
+            for (const [name, value] of this.env.bindings()) this.preludeBindings.set(name, this.reference(value));
+            this.run(parse(typeSource));
+            this.run(parse(doSource));
+            for (const name of ["cast", "do"]) this.preludeBindings.set(name, this.env.get(name)!);
+        }
         this.loadingPrelude = false;
         this.env = this.programEnv = outer;
         for (const [name, value] of this.preludeBindings) outer.setLocal(name, value);

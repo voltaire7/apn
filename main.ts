@@ -9,7 +9,7 @@
 // =====================================================================
 
 import { CLI_HELP, readCliOptions, VERSION } from "./src/cli-options.ts";
-import { setLooseSpacing } from "./src/parser.ts";
+import { setLooseSpacing, setPreludeUsed } from "./src/parser.ts";
 import { formatFileReadError } from "./src/errors.ts";
 import { dirname } from "./src/interp.ts";
 import { runSource, repl, formatError, commandLineInterpreter } from "./src/repl.ts";
@@ -19,7 +19,7 @@ export { lex } from "./src/lexer.ts";
 // ---------------- main ----------------
 
 if (import.meta.main) {
-    const { args: _args, literalFile, loose, error } = readCliOptions(Deno.args);
+    const { args: _args, literalFile, loose, noPrelude, error } = readCliOptions(Deno.args);
     if (error) {
         const label = Deno.stderr.isTerminal() ? "\x1b[1;31merror:\x1b[0m" : "error:";
         console.error(`${label} ${error}`);
@@ -27,6 +27,7 @@ if (import.meta.main) {
     }
 
     setLooseSpacing(loose);
+    setPreludeUsed(!noPrelude);
 
     if (!literalFile && (_args[0] === "--help" || _args[0] === "-h")) {
         console.log(CLI_HELP);

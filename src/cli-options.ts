@@ -15,6 +15,8 @@ export const CLI_HELP = `Usage:
   apn --help, -h                   Show this help
   apn --loose ...                 Any of the above without the spacing rules
                                   ([1, 2], [x = 1, y = 2], x = 1, { x }, (x))
+  apn --no-prelude ...            Any of the above without the prelude: only
+                                  intrinsics.* and what the program defines
 
 Files and REPL submissions are statically checked by default.
 Use -- before a filename beginning with '-'. Options after FILE.apn are
@@ -22,10 +24,13 @@ script arguments, not APN options. Type :help inside the REPL for language help.
 The apn launcher also accepts --allow-ffi[=PATH,...] as its first argument.`;
 
 /** Validate APN options without interpreting arguments belonging to a script. */
-export function readCliOptions(input: string[]): { args: string[]; literalFile: boolean; loose: boolean; error?: string } {
-    const loose = input[0] === "--loose";
-    const { args, literalFile, error } = readMode(loose ? input.slice(1) : input);
-    return { args, literalFile, loose, ...error ? { error } : {} };
+export function readCliOptions(input: string[]): { args: string[]; literalFile: boolean; loose: boolean; noPrelude: boolean; error?: string } {
+    // --loose and --no-prelude come first, each once, in either order.
+    const leading = new Set<string>();
+    let rest = input;
+    while (["--loose", "--no-prelude"].includes(rest[0]) && !leading.has(rest[0])) { leading.add(rest[0]); rest = rest.slice(1); }
+    const { args, literalFile, error } = readMode(rest);
+    return { args, literalFile, loose: leading.has("--loose"), noPrelude: leading.has("--no-prelude"), ...error ? { error } : {} };
 }
 function readMode(input: string[]): { args: string[]; literalFile: boolean; error?: string } {
     const args = [...input];
@@ -35,7 +40,7 @@ function readMode(input: string[]): { args: string[]; literalFile: boolean; erro
     const first = args[0];
     const result = { args, literalFile: false };
     if (!first || !first.startsWith("-")) return result;
-    if (first === "--loose") return { ...result, error: "--loose is given once, first" };
+    if (first === "--loose" || first === "--no-prelude") return { ...result, error: `${first} is given once, before the rest` };
     if (["--help", "-h", "--lsp", "--version"].includes(first)) {
         return args.length === 1 ? result : { ...result, error: `${first} does not accept arguments` };
     }

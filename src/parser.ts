@@ -2655,6 +2655,11 @@ function literalEnd(source: string, pos: number): number {
 let looseSpacing = false;
 export function setLooseSpacing(loose: boolean): void { looseSpacing = loose; }
 export function getLooseSpacing(): boolean { return looseSpacing; }
+// Whether programs run and are checked with the prelude (apn --no-prelude:
+// without it, only the intrinsics and what a program defines).
+let preludeUsed = true;
+export function setPreludeUsed(used: boolean): void { preludeUsed = used; }
+export function getPreludeUsed(): boolean { return preludeUsed; }
 
 // A line has at most this many characters (code points), each string,
 // character or number literal on it, and its comment, counting as one: a line

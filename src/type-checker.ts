@@ -8,7 +8,7 @@ import { parseLiteral, textNatives } from "./text-natives.ts";
 import { builtinContains, castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, numericWithin, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
 import { APNError, didYouMean, formatFileReadError, placeholderError, typeApplied, withArticle } from "./errors.ts";
-import { bindingItem, DEFAULT_FIXITY, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
+import { bindingItem, DEFAULT_FIXITY, getPreludeUsed, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
 import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
@@ -7611,7 +7611,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The prelude's names, as the checker reads lib/prelude.apn itself. A
     // definition whose type inference cannot derive (sequence's recursion
     // over any monad) is typed by its rule instead (see PRELUDE_TYPINGS).
-    if (!options.prelude) for (const [name, entry] of copyTypeScope(preludeScope())) {
+    if (!options.prelude && getPreludeUsed()) for (const [name, entry] of copyTypeScope(preludeScope())) {
         const rule = PRELUDE_TYPINGS.get(name);
         scope.set(name, rule ? { ...entry, type: { k: "intrinsic", name: rule[0], arity: rule[1] } } : entry);
     }
