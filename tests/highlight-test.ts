@@ -29,7 +29,7 @@ Deno.test("editor colors keywords, builtins, constructors, strings and comments"
     ]);
     equal(colors("double' x = 'a'"), [["=", "punctuation"], ["'a'", "string"]]);
     // return colors as import, load and use do.
-    equal(colors("load use do return else"), [["load", "keyword"], ["use", "keyword"], ["do", "keyword"], ["return", "keyword"], ["else", "keyword"]]);
+    equal(colors("load use do return else loop for while"), [["load", "keyword"], ["use", "keyword"], ["do", "keyword"], ["return", "keyword"], ["else", "keyword"], ["loop", "keyword"], ["for", "keyword"], ["while", "keyword"]]);
 });
 Deno.test("highlighting tolerates incomplete strings and brackets with UTF-16 positions", () => {
     const source = '["😀\nhello';
