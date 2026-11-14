@@ -7245,27 +7245,26 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try { defineGroups(); } finally { definingSelf.splice(definingSelf.indexOf(self), 1); }
         function defineGroups(): void {
         const groups = new Map<string, Ty>();
-        // Inputs a clause ties together (f x x, (x : t) (y : t)) key apart from
-        // free ones: an a -> a clause is its own choice beside an a -> b one.
-        const domain = (t: Ty, seen = new Set<Ty>(), named = new Map<Ty, number>()): string => {
+        // Clauses of the same inputs share one type; any others are choices
+        // of an overload, which each call decides between. Its inputs are
+        // written with one naming of their variables, so a clause tying two
+        // together (f x x, (x : t) (y : t)) is not one that leaves them free.
+        // A variant's clauses (f None, f (Some x)) share its type.
+        const domain = (t: Ty, seen = new Set<Ty>(), names = new Map<Ty, string>()): string => {
             t = resolve(t);
             if (seen.has(t)) return "recursive";
             seen.add(t);
             if (t.k !== "fn") return "";
-            const input = resolve(t.input);
+            const input = resolve(t.input), shown = (x: Ty) => text(x, new Map(), new Set(), names);
             const patterns = (t.checks ?? []).flatMap(check => {
-                if (check.k === "operation" && check.op === "remainder") return [text(check.args[1])];
+                if (check.k === "operation" && check.op === "remainder") return [shown(check.args[1])];
                 if (check.k !== "operation" || check.op !== "pattern") return [];
                 const matcher = resolve(check.args[0]);
                 if (matcher.k !== "fn" || matcher.pattern?.p === "var" || matcher.pattern?.p === "wildcard") return [];
-                return [text(matcher.input)];
+                return [shown(matcher.input)];
             }).join("&");
-            // An empty-list clause is its own choice: merged with a cons clause, its
-            // input type would reject every non-empty argument.
-            const empty = input.k === "list" && input.items?.length === 0 ? "empty:" : "";
-            const variable = input.k === "var" ? `*${named.get(input) ?? named.set(input, named.size).get(input)}` : "";
-            return empty + (input.k === "variant" ? input.name : input.k === "var" ? variable : text(input)) + patterns + ";" +
-                domain(t.output, seen, named);
+            // (A variable is marked: a type may print as one does, a = Int.)
+            return (input.k === "variant" ? input.name : input.k === "var" ? `*${shown(input)}` : shown(input)) + patterns + ";" + domain(t.output, seen, names);
         };
         const bindsSelf = (p: Pattern): boolean => {
             switch (p.p) {
@@ -7287,6 +7286,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const t = inferDefinition(definition, false, () => functionType(c.params, c.body, scope, name));
             const head = resultHead(t, c.params.length);
             if (head) recordHead(c.body, head);
+            // A clause naming the function as a parameter (x x = x) takes only
+            // the function itself, which its input type cannot say.
             let key = `${c.params.some(bindsSelf) ? "self:" : ""}${domain(t)}`, existing = groups.get(key);
             // A clause with an earlier one's patterns but another result type
             // overloads it: the context of each call chooses between them.
