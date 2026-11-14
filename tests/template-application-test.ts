@@ -200,6 +200,8 @@ for (const checked of [true, false]) for (const [source, expected] of [
     ['Money = Float\nf (x : Float) = 1\nf (x : Money) = "m"\ng (s : String) = s\nh (n : Int) = n\n[g (f (1.5 : Money)), h (f 1.5)]', '["m",1]'],
     ['Shape = Circle Float | Square Float\nf (s : Shape) = 1\nf (Circle r) = "c"\ng (s : String) = s\nh (n : Int) = n\n[g (f (Circle 1.0)), h (f (Square 1.0))]', '["c",1]'],
     ['Pos = (n : Int) | n > 0\nf (x : Int) = 1\nf (x : Pos) = "p"\ng (s : String) = s\nh (n : Int) = n\n[g (f (3 : Pos)), h (f 3)]', '["p",1]'],
+    // A type a block declares, read where the clauses are written.
+    ['b = {\n    Money = Float\n    f (x : Float) = 1\n    f (x : Money) = "m"\n    g (s : String) = s\n    g (f (1.5 : Money))\n}\nb', '"m"'],
     ['Pos = (n : Int) | n > 0\nSmall = (n : Pos) | n < 10\nf (x : Int) = "i"\nf (x : Pos) = "p"\nf (x : Small) = "s"\n[f 3, f (3 : Pos), f (3 : Small)]', '["i","p","s"]'],
     // A clause takes a guard, as an alternative does; else always holds.
     ['f x | x >= 0 = "pos"\nf x = "neg"\n[f 1, f -1]', '["pos","neg"]'],
