@@ -27,7 +27,6 @@ for (const [name, source, expected] of [
     ["unused values stay deferred", 'unused = missing + 1\nobj = [x = 1, y = unused]\nobj "x"', '1'],
     ["fields are computed when used", 'obj = [x = head [], y = 2]\nobj.y', '2'],
     ["pairs give the key's text", 'pairs [x = 1, `a b` = 2]', '[["x",1],["a b",2]]'],
-    ["a record to HashMap", 'm = HashMap [x = 1]\nm "x"', '1'],
     ["function source keys", 'f obj = obj.`a b`\nf', 'obj -> obj.`a b`'],
     ["function source patterns", 'f [x = value] = value\nf', '[x = value] -> value'],
     ["function source records", 'f x = [x = x, y = x]\nf', 'x -> [x = x, y = x]'],

@@ -8,7 +8,7 @@ for (const [source, expected] of [
     ['typeOf ()', '[]'],
     ['[truthy 0, truthy 1, truthy -1, truthy 0.0, truthy 0i, truthy 1i]', '[False,True,True,False,False,True]'],
     ['[truthy "", truthy "0", truthy [], truthy [missing], truthy [1..]]', '[False,True,False,True,True]'],
-    ['r = [] : [x : Record]; [truthy r.x, truthy [x = 1], truthy (HashMap [])]', '[False,True,False]'],
+    ['r = [] : [x : Record]; [truthy r.x, truthy [x = 1], truthy ([] : HashMap _ _)]', '[False,True,False]'],
     ['[truthy Int, truthy (x -> x), truthy (Mutable 0), truthy (Mutable 1)]', '[True,True,False,True]'],
     ['Option a = Some a | None; truthy None', 'True'],
     ['Flag = Bool; f = False : Flag; [truthy f, !f, f ? 1 : 0, f && 1]', '[False,True,0,False]'],

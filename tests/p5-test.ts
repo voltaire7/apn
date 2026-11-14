@@ -65,9 +65,9 @@ Deno.test("p5 call yields p5's result; a callback without arguments gets the ske
     sketch.dispatch("setup");
     if (JSON.stringify(calls) !== '[["sphere",3],["model","geometry"],["text","60"]]') throw new Error(JSON.stringify(calls));
 });
-Deno.test("p5 takes a HashMap (keys a program computes) as an object", () => {
+Deno.test("p5 takes a (keys a program computes : HashMap _ _) as an object", () => {
     const i = new Interpreter();
-    i.run(parse('std <- import "std"; use std.p5\nmain = sketch [setup = (p : Sketch) -> p.call "fill" [HashMap [["a b",1]]]]'));
+    i.run(parse('std <- import "std"; use std.p5\nmain = sketch [setup = (p : Sketch) -> p.call "fill" [([["a b",1]] : HashMap _ _)]]'));
     let given: unknown;
     new P5Sketch(i, i.env.get("main")!, { fill: (x: unknown) => { given = x; } }).dispatch("setup");
     if (JSON.stringify(given) !== '{"a b":1}') throw new Error(JSON.stringify(given));

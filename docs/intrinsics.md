@@ -144,7 +144,7 @@ String = | String (List Char)  # text: to (List Char) and from (List Char) conve
 IO a = | IO (World -> [a,World])
 Mutable a = | Mutable Ref
 Pointer = | Pointer UInt
-HashMap k v = | HashMap (List [k,v])
+HashMap k v = | Entries (List [k,v])
 ```
 
 An action is a function from the state of the world to a result and the next
@@ -152,7 +152,9 @@ state, and `>>=` threads that state through, which is why no action runs when
 it is applied, only when something runs it. `World` (the state
 of everything outside the program) and `Ref` (a place in the store) are the
 interpreter's: no program has a constructor for them, since their values exist
-only while a program runs. A program's own types have no such thing: APN has
+only while a program runs. So is `Entries`: a map is made by converting an
+association list to its type, `([["a",1]] : HashMap String Int)`, which keeps each
+key once. A program's own types have no such thing: APN has
 no abstract types, every constructor is public. A `Mutable` cell is a reference into the world's store, and `set` an
 action that changes the store; a `HashMap` is an association list whose keys
 appear once.
@@ -186,12 +188,12 @@ tail (_ :: xs) = xs
 tail [] = fail "tail of empty list"
 null [] = True
 null (text : String) = text == ""
-null (m : HashMap) = null (pairs m)
+null (m : HashMap _ _) = null (pairs m)
 null _ = False
 length [] = 0
 length (_ :: xs) = 1 + length xs
 length (text : String) = length (to (List Char) text)
-length (m : HashMap) = length (pairs m)
+length (m : HashMap _ _) = length (pairs m)
 take 0 _ = []
 take (n : UInt) [] = []
 take (n : UInt) (x :: xs) = x :: take (n - 1) xs
@@ -233,20 +235,13 @@ lookup key m = filter (entry -> head entry == key) (pairs m) ~ [
     [] -> fail "HashMap key not found"
     entry :: _ -> entry 1
 ]
-remove key m = HashMap (filter (entry -> head entry != key) (pairs m))
-insert entries m = foldl (map, entry -> put entry map) m (pairs (HashMap entries))
+remove key m = (filter (entry -> head entry != key) (pairs m) : HashMap _ _)
+insert entries m = foldl (map, entry -> put entry map) m entries
 # A key already there keeps its place.
 put [key,value] m = has key m
-    ? HashMap (map (entry -> head entry == key ? [key,value] : entry) (pairs m))
-    : HashMap (pairs m ++ [[key,value]])
+    ? (map (entry -> head entry == key ? [key,value] : entry) (pairs m) : HashMap _ _)
+    : (pairs m ++ [[key,value]] : HashMap _ _)
 ```
-
-`HashMap entries` makes a map from a record or an association list. Here the
-language cannot yet say what it should: the model above, `HashMap k v`, gives
-the type two parameters, but the type is written `HashMap` without them (`(m :
-HashMap)`, `x : HashMap`), its values' `typeOf` is `HashMap`, and there is no
-pattern taking a map apart (`pairs` does). One name with one arity everywhere
-would make `HashMap k v` the type and its constructor take one list.
 
 ## Truth, operators and indexing
 
@@ -259,7 +254,7 @@ truthy (text : String) = text != ""
 truthy [] = False
 truthy (_ :: _) = True
 truthy (r : Record) = not (null (pairs r))
-truthy (m : HashMap) = not (null (pairs m))
+truthy (m : HashMap _ _) = not (null (pairs m))
 truthy _ = True
 a && b = truthy a ? truthy b : False
 a || b = truthy a ? True : truthy b

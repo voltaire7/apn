@@ -5,10 +5,10 @@ getOption key m = has key m ? Some (lookup key m) : None
 getOr fallback key m = has key m ? lookup key m : fallback
 _insertCombined combine acc [key,value] =
     insert [[key, has key acc ? combine (lookup key acc) value : value]] acc
-insertWith combine entry m = foldl (_insertCombined combine) m (pairs (HashMap entry))
+insertWith combine entries m = foldl (_insertCombined combine) m entries
 update key f m = has key m ? insert [[key, f (lookup key m)]] m : m
-mapValues f m = HashMap (map ([key,value] -> [key, f value]) (pairs m))
-filterMap predicate m = HashMap (filter ([key,value] -> predicate key value) (pairs m))
+mapValues f m = (map ([key,value] -> [key, f value]) (pairs m) : HashMap _ _)
+filterMap predicate m = (filter ([key,value] -> predicate key value) (pairs m) : HashMap _ _)
 merge left right = insert (pairs right) left
 mergeWith combine left right = insertWith combine (pairs right) left
 frequencies xs = {
@@ -16,7 +16,8 @@ frequencies xs = {
         count = getOr 0 x m + 1
         seq count (insert [[x,count]] m)
     }
-    foldl increment (HashMap []) xs
+    foldl increment ([] : HashMap _ _) xs
 }
 groupBy project xs = mapValues reverse
-    (foldl (m, x -> insertWith (old, new -> new ++ old) [[project x, [x]]] m) (HashMap []) xs)
+    (foldl (m, x -> insertWith (old, new -> new ++ old) [[project x, [x]]] m)
+        ([] : HashMap _ _) xs)

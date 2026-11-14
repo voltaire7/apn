@@ -99,8 +99,9 @@ standalone executable without the existing runtime.
 ## Primitive boundary and limits
 
 The object environment exposes arithmetic/comparisons, scalar types, list
-operations, HashMap construction/access, character conversion, `seq`, and
-`fail`. Those are explicit value-level operations, not evaluation shortcuts.
+operations, maps (`metaMap entries` makes one, `isMetaMap x` tells one, as the
+language has no ascription; `lookup`, `insert`, ...), character conversion,
+`seq`, and `fail`. Those are explicit value-level operations, not evaluation shortcuts.
 `lib/std/meta/primitives.apn` is the complete list.
 
 The non-I/O standard-library native layer contains six functions: `seq`,

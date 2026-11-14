@@ -396,7 +396,7 @@ passed where a function goes (`f t = t 1`) are errors, `5 : Int` ascribes and
 as any function is (`Option : Type -> Type`, `map Option [Int,String]` is
 `[Option Int, Option String]`), and a constructor is a function that does not
 evaluate (`map Box [1,2]`). And `HashMap`, `Mutable` and `Pointer`,
-types that are their own constructors, build their values (`HashMap [...]`,
+types that are their own constructors, build their values (`([...] : HashMap _ _)`,
 `Mutable 0`). A typed pattern writes its type after the value: `(Int x)`,
 `((T) p)` and `(t x)` are errors whose hint is `(x : Int)`. A type is given
 every parameter it takes, `_` for any (`(xs : List _)`): unapplied it is a
@@ -715,7 +715,7 @@ After `.`, a string is applied (`obj."my value"` is `obj "my value"`), and a
 number is no field: `obj.1` is an error (write ``obj.`1` `` or `obj 1`).
 
 Application evaluates its argument: `key = "field"; obj key` selects a named
-field. `pairs`, iteration, and conversion to HashMap give each key's text;
+field. `pairs` and iteration give each key's text;
 `pairs []` is `[]`, as `[]` is the empty record too.
 `obj.(expression)` evaluates with the record fields in scope; use `obj key` for computed lookup. Missing keys
 raise an error.
@@ -745,7 +745,7 @@ enumeration's values do (their positions). A string argument performs
 [association-list lookup](templates-and-types.md#association-list-lookup):
 `[["0",42]] "0"` returns `42`; it never coerces `"0"` to positional index zero.
 Ordinary scalar lists such as `[10,20]` are not association lists and reject string lookup.
-HashMap application likewise keeps numeric `0` and string `"0"` distinct keys.
+A HashMap likewise keeps numeric `0` and string `"0"` distinct keys.
 
 On an existing record, `obj "field" = value` updates or adds the field `field`,
 just like `obj.field = value`. The key may be a string literal, variable, or
@@ -1561,20 +1561,23 @@ and `(3 : Int) * (2 : Int)` returns `6`, both still typed Int.
 
 ## HashMap
 
-`HashMap [["x",123]]` constructs from an association list; `HashMap [x = 123]`
-constructs from a record. Empty construction is `HashMap []`. Keys may be finite
-numbers, strings, chars, or booleans. Numerically equal keys share an entry
-regardless of exactness or numeric type; distinct strings/chars stay distinct.
-Duplicate keys keep the last value. Insertion order is preserved for traversal,
-and replacing an existing key keeps its position.
+`HashMap k v` is the type of maps from keys of `k` to values of `v` (`HashMap
+String Int`; `_` for one to infer). A map is an association list converted to
+it, as any value of a type is made: `([["x",123]] : HashMap String Int)`, or
+`([] : HashMap _ _)` for none; a record is not one (its pairs are, `pairs r`).
+Keys may be finite numbers, strings, chars, or booleans. Numerically equal keys
+share an entry regardless of exactness or numeric type; distinct strings/chars
+stay distinct. Duplicate keys keep the last value. Insertion order is preserved
+for traversal, and replacing an existing key keeps its position. A map prints
+as the conversion that makes it.
 
-`insert [x = 123] $ HashMap []` returns a map containing x. `insert` accepts a
-record or association list; `remove key map` returns a map without the key.
-Updates preserve the old map. `lookup key map` or `map key` retrieves a value,
-raising an error when absent; use `has key map` when absence is expected.
-`keys`, `values`, `pairs`, `length`, and `null` operate on maps. Association-list
-values stay lazy; keys are evaluated at construction. Record inputs follow the
-existing record evaluation rules. `(HashMap m)` is a type pattern.
+`insert [["x",123]] m` returns `m` with those entries, and `remove key m` one
+without the key; the old map stays as it was. `lookup key m` or `m key`
+retrieves a value, raising an error when absent; use `has key m` when absence
+is expected. `keys`, `values`, `pairs`, `length`, and `null` operate on maps.
+Values stay lazy; keys are evaluated at construction. `(m : HashMap k v)` is a
+map's pattern, `k` and `v` its keys' and values' types (see
+[intrinsics](intrinsics.md#maps)).
 
 Type constructors also work directly with function iteration: `100 * Int`
 returns typed integers `0` through `99`; `[1..100] * Int` returns `1` through

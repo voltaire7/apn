@@ -96,13 +96,13 @@ const cases: [string, string][] = [
     ['joinWith "/" ["a","b"]', '"a/b"'],
     ['startsWith "ab" "abc"', 'True'],
     ['endsWith "😀" "a😀"', 'True'],
-    ['getOr 9 "x" (HashMap [])', '9'],
-    ['getOption "x" (HashMap [])', 'None'],
-    ['getOr missing "x" (HashMap [x = 2])', '2'],
+    ['getOr 9 "x" ([] : HashMap _ _)', '9'],
+    ['getOption "x" ([] : HashMap _ _)', 'None'],
+    ['getOr missing "x" ([["x",2]] : HashMap _ _)', '2'],
     ['lookup "a" (frequencies ["a","b","a"])', '2'],
-    ['lookup "a" (mergeWith (+) (HashMap [a = 2]) (HashMap [a = 3]))', '5'],
+    ['lookup "a" (mergeWith (+) ([["a",2]] : HashMap _ _) ([["a",3]] : HashMap _ _))', '5'],
     ['lookup 1 (groupBy (x -> x % 2) [1..5])', '[1,3,5]'],
-    ['pairs (filterMap (key, value -> value > 2) (HashMap [a = 1, b = 3]))', '[["b",3]]'],
+    ['pairs (filterMap (key, value -> value > 2) ([["a",1],["b",3]] : HashMap _ _))', '[["b",3]]'],
 ];
 for (const [source, expected] of cases) Deno.test(`std: ${source}`, () => {
     const i = new Interpreter();

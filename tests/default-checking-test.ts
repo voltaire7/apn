@@ -54,12 +54,12 @@ for (const [source, expected] of [
     [`${FL}rv (xs : List _) = fl (acc, x -> x :: acc) [] xs\nf xs = map (x -> x) (rv xs)\nf [1,2]`, '[2,1]'],
     // Its lengths are the run's: a fold that keeps its accumulator keeps [1,2].
     [`${FL}g (fl (acc, x -> acc) [1,2] [3])`, '3'],
-    // (m : HashMap) binds a map, of any keys and values.
-    ['ks (m : HashMap) = keys m; ks (HashMap [["a",1]])', '["a"]'],
+    // (m : HashMap _ _) binds a map, of any keys and values.
+    ['ks (m : HashMap _ _) = keys m; ks ([["a",1]] : HashMap _ _)', '["a"]'],
     // Clauses typed by different types recurse through the finished function:
     // ln (keys m) is a List String, ln (to (List Char) s) a List Char.
-    ['ln (s : String) = ln (to (List Char) s); ln (m : HashMap) = ln (keys m); ln (xs : List _) = 7\n' +
-        '[ln (HashMap [["a",1]]), ln "ab", ln [1]]', '[7,7,7]'],
+    ['ln (s : String) = ln (to (List Char) s); ln (m : HashMap _ _) = ln (keys m); ln (xs : List _) = 7\n' +
+        '[ln ([["a",1]] : HashMap _ _), ln "ab", ln [1]]', '[7,7,7]'],
     // Typed clauses recursing at different types (ln [1] beside ln ["a"]):
     // each call takes the clause the run takes, not the first call's type.
     ['ln (n : Int) = ln [1]; ln (s : String) = ln ["a"]; ln (xs : List _) = 7; [ln 5, ln "ab", ln [2]]', '[7,7,7]'],
@@ -1048,7 +1048,7 @@ for (const [source, expected] of [
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nprint (length box)\ng (f (r (counter + 0 == 0)))', '0'],
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nhead box\ng (f (r (counter + 0 == 3)))', '0'],
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nhead box\nset counter 8\nhead box\ng (f (r (counter + 0 == 3)))', '0'],
-    ['counter = Mutable 0\nother = Mutable 7\nm = HashMap [["a",1]]\nhas "a" m ? set counter 5 : return []\ng (f (r (other + 0 == 7)))', '0'],
+    ['counter = Mutable 0\nother = Mutable 7\nm = ([["a",1]] : HashMap _ _)\nhas "a" m ? set counter 5 : return []\ng (f (r (other + 0 == 7)))', '0'],
     // Lazily computed elements run where the program forces them: map's
     // elements when used, filter's predicate as its cells are reached.
     ['counter = Mutable 0; print (length (map (x -> set counter x) [1,2])); g (f (r (counter + 0 == 0)))', '0'],
@@ -1060,11 +1060,11 @@ for (const [source, expected] of [
     ['counter = Mutable 0\nbump x = set counter (counter + 1)\nxs = map (x -> bump x) [1,2]\ndo xs\ndo xs\ng (f (r (counter + 0 == 4)))', '0'],
     ['counter = Mutable 0\nbump x = set counter (counter + 1)\nys = [bump 0, bump 0]\ndo ys\ng (f (r (counter + 0 == 2)))', '0'],
     // An uncertain statement reaching a lazily computed list follows what it is computed from.
-    ['counter = Mutable 0\nother = Mutable 7\nys = map (x -> x * 2) [1,2]\nm = HashMap [["a",1]]\nhas "a" m ? set counter (head ys) : return []\ng (f (r (other + 0 == 7)))', '0'],
+    ['counter = Mutable 0\nother = Mutable 7\nys = map (x -> x * 2) [1,2]\nm = ([["a",1]] : HashMap _ _)\nhas "a" m ? set counter (head ys) : return []\ng (f (r (other + 0 == 7)))', '0'],
     // A load reaches only what the loaded file's source names.
     ['counter = Mutable 0\nother = Mutable 7\nset other 8\nload "examples/advent-of-code/lanternfish"\ng (f (r (other + 0 == 8)))','0'],
     // A name use opened reaches the field it was opened from.
-    ['counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set counter 3]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set counter 3]\nuse ns\nm = ([["a",1]] : HashMap _ _)\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))','0'],
     // A function held by a pattern binding runs its body where it is called.
     ['counter = Mutable 0\nother = Mutable 7\nhb <- return (x -> 0)\ny <- return (hb 0)\ng (f (r (other + 0 == 7)))','0'],
     // Keys bound locally, and views stored in records, lists and cells or
@@ -1100,15 +1100,15 @@ for (const source of [
     'counter = Mutable 0\nk y = { set counter 4; return (counter + 0) }\nw <- k 0\ng (f (r (w == 0)))',
     'counter = Mutable 0; xs <- return [set counter 9, 1]; g (f (r (counter + 0 == 9)))',
     // A statement whose run is uncertain leaves what it can reach unknown.
-    'counter = Mutable 0\nm = HashMap [["a",1]]\nhas "a" m ? set counter 5 : return []\ng (f (r (counter + 0 == 5)))',
+    'counter = Mutable 0\nm = ([["a",1]] : HashMap _ _)\nhas "a" m ? set counter 5 : return []\ng (f (r (counter + 0 == 5)))',
     // A function held by a pattern binding runs its body where it is called.
     'counter = Mutable 0\nother = Mutable 7\nhb <- return (x -> { set other 1; return 0 })\nhb 0\ng (f (r (other + 0 == 7)))',
     'counter = Mutable 0\nother = Mutable 7\nhs <- return [x -> { set other 1; return 0 }]\nhead hs 0\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\npick n = n > 0 ? x -> { set other 1; 0 } : x -> 0\nhb <- return (pick 1)\nm = HashMap [["a",1]]\nhas "a" m ? hb 0 : 0\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\npick n = n > 0 ? x -> { set other 1; 0 } : x -> 0\nhb <- return (pick 1)\nm = ([["a",1]] : HashMap _ _)\nhas "a" m ? hb 0 : 0\ng (f (r (other + 0 == 7)))',
     'counter = Mutable 0\nother = Mutable 7\n[ha,hb] <- return [x -> return 0, x -> { set other 1; return 0 }]\nhb 0\ng (f (r (other + 0 == 7)))',
     // A name use opened reaches the field it was opened from.
-    'counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set other 3]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set counter 3]\nuse ns\nm = HashMap [["a",1]]\nhas "a" m ? bump 0 : return []\ng (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set other 3]\nuse ns\nm = ([["a",1]] : HashMap _ _)\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set counter 3]\nuse ns\nm = ([["a",1]] : HashMap _ _)\nhas "a" m ? bump 0 : return []\ng (f (r (counter + 0 == 0)))',
     'counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 0)))',
     'counter = Mutable 0\nsnap = counter + 0\nset counter 4\nprint snap\nset counter 9\ng (f (r (snap + 0 == 9)))',
     'counter = Mutable 0\ninit = set counter 5\ninit\nset counter 1\ninit\ng (f (r (counter + 0 == 1)))',

@@ -23,7 +23,7 @@ for (const [source, expected] of [
     ['std <- import "std"; use std.json; to JSON [ids = ["jawed"]]', '"{\\"ids\\":[\\"jawed\\"]}"'],
     ['std <- import "std"\nuse std.json\nto JSON [1,2.5,True,"a",\'c\',[]]', '"[1,2.5,true,\\"a\\",\\"c\\",[]]"'],
     ['std <- import "std"\nuse std.json\nto JSON [`Content-Type` = "x", n = 123456789012345678901234567890]', '"{\\"Content-Type\\":\\"x\\",\\"n\\":123456789012345678901234567890}"'],
-    ['std <- import "std"; use std.json; to JSON (HashMap [["k",1]])', '"{\\"k\\":1}"'],
+    ['std <- import "std"; use std.json; to JSON ([["k",1]] : HashMap _ _)', '"{\\"k\\":1}"'],
     ['std <- import "std"; use std.json; to JSON [1..3]', '"[1,2,3]"'],
     ['std <- import "std"; use std.json; prettyJson [a = [1]]', '"{\\n  \\"a\\": [\\n    1\\n  ]\\n}"'],
     ['std <- import "std"\nuse std.json\nfrom JSON "{\\"status\\": 1, \\"odd-key\\": [true, null, 2.5]}"', '[status = 1, `odd-key` = [True,[],2.5]]'],

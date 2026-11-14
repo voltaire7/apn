@@ -131,7 +131,7 @@ export function valueToString(v: Value): string {
             // Any (_ given to a type) is written _.
             return (v.description ?? (v.name === "$any" && !v.family ? "_" : v.name)) + (v.arguments?.length ? " " + v.arguments.map(typeArgumentText).join(" ") : "");
         }
-        case "hashmap": return `HashMap [${itemsText([...v.entries.values()].map(([k, x]) => `[${itemsText([valueToString(k), valueToString(x)])}]`))}]`;
+        case "hashmap": return `([${itemsText([...v.entries.values()].map(([k, x]) => `[${itemsText([valueToString(k), valueToString(x)])}]`))}] : HashMap _ _)`;
         case "rationalRange": return rangeText(v.lo, arithmetic("+", v.lo, v.step), v.hi);
         case "bool": return v.v ? "True" : "False";
         case "string": return stringLiteral(v.v);
@@ -176,7 +176,7 @@ export function compoundArgument(v: Value): boolean {
         case "io": case "closure": case "clauseFn": case "contract": case "functionType": return true;
         case "native": return v.applied.length > 0;
         case "int": case "float": case "rational": case "complex": return /\s/.test(valueToString(v));
-        case "type": return !!v.arguments?.length || /\s/.test(v.description ?? "");
+        case "type": return !!v.arguments?.length || /\s/.test(v.description ?? "") || !!v.choices && /\s/.test(v.name);
         default: return false;
     }
 }

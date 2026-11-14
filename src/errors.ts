@@ -103,7 +103,7 @@ export function withArticle(noun: string): string {
 
 // A type applied to a value as written (Int x): the message and the
 // spellings that say it.
-export function typeApplied(type: string): { message: string; hint: string } {
-    const convert = type === "Dynamic" ? "" : `, or convert it (to ${type} x)`;
-    return { message: `${type} is a type, not a function`, hint: `ascribe a value (x : ${type})${convert}` };
+export function typeApplied(type: string, written = type): { message: string; hint: string } {
+    const convert = type === "Dynamic" ? "" : `, or convert it (to ${/\s/.test(written) ? `(${written})` : written} x)`;
+    return { message: `${type} is a type, not a function`, hint: `ascribe a value (x : ${written})${convert}` };
 }

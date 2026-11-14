@@ -2,10 +2,10 @@ std <- import "std"
 use std.text
 parser <- (load "meta/parser" : Dynamic)
 use parser
-evaluator <- (load "meta/evaluator" : Dynamic)
-use evaluator
 primitives <- (load "meta/primitives" : Dynamic)
 use primitives
+evaluator <- (load "meta/evaluator" : Dynamic)
+use evaluator
 
 # The reader's output is toAST's lists; their shape is not statically typed.
 metaParse source = mpParse source : Dynamic

@@ -1303,18 +1303,18 @@ print (MkUserId 123)                # => MkUserId 123
 
 
 # Persistent HashMap, accepting records or association lists.
-typedMap = insert [x = 123] $ HashMap []
-print typedMap                      # => HashMap [["x",123]]
+typedMap = insert [["x",123]] $ ([] : HashMap _ _)
+print typedMap                      # => ([["x",123]] : HashMap _ _)
 print (typedMap "x")                 # => 123
-typedMapNext = insert [y = 456] $ typedMap
+typedMapNext = insert [["y",456]] $ typedMap
 print (has "y" typedMap)             # => False
 print (has "y" typedMapNext)         # => True
 print (keys typedMapNext)            # => ["x","y"]
 print (values typedMapNext)          # => [123,456]
 print (pairs typedMapNext)           # => [["x",123],["y",456]]
 print (length typedMapNext)          # => 2
-print (remove "x" $ typedMapNext)    # => HashMap [["y",456]]
-print (HashMap [["a",1],["b",2]]) # => HashMap [["a",1],["b",2]]
+print (remove "x" $ typedMapNext)    # => ([["y",456]] : HashMap _ _)
+print ([["a",1],["b",2]] : HashMap _ _) # => ([["a",1],["b",2]] : HashMap _ _)
 
 print (typeOf $ True) # => Bool
 

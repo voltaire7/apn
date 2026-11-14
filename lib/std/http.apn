@@ -1,8 +1,9 @@
 # HTTP requests. fetch url options sends one and returns its response, whatever
 # its status, as [status : Int, ok : Bool, statusText : String, url : String,
-# headers : HashMap, body : String] (headers by lowercase name). options is a
-# record of method (default "GET"), headers (a record or HashMap of strings),
-# body (a String) and timeout (milliseconds), each optional; [] for none:
+# headers : HashMap String String, body : String] (headers by lowercase name).
+# options is a record of method (default "GET"), headers (a record or a HashMap
+# of strings), body (a String) and timeout (milliseconds), each optional; [] for
+# none:
 # [method = "POST", headers = [`Content-Type` = "text/plain"]].
 
 # The body of a successful (2xx) response; any other status fails.

@@ -432,7 +432,9 @@ function wholeList(p: Pattern): p is Extract<Pattern, { p: "schema" }> {
 function takesValue(f: Extract<Ty, { k: "type" }>): boolean {
     const value = resolve(f.value);
     if (value.k === "atom" && CONSTRUCTING_TYPES.has(value.name)) return false;
-    const count = value.k === "variant" && !value.base ? value.args.length : value.k === "atom" && (value.name === "List" || value.name === "IO") ? 1 : 0;
+    // (A map's type is HashMap given its two: HashMap String a takes one more.)
+    const count = value.k === "variant" && !value.base ? value.args.length : value.k === "atom" && (value.name === "List" || value.name === "IO") ? 1
+        : value.k === "atom" && value.name === "HashMap" || value.k === "map" && f.applied === 1 ? 2 : 0;
     return (f.applied ?? 0) >= count;
 }
 // List takes only a type (IO has its own message for a value).
@@ -445,7 +447,8 @@ function typeParameters(type: Ty): number {
     if (t.k === "factory") return 2;
     if (t.k !== "type" || t.applied) return 0;
     const value = resolve(t.value);
-    return value.k === "variant" && !value.base ? value.args.length : value.k === "atom" && (value.name === "List" || value.name === "IO") ? 1 : 0;
+    return value.k === "variant" && !value.base ? value.args.length : value.k === "atom" && (value.name === "List" || value.name === "IO") ? 1
+        : value.k === "atom" && value.name === "HashMap" || value.k === "map" && t.applied === 1 ? 2 : 0;
 }
 const constant = (n: bigint): Index => ({ constant: n, terms: new Map() });
 const resolve = (t: Ty): Ty => t.k === "var" && t.link ? resolve(t.link) : t.k === "apply" ? appliedType(t) : t;
@@ -929,7 +932,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // call first gave each, and the calls that type does not fit, which take
     // the function's finished type instead (see defineClauses).
     // byType: clauses typed by different types at one parameter ((String s),
-    // (HashMap m), (List _ xs)), whose recursive calls all wait for it.
+    // (m : HashMap _ _), (xs : List _)), whose recursive calls all wait for it.
     const definingSelf: { pending: Ty; targets: Ty[]; byType: boolean }[] = [];
     // A recursive call the finished function decides (see definingSelf).
     function selfCall(self: { targets: Ty[] }, argument: Entry): Ty {
@@ -1150,8 +1153,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (t.op === "insert") {
             if (b.k !== "map") return problem("insert expects a HashMap");
-            if (a.k === "record") { unify(b.key, atom("String")); for (const value of a.fields.values()) unify(b.value, value); }
-            else unify(list(pair(b.key, b.value)), a);
+            if (a.k === "record") return problem("insert takes an association list", undefined, 'write its entries as [key,value] pairs: insert [["a",1]] m');
+            unify(list(pair(b.key, b.value)), a);
             return b;
         }
         if (t.op === "negate") {
@@ -2258,8 +2261,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const free = freeListType(p.type, scope);
                 const t = typeExpr(p.type, scope, bound);
                 if (!choosing) options.patternTypes?.set(p.type, t);
-                // A list type of free names alone (List a, Vect n a) takes a list
-                // as it is: it converts nothing, as a type variable does not.
+                // A collection type of free names alone (List a, Vect n a, HashMap
+                // k v) takes a value as it is: it converts nothing, as a type
+                // variable does not.
                 if (free) unify(t, expected, e);
                 else application({ k: "fn", input: t, output: t, coerce: true, pattern: p }, { type: expected }, e);
                 bind(p.value, t, scope, e, bound);
@@ -2429,9 +2433,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return;
                 }
                 if (t.k === "type") {
-                    // A collection's pattern takes one of any elements: (List xs), (HashMap m).
-                    const value = t.value.k === "atom" && t.value.name === "List" ? list(variable())
-                        : t.value.k === "atom" && t.value.name === "HashMap" ? { k: "map", key: variable(), value: variable() } as Ty : t.value;
+                    // A collection's pattern takes one of any elements: (List xs).
+                    const value = t.value.k === "atom" && t.value.name === "List" ? list(variable()) : t.value;
                     unify(value, expected, e);
                     // (x : UInt8) binds what 5 : UInt8 makes, a UInt8, as at runtime;
                     // a literal is a value of the type: (300 : UInt8) fails. A named
@@ -3179,6 +3182,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             // List T: the type of lists of T.
             if (t.k === "atom" && t.name === "List" && a.k === "type") return { k: "type", value: list(a.value) };
+            // HashMap k v: the type of maps from k to v.
+            if (t.k === "atom" && t.name === "HashMap" && a.k === "type") return { k: "type", value: { k: "map", key: a.value, value: variable() }, applied: 1 };
+            if (t.k === "map" && f.applied === 1 && a.k === "type") return { k: "type", value: { ...t, value: a.value } };
             // IO T: the type of actions yielding T.
             if (t.k === "atom" && t.name === "IO") {
                 if (a.k === "type") return { k: "type", value: io(a.value) };
@@ -3228,6 +3234,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 requirements.push({ k: "operation", op: "construct", args: [f, argument.type] });
                 return t;
             }
+            // A record or association list as a HashMap k v (x : HashMap String
+            // Int): its keys are k's and its values v's.
+            if (t.k === "map" && !f.applied) {
+                if (a.k === "map") { convert(t.key, a.key, e); convert(t.value, a.value, e); return t; }
+                if (a.k === "record") return problem("a HashMap is made from an association list", e, 'write its entries as [key,value] pairs: ([["a",1]] : HashMap _ _)');
+                const key = variable(), value = variable();
+                unify(list(pair(key, value)), a, e);
+                convert(t.key, key, e);
+                convert(t.value, value, e);
+                return t;
+            }
             if (t.k === "atom") {
                 if (t.name === "Type" && ["type", "factory", "alias", "list", "record"].includes(a.k)) return argument.type;
                 if (t.name === "List" && a.k === "list") return a;
@@ -3235,11 +3252,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (t.name === "Function" && (a.k === "fn" || a.k === "overload")) return a;
                 if (t.name === "Mutable") return { k: "mutable", value: argument.type };
                 if (t.name === "HashMap") {
-                    if (a.k === "map") return a;
-                    if (a.k === "record") return { k: "map", key: atom("String"), value: union([...a.fields.values()]) };
-                    const key = variable(), value = variable();
-                    unify(list(pair(key, value)), a, e);
-                    return { k: "map", key, value };
+                    const { message, hint } = typeApplied("HashMap", "HashMap _ _");
+                    return problem(message, e, hint);
                 }
                 if (t.name === "String" && a.k === "list") {
                     unify(atom("Char"), a.element, e);
@@ -6783,7 +6797,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     function patternConverts(p: Pattern, scope: Scope): boolean {
         switch (p.p) {
-            // A list type of free names alone (List a, Vect n _) takes any list as it is.
+            // A collection type of free names alone (List a, Vect n _, HashMap k v)
+            // takes any of its values as they are.
             case "schema": return !freeListType(p.type, scope);
             case "int": return true;
             case "constr": {
@@ -6812,7 +6827,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const entry = scope.get(x.name), value = entry && resolve(entry.type);
             return !entry || !!entry.index?.terms.size || value?.k === "type" && resolve(value.value).k === "var";
         };
-        return head.t === "var" && (head.name === "List" && args.length === 1 || head.name === "Vect" && args.length === 2)
+        return head.t === "var" && (head.name === "List" && args.length === 1 || ["Vect", "HashMap"].includes(head.name) && args.length === 2)
             && !!scope.get(head.name)?.builtin && args.every(free);
     }
     // An index written with the names the program bound to its terms (m for
@@ -7375,7 +7390,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const fallback = previous && !previous.recursive ? overloaded(name, clauses, scope, previous) : undefined;
         scope.set(name, { type: instance ? { k: "overload", choices: [pending, previous.type], name, prefer: true }
             : fallback ? { k: "overload", choices: [pending, fallback], name } : pending, mono: true, recursive: true });
-        const typeTag = (p: Pattern | undefined) => p?.p === "constr" && TYPE_NAMES.includes(p.tag) ? p.tag : undefined;
+        // (A typed pattern's type, (s : String) or (xs : List _), by its head.)
+        const typeTag = (p: Pattern | undefined): string | undefined => {
+            if (p?.p === "constr") return TYPE_NAMES.includes(p.tag) ? p.tag : undefined;
+            if (p?.p !== "schema") return undefined;
+            let head = p.type;
+            while (head.t === "app") head = head.f;
+            return head.t === "var" && TYPE_NAMES.includes(head.name) ? head.name : undefined;
+        };
         const byType = clauses[0].params.some((_, i) => new Set(clauses.map(c => typeTag(c.params[i])).filter(Boolean)).size > 1);
         const self = { pending, targets: [] as Ty[], byType };
         definingSelf.push(self);

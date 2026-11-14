@@ -14,7 +14,7 @@ float = Decoder (value -> isNumber value ? Ok (inexact value) : Err "Expecting a
 bool = expecting "a BOOL" (isType Bool)
 # The value an object holds under name, or the error saying it has none.
 _field name value = {
-    fields = isType Record value ? HashMap (pairs (value : Record)) : HashMap []
+    fields = isType Record value ? (pairs (value : Record) : HashMap _ _) : ([] : HashMap _ _)
     has name fields
         ? Ok (lookup name fields)
         : Err ("Expecting an OBJECT with a field named `" ++ name ++ "`")

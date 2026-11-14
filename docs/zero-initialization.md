@@ -61,7 +61,7 @@ A constructed Float field keeps its type: assigning `Int` to it fails with
 | `Char` | `'\0'` (the NUL code point) |
 | `List` | `[]` |
 | `Record` | Empty record, displayed `[]` |
-| `HashMap` | `HashMap []` |
+| `HashMap` | `([] : HashMap _ _)` |
 | `Pointer` | `Pointer 0x0` (null; dereferencing still errors) |
 
 These are construction defaults, not alternate meanings of bare type names.

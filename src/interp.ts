@@ -2289,7 +2289,9 @@ export class Interpreter {
                 const parameter = this.typeParameter(f, arg);
                 if (parameter) return parameter;
                 if (written && !CONSTRUCTING_TYPES.has(f.name)) {
-                    const { message, hint } = typeApplied(typeToString(f));
+                    // (Its hint writes the parameters it still takes: HashMap _ _.)
+                    const missing = Math.max(0, (f.alias ? 0 : this.typeParameters(f.name)) - (f.arguments?.length ?? 0));
+                    const { message, hint } = typeApplied(typeToString(f), typeToString(f) + " _".repeat(missing));
                     throw new APNError("runtime", message, { hint });
                 }
                 return this.typeValue(f, arg);
@@ -3531,8 +3533,9 @@ export class Interpreter {
                     if (wrap) emit(")");
                 }
             } else if (v.kind === "hashmap") {
-                emit("HashMap", "type"); emit(" ");
+                emit("(");
                 this.render(mkList([...v.entries.values()].map(([key, value]) => mkList([key, value]))), emit, false, ancestors);
+                emit(" : "); emit("HashMap _ _", "type"); emit(")");
             } else if (this.repeatedType(v)) {
                 emit("[");
                 this.render(this.repeatedType(v)!, emit, false, ancestors);
@@ -3888,6 +3891,7 @@ export class Interpreter {
             if (type.name === "Dynamic" && !type.family) return this.constructType("Dynamic", value);
             if (type.name === "$any") return value;
             if (type.name === "List" && !type.family) return this.listType(type, value);
+            if (type.name === "HashMap" && !type.family) return this.hashMapType(type, value);
             let actual = type.name === "Type" ? this.demand(value) : this.dataValue(value);
             // A pending monadic value takes this type's monad (Option Int { return 42 }).
             if (actual.kind === "pending" && (type.family || actual.step.op === "call")) actual = this.dataValue(this.realize(actual, type));
@@ -4294,6 +4298,13 @@ export class Interpreter {
                 rest = cell.tail;
             }
             return this.cell(rest) === null;
+        }
+        // HashMap k v: each key a k and each value a v.
+        if (type.kind === "type" && type.name === "HashMap" && !type.family && type.arguments?.length === 2) {
+            const map = this.dataValue(value);
+            if (map.kind !== "hashmap") return false;
+            const [k, v] = type.arguments;
+            return [...map.entries.values()].every(([key, item]) => this.belongsToType(k, key, met) && this.belongsToType(v, item, met));
         }
         // List a = [] | a :: List a: each element an a, read as the list
         // unfolds. A cell met again (ones = 1 :: ones) or an endless range,
@@ -4711,7 +4722,6 @@ export class Interpreter {
         const declared = name === "Mutable" ? this.declaredTypes.get(value) ?? this.declaredTypes.get(this.reference(value)) : undefined;
         value = this.dataValue(value);
         if (name === "Mutable") return declared ? { kind: "mutable", v: value, schema: declared } : { kind: "mutable", v: value };
-        if (name === "HashMap") return this.makeHashMap(value);
         if (name === "String" && this.isList(value)) return this.callNative("fromChars", [value]);
         if (NUMERIC_TYPES.includes(name)) {
             if (!isNumeric(value)) throw new APNError("runtime", `${name} expects a number`);
@@ -4730,8 +4740,7 @@ export class Interpreter {
 
     associations(value: Value): Array<[Value, Value]> {
         if (value.kind === "hashmap") return [...value.entries.values()];
-        if (value.kind === "record") return value.v.map(([key, item]) => [mkStr(key), item]);
-        if (!this.isList(value)) throw new APNError("runtime", "HashMap expects a record or association list");
+        if (!this.isList(value)) throw new APNError("runtime", "a HashMap is made from an association list", { hint: "write its entries as [key,value] pairs: ([[\"a\",1]] : HashMap _ _)" });
         const items = this.items(value);
         return items.map((item) => {
             const pair = this.demand(item);
@@ -4745,6 +4754,19 @@ export class Interpreter {
     makeHashMap(value: Value): Value {
         const entries = new Map<string, [Value, Value]>();
         for (const [key, item] of this.associations(value)) entries.set(this.hashKey(key), [key, item]);
+        return { kind: "hashmap", entries };
+    }
+    // A record or association list as a HashMap k v: each key a k, each value
+    // a v (converted when read), a type variable or _ checking nothing.
+    private hashMapType(type: Extract<Value, { kind: "type" }>, value: Value): Value {
+        if (type.arguments?.length !== 2) throw new APNError("runtime", "HashMap takes a key type and a value type", { hint: "write HashMap k v, as (x : HashMap String Int) or (x : HashMap _ _)" });
+        const [keyType, valueType] = type.arguments.map(t => this.reference(t));
+        const open = (t: Value) => t.kind === "type" && (t.variable || this.isAny(t));
+        const entries = new Map<string, [Value, Value]>();
+        for (const [key, item] of this.associations(this.dataValue(value))) {
+            const k = open(keyType) ? key : this.demand(this.conform(keyType, key));
+            entries.set(this.hashKey(k), [k, open(valueType) ? item : this.defer(() => this.conform(valueType, item))]);
+        }
         return { kind: "hashmap", entries };
     }
 
@@ -4951,6 +4973,14 @@ export class Interpreter {
             if (value.kind === "list" && value.schema) return this.inspectType(value.schema);
             // A list's type is its items' types, as a record's is its fields'.
             if (this.isList(value)) return this.itemTypes(value);
+            // A map's, its keys' and values' (a and b when it holds none).
+            if (value.kind === "hashmap") {
+                const entries = [...value.entries.values()];
+                const of = (n: 0 | 1, name: string): Value => entries.length
+                    ? this.union(entries.map(entry => this.reference(this.callNative("typeOf", [entry[n]]))))
+                    : { kind: "type", name, variable: true };
+                return { kind: "type", inspect: true, name: "HashMap", arguments: [of(0, "a"), of(1, "b")] };
+            }
             // A record's type is its fields' types ([x = 1] is a [x : Int]),
             // each found when shown; a shared object's fields are live.
             if (value.kind === "record" && !value.shared) return { kind: "record", v: value.v.map(([key, field]): [string, Value] => [key, this.defer(() => this.callNative("typeOf", [field]))]) };
@@ -6121,6 +6151,8 @@ export class Interpreter {
         if (plain && (f.name === "List" || f.name === "IO") && !f.arguments?.length && this.isTypeValue(value)) return this.conform(f, value);
         // A type variable applied to a type: f a, any type holding a.
         if (f.variable && f.name !== "_" && this.isTypeValue(value)) return { ...f, arguments: [...f.arguments ?? [], value] };
+        // HashMap k v: the types of its keys and values.
+        if (plain && f.name === "HashMap" && (f.arguments?.length ?? 0) < 2 && this.isTypeValue(value)) return { ...f, arguments: [...f.arguments ?? [], value] };
         if (this.counted(f) && (f.arguments?.length ?? 0) < 2) {
             const args = [...f.arguments ?? []];
             if (!args.length && (value.kind !== "int" || value.v < 0n)) throw new APNError("runtime", `${f.name} length must be a nonnegative Int`);
@@ -6203,7 +6235,7 @@ export class Interpreter {
         const bound = scope.get(name), t = bound && this.reference(bound);
         if (t?.kind !== "type" || t.arguments?.length || t.alias) return 0;
         if (t.family) return t.family.parameters?.length ?? 0;
-        return t.name === "List" || t.name === "IO" ? 1 : this.counted(t) ? 2 : 0;
+        return t.name === "List" || t.name === "IO" ? 1 : this.counted(t) || t.name === "HashMap" ? 2 : 0;
     }
 
     private typeBinding(p: Extract<Pattern, { p: "schema" }>, v: Value, binds: Map<string, Value>): boolean | undefined {
@@ -6242,6 +6274,23 @@ export class Interpreter {
         if (this.counted(base) && args.length === 2) {
             const [size, element] = args.map(asPattern);
             return !!size && !!element && this.matchVectorPattern(base, [size, element, p.value], v, binds);
+        }
+        // (m : HashMap k v): a map, k and v its keys' and values' types (computed
+        // if used, as List a's), a written type each key's or value's.
+        if (base.name === "HashMap" && !base.family && args.length === 2) {
+            const map = this.dataValue(v);
+            if (map.kind !== "hashmap") return false;
+            for (const [n, arg] of args.entries()) {
+                if (arg.t === "placeholder") continue;
+                if (arg.t === "var" && /^[a-z]/.test(arg.name) && !binds.has(arg.name) && this.typeVariableName(arg.name, this.env)) {
+                    binds.set(arg.name, this.defer(() => this.readElementType((this.reference(this.callNative("typeOf", [map])) as Extract<Value, { kind: "type" }>).arguments![n])));
+                    continue;
+                }
+                const wanted = arg.t === "var" && binds.has(arg.name) ? binds.get(arg.name)! : this.reference(this.eval(arg));
+                if (this.readElementTypes.has(this.reference(wanted))) continue;
+                if (![...map.entries.values()].every(entry => this.belongsToType(wanted, entry[n]))) return false;
+            }
+            return this.matchPattern(p.value, map, binds);
         }
         if (base.name === "List" && args.length === 1 && (args[0].t === "var" || args[0].t === "placeholder")) {
             const list = this.dataValue(v);

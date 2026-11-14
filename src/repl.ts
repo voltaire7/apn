@@ -356,7 +356,7 @@ function helpText(): string {
         `  myTypeOf (x : t) = print t   (bind the runtime type and value)`,
         `  f (x : Int) = ...; f (x : Number) = ... (typed overloads)`,
         `  100 * _ -> (0 : Int) repeats; 100 * (0 : Int) multiplies`,
-        `  insert ["x": 123] $ HashMap []; lookup "x" m; m "x"`,
+        `  m = insert [["x",123]] ([] : HashMap _ _); lookup "x" m; m "x"`,
         `  has/remove key map; keys/values/pairs map; map updates are persistent`,
         `  sqrt -1 => 0+1i (function - number applies it to the negated number)`,
         `  exact integers/rationals: 0xFF, 0b1010, 0o17, 1 / 3; floats: .1, 1e3`,

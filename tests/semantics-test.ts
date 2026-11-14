@@ -490,7 +490,7 @@ for (const source of ["f (Int x) = x\nprint (f 1)", "f ((Int) x) = x\nprint 1", 
     failure(`a typed pattern writes its type after the value: ${source}`, source, "writes its type after the value");
 }
 example("types that construct, and typed patterns of any parameters", `
-m = HashMap [["a",1]]
+m = ([["a",1]] : HashMap _ _)
 c = Mutable 0
 f (xs : List _) = length xs
 g { x : Int } = x + 1
