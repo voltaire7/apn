@@ -17,7 +17,8 @@ branch should do nothing.
 
 `match` is an intrinsic function, available by default. It tries a list of unary
 functions as a function's clauses are tried: the most specific that fits first (a
-literal before a type pattern before a name), in written order among equals:
+literal before a type pattern before a name, `[x,y]` before `x :: rest`; see
+[ranking](semantics.md#clause-ranking)), in written order where neither contains the other:
 
 ```apn
 handlers = [

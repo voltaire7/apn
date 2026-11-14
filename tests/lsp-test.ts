@@ -147,41 +147,27 @@ Deno.test("completing a standard name adds its import, as a list beside another"
     equal(complete("x = 1", "toString"), undefined);
     equal(complete("x = 1", "withFile")?.[1]?.[0]?.[3], 'std <- import "std"\nuse std.io\n\n');
 });
-Deno.test("lint reports a clause or alternative that never runs", () => {
+Deno.test("lint reports an alternative that never runs", () => {
     const unreachable = (source: string) => lint(source).filter(d => d.code === "unreachable-clause").map(d => d.range.start.line);
-    // After a clause taking any argument, a list, cons or program constructor
-    // pattern ranks no higher, so its clause never runs; in a block too.
-    equal(unreachable("f xs = 0\nf [a,b] = a + b\ng x = 0\ng (x :: _) = x"), [1, 3]);
-    equal(unreachable("std <- import \"std\"; use std.option\nm _ = 0\nm (Some y) = y"), [2]);
-    equal(unreachable("b = {\n    q x = 0\n    q [a] = a\n    q 1\n}"), [2]);
-    equal(lint("f xs = 0\nf [a,b] = a + b")[0].message, "This clause of 'f' never runs: the clause on line 1 takes any argument and comes first.");
-    // A literal or a built-in type outranks a name; an equivalent clause
-    // replaces the earlier one; a guard or a repeated name takes not everything;
-    // a rebinding starts a new version.
-    equal(unreachable("f x = 0\nf 1 = 2\ng x = 0\ng (n : Int) = n\nk x = 0\nk y = 9"), []);
-    equal(unreachable("n x x = 0\nn [a] b = 1\nw = x | x > 0 -> 1\nw [a] = 2\nr x = 0\nr = 5\nr [a] = 1"), []);
-    // Constructors of imported modules, standard or the program's own, rank no
-    // higher either; one the linter cannot resolve is left alone.
-    equal(unreachable("std <- import \"std\"; use std.browser\nv _ = 0\nv Visible = 1"), [2]);
-    const cards = new URL("./fixtures/lint/", import.meta.url).pathname;
-    equal(lint("cards <- import \"cards\"\nuse [cards]\ns _ = 0\ns Hearts = 1", false, cards).filter(d => d.code === "unreachable-clause").map(d => d.range.start.line), [3]);
-    equal(unreachable("cards <- import \"cards\"\nuse [cards]\ns _ = 0\ns Hearts = 1"), []);
-    // So are those of a loaded file use opens (also through Dynamic); a load
-    // statement opens nothing.
-    for (const load of ['c <- load "cards"\nuse c', 'c <- (load "cards" : Dynamic)\nuse c', 'c <- load "missing"\nuse c', 'load "cards"']) {
-        equal(lint(`${load}\ns _ = 0\ns Hearts = 1`, false, cards).filter(d => d.code === "unreachable-clause").length, load.includes("cards") && load.includes("use") ? 1 : 0);
-    }
-    // And of a record use opens: one bound to an import or a load, written in
-    // place, or in a list; not a record never opened, or rebound to another.
-    const opened = (source: string) => lint(source, false, cards).filter(d => d.code === "unreachable-clause").length;
-    equal(opened('opt <- import "std/option"\nuse [opt]\nf _ = 0\nf (Some x) = x'), 1);
-    equal(opened('t <- load "cards"\nuse [t]\ns _ = 0\ns Hearts = 1'), 1);
-    equal(opened('std <- import "std"\nuse std.option\nf _ = 0\nf (Some x) = x'), 1);
-    equal(opened('opt <- import "std/option"\nf _ = 0\nf (Some x) = x'), 0);
-    equal(opened('t <- load "cards"\nt = [x = 1]\nuse [t]\ns _ = 0\ns Hearts = 1'), 0);
-    // match ranks its alternatives as clauses: a literal after an unconditional
-    // one still runs, another name or list pattern never does.
+    // Clauses are tried most specific first, so one after a clause taking any
+    // argument still runs; an equivalent clause replaces the earlier one.
+    equal(unreachable("f xs = 0\nf [a,b] = a + b\ng x = 0\ng (x :: _) = x\nk x = 0\nk y = 9"), []);
+    equal(unreachable("std <- import \"std\"; use std.option\nm _ = 0\nm (Some y) = y"), []);
+    // A match's alternatives stay: one an earlier takes every value of never runs.
+    equal(unreachable("v = 3 ~ [\n    x -> 0\n    [a] -> 5\n    y -> 1\n]"), [3]);
+    equal(lint("v = 3 ~ [\n    x -> 0\n    y -> 1\n]")[0].message, "This alternative never runs: an earlier one takes every value it does.");
+    // A literal, a more specific pattern, or a guarded one before a plain one runs.
     equal(unreachable("v = 3 ~ [\n    x -> 0\n    1 -> 5\n]"), []);
-    equal(unreachable("v = 3 ~ [\n    x -> 0\n    [a] -> 5\n    y -> 1\n]"), [2, 3]);
-    equal(unreachable("v = 3 ~ [\n    1 -> 5\n    x -> 0\n]"), []);
+    equal(unreachable("v = 3 ~ [\n    x | x > 0 -> 0\n    y -> 1\n]"), []);
+});
+Deno.test("lint knows the constructors of the modules and files a program opens", () => {
+    const cards = new URL("./fixtures/lint/", import.meta.url).pathname;
+    const missing = (source: string) => lint(source, false, cards).filter(d => d.code === "non-exhaustive-match").length;
+    // Imported or loaded and opened by use; a load statement or an import
+    // never opened opens nothing.
+    equal(missing('cards <- import "cards"\nuse [cards]\nv = Hearts ~ [Hearts -> 1]'), 1);
+    equal(missing('c <- load "cards"\nuse c\nv = Hearts ~ [Hearts -> 1]'), 1);
+    equal(missing('load "cards"\nv = Hearts ~ [Hearts -> 1]'), 0);
+    equal(missing('opt <- import "std/option"\nuse [opt]\nf = Some 1 ~ [Some x -> x]'), 1);
+    equal(missing('opt <- import "std/option"\nf = Some 1 ~ [Some x -> x]'), 0);
 });

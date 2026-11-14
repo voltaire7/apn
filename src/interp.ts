@@ -17,7 +17,7 @@ import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_TYPES, SCALAR_TYPES, numericWit
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { APNError, didYouMean, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, type Binding, listRole, readPatterns, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, declaresNames, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, type Binding, clausePlaces, listRole, readPatterns, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, declaresNames, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, isUse } from "./ast.ts";
@@ -2407,7 +2407,7 @@ export class Interpreter {
         return v?.kind === "native" && v.name === "intrinsics.match" && v.applied.length === 0;
     }
     // A match against written alternatives: the most specific whose pattern and
-    // guard fit, as among a function's clauses (written order breaks ties),
+    // guard fit, as among a function's clauses (see clausePlaces),
     // gives its body, evaluated in place of the match. The value is one lazy
     // argument shared by every alternative tried.
     private coreMatch({ value, alternatives }: CoreMatch): TailCall {
@@ -2415,7 +2415,7 @@ export class Interpreter {
         // Only a constructor pattern's rank depends on the value.
         if (!ranked) {
             const dynamic = alternatives.some(a => a.params[0].p === "constr");
-            ranked = dynamic ? null : this.ranked(alternatives, a => LITERAL_PATTERNS.has(a.params[0].p) ? 40 : 0);
+            ranked = dynamic ? null : this.ranked(alternatives, a => LITERAL_PATTERNS.has(a.params[0].p) ? 40 : 0, clausePlaces(alternatives));
             rankedAlternatives.set(alternatives, ranked);
         }
         // A literal pattern tried first demands the value at once.
@@ -2444,15 +2444,15 @@ export class Interpreter {
         return this.eval(value);
     }
     // The clause these arguments take (a match's alternatives are clauses of
-    // one parameter): the most specific whose patterns and guard fit, written
-    // order breaking ties, and the scope its body runs in. Patterns are ranked
+    // one parameter): the most specific whose patterns and guard fit (see
+    // clausePlaces), and the scope its body runs in. Patterns are ranked
     // and matched in the scope they were written in.
     private choose<C extends { params: Pattern[]; guard?: Expr }>(clauses: C[], args: Value[], scope: Env, self?: [string, Value], ranked?: C[]): { clause: C; child: Env } | undefined {
         for (const clause of clauses) this.typesAfterValues(clause.params, scope, clause);
         const caller = this.env;
         this.env = scope;
         try {
-            const order = ranked ?? this.ranked(clauses, c => c.params.reduce((score, p, i) => score + this.patternScore(p, args[i]), 0));
+            const order = ranked ?? this.ranked(clauses, c => c.params.reduce((score, p, i) => score + this.patternScore(p, args[i]), 0), clausePlaces(clauses));
             for (const clause of order) {
                 this.env = scope;
                 const binds = new Map<string, Value>(self ? [self] : []);
@@ -2469,10 +2469,11 @@ export class Interpreter {
         } finally { this.env = caller; }
     }
 
-    // Items by score, highest first, keeping their order among equals.
-    private ranked<T>(items: T[], score: (item: T) => number): T[] {
-        return items.map((item, index) => ({ item, index, score: score(item) }))
-            .sort((a, b) => b.score - a.score || a.index - b.index).map(x => x.item);
+    // Items by score, highest first; among equals, in their places (clauses:
+    // the most specific first, see clausePlaces), else in their order.
+    private ranked<T>(items: T[], score: (item: T) => number, places?: number[]): T[] {
+        return items.map((item, index) => ({ item, place: places?.[index] ?? index, score: score(item) }))
+            .sort((a, b) => b.score - a.score || a.place - b.place).map(x => x.item);
     }
 
     // get or with, when clauses in scope extend the builtin one.

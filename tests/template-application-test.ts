@@ -183,6 +183,12 @@ for (const checked of [true, false]) for (const [source, expected] of [
     ['len = length\nf (xs : Vect (len [1,2]) Int) = 1\nf _ = 0\n[f [1,2], f [1]]', '[1,0]'],
     ['w = while\nn = Mutable 0\nw [n < 3] (set n (n + 1))\nn + 0', '3'],
     ['i = isType\n[i (a -> a) (x -> x), i Int 1]', '[True,True]'],
+    // Clauses and alternatives are tried most specific first, wherever written.
+    ['f xs = "any"\nf [x,y] = "pair"\nf (x :: r) = "cons"\n[f [1,2], f [1], f []]', '["pair","cons","any"]'],
+    ['[1,2] ~ [xs -> "any", x :: r -> "cons", [x,y] -> "pair"]', '"pair"'],
+    ['f x y = "free"\nf x x = "same"\n[f 1 1, f 1 2]', '["same","free"]'],
+    ['len xs = 0\nlen (x :: r) = 1 + len r\nlen [1,2,3]', '3'],
+    ['g [x,0] = "a"\ng [0,y] = "b"\ng [0,0]', '"a"'],
     // A repeated name is a test the run makes, deciding no type.
     ['f x x = True\nf x y = False\n[f 1 1, f 1 2, f 1 "a"]', '[True,False,False]'],
     ['same (x : t) (y : t) = True\nsame x y = False\n[same 1 2, same 1 True]', '[True,False]'],

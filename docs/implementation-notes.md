@@ -104,7 +104,8 @@ intentional evaluation change.
   `match` operation over the alternatives' function types when the value's type
   is known only at calls (a parameter's), as clauses are; one `chosen` join
   serves both. Clauses and alternatives are chosen by one `choose` at runtime
-  and one `possibleClauses` in the checker. A function whose body matches its
+  and one `possibleClauses` in the checker, both in the order `clausePlaces`
+  (`ast.ts`) gives among equally ranked ones, so the two cannot disagree. A function whose body matches its
   parameters is its alternatives as clauses (`matchedClauses`) wherever the
   checker or `typeOf` reads a definition.
 - Sugar keeps its written node (printing, `probe`, tools) and runs and checks

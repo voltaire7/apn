@@ -183,7 +183,7 @@ like `f (x : t) = t`, and `f a e -> …` is the flat typed pattern `((f a) e)`, 
 `(Vec n a xs)` is `((Vec n a) xs)`. This holds everywhere, `match` alternatives included.
 Directly inside `[ ]`, a `,` separates the list's items, so a lambda with
 several parameters there is parenthesized: `[(x, y -> x), f]`. A function may be written as several
-equations, tried in source order:
+equations, tried most specific first ([ranking](#clause-ranking)):
 
 ```apn
 len [] = 0
@@ -198,10 +198,9 @@ are an overload the context chooses: [overloading on the result type](#overloadi
 Literal patterns (integers, floats, strings, characters, `True`, `False`) are
 tried before other clauses ([ranking](#clause-ranking)); numeric literal patterns compare numerically, so
 `2` and `2.0` match each other. Integer ranges (`[1..9]`) are also patterns.
-Otherwise clauses run in source order, so after a clause taking any argument
-(distinct names or `_`, no guard) a clause of lists, cons, records or
-constructor patterns never runs; one with an equivalent pattern replaces it
-instead. When no equation matches, the
+Where they were written does not matter: `len xs = 0` before `len (x::rest) =
+...` still leaves `len [1,2]` to the second, and a later clause with an
+equivalent pattern replaces an earlier one. When no equation matches, the
 error names the function: `no clause of 'len'
 matches the given arguments`. When what is known of the arguments already
 rules out every clause (a literal, a constructor, a list's length: `pred 0`
@@ -1509,7 +1508,13 @@ add (x : Number) (y : Number) = x + y
 ```
 
 Literal matches outrank exact concrete type matches, which outrank aggregate
-matches, which outrank conversion matches. Ties retain source order. Converting
+matches, which outrank conversion matches. Among equals, a clause whose
+patterns match only values another's match is tried before it: `[x,y]` before
+`x :: rest` before `xs`, `Some x` before `_`, `f x x` before `f x y`, a guarded
+clause before the same patterns unguarded. Patterns neither of which contains
+the other (`[x, 0]` and `[0, y]`) keep the order they were written in. So no
+clause hides another by coming first, and clauses added elsewhere (a module's
+instance, a REPL session's) take their place by what they match. Converting
 either a typed or an untyped input must be lossless; explicit floating-point
 construction is a separate operation and does not relax pattern matching. The same
 ranking chooses among any function's clauses and a `match`'s alternatives:

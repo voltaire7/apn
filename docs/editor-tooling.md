@@ -69,10 +69,10 @@ errors or general type errors. It warns about a parameter its body never uses
 (`f x y = x` warns about `y`; write `_` to discard it), including a name a
 typed pattern's type binds (`a` in `first (x::_ : List a) = x`; a name
 repeated in another parameter's type is a use). Names starting with `_`
-are exempt. It warns about a clause that
-[never runs](semantics.md#functions-and-conditionals) because an earlier one
-takes any argument (`f xs = 0` then `f [a,b] = a + b`), and about a `match`
-alternative after one that takes any value. The constructors it knows are
+are exempt. It warns about a `match` alternative that never runs because one
+tried before it takes every value it does (`x -> 0` then `y -> 1`; clauses are
+[tried most specific first](semantics.md#clause-ranking), and a function's
+equivalent clause replaces the earlier one instead). The constructors it knows are
 the program's and those its `use` statements open, where `use` opens a record
 bound to an import or a load (`opt <- import "std/option"; use opt`,
 `f <- (load "f" : Dynamic); use f`, or `use std.option`), written in

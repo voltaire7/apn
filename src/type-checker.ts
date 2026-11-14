@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, type Binding, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, type Binding, clausePlaces, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -101,7 +101,8 @@ interface Shape { arg?: number; length?: LengthRef; items?: (Shape | undefined)[
 // names that make a variable pattern refutable (repeated names compare values).
 // callArgs collects a call's arguments so the complete call can be ranked as
 // the runtime ranks clauses (see clauseFn dispatch in interp.ts).
-interface ClauseOrder { index: number; params: Pattern[]; refutable: Set<string> }
+// place: where the clause is tried among its function's (see clausePlaces).
+interface ClauseOrder { index: number; place: number; params: Pattern[]; refutable: Set<string> }
 // ref names the parameter (by binder) whose value this is, when the value
 // itself is only known at that function's calls.
 // tag is the constructor that visibly built the value (None, Some 5); call is
@@ -3031,7 +3032,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const ranked = accepted.flatMap(a => a.clauses!.map(c => ({ clause: c, ...rankClause(c, a.call!) })));
                 const sure = ranked.filter(r => r.matches);
                 const before = (a: typeof ranked[number], b: typeof ranked[number]) =>
-                    a.low > b.high || a.low >= b.high && a.clause.index < b.clause.index;
+                    a.low > b.high || a.low >= b.high && a.clause.place < b.clause.place;
                 // Clauses with the same patterns differ only in result type
                 // (an undecided overload): neither hides the other.
                 const samePatterns = (a: typeof ranked[number], b: typeof ranked[number]) => !!f.undecided && clauseKey("", a.clause) === clauseKey("", b.clause);
@@ -5449,7 +5450,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // The steps before the first one some earlier clause may take.
         let steps = length;
         for (const other of summary.clauses) {
-            if (other === clause || other.index > clause.index) continue;
+            if (other === clause || other.place > clause.place) continue;
             let at: bigint | undefined, never = false;
             for (const [i, p] of other.params.entries()) {
                 if (p.p === "wildcard" || p.p === "var" && !other.refutable.has(p.name)) continue;
@@ -5511,7 +5512,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const ranked = clauses.map(c => ({ clause: c, ...peek(() => rankClause(c, entries), { low: -1000, high: Infinity, matches: false, fails: false }) }));
         const sure = ranked.filter(r => r.matches);
         const before = (a: typeof ranked[number], b: typeof ranked[number]) =>
-            a.low > b.high || a.low >= b.high && a.clause.index < b.clause.index;
+            a.low > b.high || a.low >= b.high && a.clause.place < b.clause.place;
         return ranked.filter(r => !r.fails && !sure.some(d => d !== r && before(d, r)));
     }
     // Bind what a pattern takes from a known value: plain names, list elements,
@@ -5801,7 +5802,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (e.guard) return undefined;
                 const names = e.params.flatMap(patternNames);
                 const refutable = new Set(names.filter((x, i) => names.indexOf(x) !== i));
-                return { fn: { summary: { scope, clauses: [{ index: 0, params: e.params, body: e.body, refutable }] }, env: [...env], applied: [] } };
+                return { fn: { summary: { scope, clauses: [{ index: 0, place: 0, params: e.params, body: e.body, refutable }] }, env: [...env], applied: [] } };
             }
             case "range": {
                 const bound = (x: Expr | null) => x && numericOf(value(x));
@@ -5863,9 +5864,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A match's alternatives as clauses (none when one is guarded), made once.
     const alternativeClauses = new WeakMap<CoreMatch, Summary["clauses"] | null>();
     function matchClauses(match: CoreMatch): Summary["clauses"] | undefined {
+        const places = clausePlaces(match.alternatives);
         if (!alternativeClauses.has(match)) alternativeClauses.set(match, match.alternatives.some(x => x.guard) ? null : match.alternatives.map(({ params, body }, index) => {
             const names = params.flatMap(patternNames);
-            return { index, params, body, refutable: new Set(names.filter((name, i) => names.indexOf(name) !== i)) };
+            return { index, place: places[index], params, body, refutable: new Set(names.filter((name, i) => names.indexOf(name) !== i)) };
         }));
         return alternativeClauses.get(match) ?? undefined;
     }
@@ -5924,9 +5926,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         bind(st.name, once(() => evaluateKnown(st.clauses[0].body, before, scope, depth)));
                         continue;
                     }
+                    const places = clausePlaces(st.clauses);
                     const summary: Summary = { scope, clauses: st.clauses.map((c, index) => {
                         const names = c.params.flatMap(patternNames);
-                        return { index, params: c.params, body: c.body, refutable: new Set([st.name, ...names.filter((x, i) => names.indexOf(x) !== i)]) };
+                        return { index, place: places[index], params: c.params, body: c.body, refutable: new Set([st.name, ...names.filter((x, i) => names.indexOf(x) !== i)]) };
                     }) };
                     // A function reads itself, the version it defines.
                     const fn: Known = { fn: { summary, env: [], applied: [] } };
@@ -6773,9 +6776,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The alternative a value known enough certainly takes: the only one that
     // may, as among clauses, certainly matching and unguarded.
     function takenAlternative(value: Expr, input: Ty, alternatives: PatternLambda[], scope: Scope): number | undefined {
+        const places = clausePlaces(alternatives);
         const clauses = alternatives.map(({ params }, index) => {
             const names = params.flatMap(patternNames);
-            return { index, params, refutable: new Set(names.filter((x, n) => names.indexOf(x) !== n)) };
+            return { index, place: places[index], params, refutable: new Set(names.filter((x, n) => names.indexOf(x) !== n)) };
         });
         const possible = possibleClauses(clauses, [{ type: input, ...valueEntry(value, scope) }]);
         if (possible.length !== 1 || !possible[0].matches) return undefined;
@@ -6922,9 +6926,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : p.p === "constr" && p.args.length === 1 && p.args[0].p === "var" ? { name: p.args[0].name, exact: false }
             : { exact: false });
         const shape = shapeOf(body, named, scope);
-        const summary: Summary = { scope: parent, clauses: (matchedClauses(params, body, !!parent.get("~")?.builtin) ?? [{ params, body }]).map((c, index) => {
+        const matched = matchedClauses(params, body, !!parent.get("~")?.builtin) ?? [{ params, body }], places = clausePlaces(matched);
+        const summary: Summary = { scope: parent, clauses: matched.map((c, index) => {
             const all = c.params.flatMap(patternNames);
-            return { index, params: c.params, body: c.body, refutable: new Set([...recursiveName ? [recursiveName] : [], ...all.filter((x, n) => all.indexOf(x) !== n)]) };
+            return { index, place: places[index], params: c.params, body: c.body, refutable: new Set([...recursiveName ? [recursiveName] : [], ...all.filter((x, n) => all.indexOf(x) !== n)]) };
         }) };
         for (let n = inputs.length - 1; n >= 0; n--) {
             const parameter = params[n];
@@ -7279,7 +7284,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 default: return false;
             }
         };
-        const orders = new Map<string, ClauseOrder[]>();
+        const orders = new Map<string, ClauseOrder[]>(), places = clausePlaces(clauses);
         const definition: Definition = { name, clauses };
         const firstKey = new Map<string, string>();
         for (const [index, c] of clauses.entries()) {
@@ -7335,7 +7340,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const all = c.params.flatMap(patternNames);
             const refutable = new Set([name, ...all.filter((x, n) => all.indexOf(x) !== n)]);
             if (!orders.has(key)) orders.set(key, []);
-            orders.get(key)!.push({ index, params: c.params, refutable });
+            orders.get(key)!.push({ index, place: places[index], params: c.params, refutable });
             if (existing) {
                 // The group's type is the first clause's: keep only the shape every clause has.
                 const first = resolve(existing), next = resolve(t);
@@ -7445,7 +7450,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     { const a = variable(), b = variable(); native("seq", [a, b], b); }
     { const seq = scope.get("seq"); if (seq) {
         setShape(seq.type, { arg: 1 });
-        const summary: Summary = { scope, clauses: [{ index: 0, params: [{ p: "var", name: "a" }, { p: "var", name: "b" }], body: { t: "var", name: "b" }, refutable: new Set() }] };
+        const summary: Summary = { scope, clauses: [{ index: 0, place: 0, params: [{ p: "var", name: "a" }, { p: "var", name: "b" }], body: { t: "var", name: "b" }, refutable: new Set() }] };
         for (let t = resolve(seq.type), n = 0; t.k === "fn" && n < 2; t = resolve(t.output), n++) t.summary = summary;
     } }
     native("toString", [variable()], str);
