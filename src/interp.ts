@@ -6461,17 +6461,14 @@ export class Interpreter {
             const binding = this.env.get(p.tag);
             if (binding) {
                 const type = this.reference(binding);
-                // (Mixed m): a value of any of a union's types.
-                if (type.kind === "type" && type.refine) return p.args.length === 1 && this.refinedPattern(type, p.args[0], v, binds);
-                if (type.kind === "type" && type.choices) return p.args.length === 1 && this.belongsToType(type, v) && this.matchPattern(p.args[0], v, binds);
-                if (p.args.length === 1 && type.kind === "type" && this.counted(type)) return this.matchPattern(p.args[0], this.conform(type, v), binds);
+                // A refinement, a union, a counted type, a list or record of
+                // types, a function type: the typed pattern of it, matched there.
+                if (type.kind === "type" && (type.refine || type.choices) || type.kind === "type" && this.counted(type) || type.kind === "functionType"
+                    || (this.isList(type) || type.kind === "record") && this.isTypeValue(type)) {
+                    return p.args.length === 1 && this.matchPattern({ p: "schema", type: { t: "var", name: p.tag }, value: p.args[0] }, v, binds);
+                }
                 if (p.args.length === 1 && type.kind === "type" && !type.family && !type.alias) {
                     return this.matchPattern({ p: "constr", tag: type.name, args: p.args }, v, binds);
-                }
-                if (p.args.length === 1 && (this.isList(type) || type.kind === "record") && this.isTypeValue(type)) {
-                    const actual = this.dataValue(v);
-                    const input = type.kind === "record" ? this.recordPatternInput(type, actual) : this.isList(actual) ? actual : null;
-                    return input !== null && this.matchPattern(p.args[0], this.conform(type, input), binds);
                 }
                 // A named subtype's takes one of its values, or a plain value it
                 // converts (as (x : Int32) takes 5 and (x : Float) takes 1),
@@ -6493,10 +6490,6 @@ export class Interpreter {
                     }
                     return p.args.length === 1 && !parameters && actual.kind === "variant" && actual.family === type.family &&
                         this.matchPattern(p.args[0], type.family.base ? actual.v[0] : this.conform(type, actual), binds);
-                }
-                if (type.kind === "functionType") {
-                    const f = this.force(v);
-                    return p.args.length === 1 && this.matchesValueType("Function", f) && this.matchPattern(p.args[0], this.conform(type, f), binds);
                 }
             }
         }
