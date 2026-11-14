@@ -155,6 +155,14 @@ no abstract types, every constructor is public. A `Mutable` cell is a reference 
 action that changes the store; a `HashMap` is an association list whose keys
 appear once.
 
+Modules are where the language cannot yet say it. `load` is the prelude's
+(`load file = map parse (intrinsics.readFileFrom (file ++ ".apn"))`), but
+`import` is `intrinsics.import`: a folder's modules (`std.option`) are read and
+run when a field is first used, an effect inside reading a value, which APN
+expresses only as an action. Defining it in APN would take an intrinsic running
+an action when its value is needed, which would let any program hide an effect,
+or importing every module of a folder at once.
+
 ## Dynamic
 
 `Dynamic` is the set of all values. What sets it apart is when its values are
