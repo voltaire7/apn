@@ -182,8 +182,11 @@ interface Entry {
     mono?: boolean;
     // inherited: visible from an enclosing scope (blocks mark every outer entry).
     inherited?: boolean;
-    // builtin: a native or intrinsic from the checker's own root scope.
+    // builtin: a native or intrinsic from the checker's own root scope;
+    // denotes: the one a name bound to it stands for (g = typeOf), whose
+    // typing rule it has (see denotes).
     builtin?: boolean;
+    denotes?: string;
     // opened: the record expression a use opened this name from.
     opened?: Expr;
     // bound: the expression a pattern binding (x <- e, [a, b] = e) took its value from.
@@ -1658,7 +1661,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (e.t === "var") return scope.get(e.name)?.index;
         if (e.t === "block" && e.stmts.length === 1) return index(e.stmts[0], scope);
         // The builtin length of a list is its static length.
-        if (e.t === "app" && e.f.t === "var" && e.f.name === "length" && scope.get("length")?.builtin) {
+        if (e.t === "app" && denotes(e.f, scope) === "length") {
             const t = resolve(inferred.get(e.a) ?? dynamic);
             if (t.k === "list") return t.items ? constant(BigInt(t.items.length)) : t.length;
             return;
@@ -2177,11 +2180,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : module ? `${openHint(module)} to use \`${name}\`` : undefined;
     }
 
-    // Names a parameter list binds; tests: its repeats only test (see bind).
-    type Bound = Set<string> & { tests?: boolean };
-    // Set while a clause of several is read: its repeated names only test.
-    let repeatsTest = false;
-    function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr, bound: Bound = new Set<string>()): void {
+    // The builtin an expression names, itself or through a name bound to it
+    // (g = typeOf): its typing rule is the value's, whatever it is called.
+    function denotes(e: Expr, scope: Scope): string | undefined {
+        if (e.t !== "var") return undefined;
+        const entry = scope.get(e.name);
+        return entry?.builtin ? e.name : entry?.denotes;
+    }
+    function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr, bound = new Set<string>()): void {
         switch (p.p) {
             case "as": {
                 bind(p.left, expected, scope, e, bound);
@@ -2197,12 +2203,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "wildcard":
                 return;
-            // A name met again (f x x, (x : t) (y : t)) is a test the run makes:
-            // in one of several clauses it decides no type, as the call may go to
-            // another clause; in the only one, it must hold.
             case "var":
-                if (!bound.has(p.name)) { bound.add(p.name); scope.set(p.name, { type: expected, mono: true }); }
-                else if (!(bound as Bound).tests) unify(scope.get(p.name)!.type, expected, e);
+                if (bound.has(p.name)) unify(scope.get(p.name)!.type, expected, e);
+                else { bound.add(p.name); scope.set(p.name, { type: expected, mono: true }); }
                 return;
             case "int":
             case "range": {
@@ -3852,15 +3855,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 const a = e.t === "app" ? e.a : e.x;
                 // isType's first argument is a type: a lambda there is read as one.
-                const typeArgument = e.t === "app" && e.f.t === "var" && e.f.name === "isType" && scope.get("isType")?.builtin ? lambdaLiteral(a) : undefined;
+                const rule = denotes(e.f, scope);
+                const typeArgument = e.t === "app" && rule === "isType" ? lambdaLiteral(a) : undefined;
                 if (typeArgument) {
-                    const isType = scope.get("isType")!;
+                    const isType = scope.get((e.f as { name: string }).name)!;
                     lambdaType(typeArgument, scope, new Map());
                     return application(copy(isType.type), { type: variable() }, e);
                 }
                 // typeOf x is the type x has, a list's the list of its items' types,
                 // as at runtime.
-                if (e.t === "app" && e.f.t === "var" && e.f.name === "typeOf" && scope.get("typeOf")?.builtin) {
+                if (e.t === "app" && rule === "typeOf") {
                     // (A copy: matching the type, typeOf x ~ [Int -> ...], decides nothing of x.)
                     const types = (t: Ty): Ty => { const r = resolve(t); return r.k === "list" ? { ...r, element: types(r.element), items: r.items?.map(types) } : { k: "type", value: r }; };
                     return types(copy(infer(a, scope), new Map()));
@@ -3868,7 +3872,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // while [condition] action and for [start, condition, step] action:
                 // code as written; the action reads the names it binds (as code joined
                 // after it does), and the condition is a Bool.
-                const loop = e.t === "app" && e.f.t === "app" && e.f.f.t === "var" && ["while", "for"].includes(e.f.f.name) && scope.get(e.f.f.name)?.builtin ? e.f.f.name : undefined;
+                const looping = e.t === "app" && e.f.t === "app" ? denotes(e.f.f, scope) : undefined;
+                const loop = looping === "while" || looping === "for" ? looping : undefined;
                 if (loop && e.t === "app" && e.f.t === "app") {
                     const shape = loop === "for" ? "[start, condition, step]" : "[condition]";
                     const hint = loop === "for" ? "for [i = 0, i < 10, i = i + 1] { print i }" : "while [n < 10] { ... }";
@@ -4460,6 +4465,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         bound: e.value,
                         // An eager binding's value is fixed where it runs: never re-derived.
                         definition: e.eager ? undefined : e.value,
+                        denotes: denotes(e.value, scope),
                         ...ran ? factsOf(ran) : {},
                     });
                 } else if (e.pattern.p === "constr" && resolve(scope.get(e.pattern.tag)?.type ?? dynamic).k === "type" ||
@@ -6836,8 +6842,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             !!length && (length.t === "placeholder" || length.t === "var" && /^[a-z]/.test(length.name) && !scope.has(length.name));
     }
     function inferFunction(params: Pattern[], body: Expr, parent: Scope, recursiveName?: string, guard?: Expr, given?: Ty[]): Ty {
-        const tests = repeatsTest;
-        repeatsTest = false;
         params = params.map(p => typed(p, parent));
         // A body that is a lambda (f = x -> y -> e is the clause f x = y -> e)
         // is checked with the clause's parameters, as f x y = e is: the same
@@ -6851,7 +6855,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         }
         const scope = new Map(parent), inputs: { type: Ty; binder?: string; coerce: boolean }[] = [];
-        const bound: Bound = Object.assign(new Set<string>(recursiveName ? [recursiveName] : []), { tests });
+        const bound = new Set<string>(recursiveName ? [recursiveName] : []);
         const patternStart = requirements.length;
         const open: boolean[] = [];
         for (const [n, p] of params.entries()) {
@@ -7199,6 +7203,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 ...lazyTop ? { lazyTop } : facts,
                 nonGeneric: captured(new Map([...scope].filter(([key]) => key !== name))),
                 definition: body,
+                denotes: denotes(body, scope),
             });
             return;
         }
@@ -7224,7 +7229,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try { defineGroups(); } finally { definingSelf.splice(definingSelf.indexOf(self), 1); }
         function defineGroups(): void {
         const groups = new Map<string, Ty>();
-        const domain = (t: Ty, seen = new Set<Ty>()): string => {
+        // Inputs a clause ties together (f x x, (x : t) (y : t)) key apart from
+        // free ones: an a -> a clause is its own choice beside an a -> b one.
+        const domain = (t: Ty, seen = new Set<Ty>(), named = new Map<Ty, number>()): string => {
             t = resolve(t);
             if (seen.has(t)) return "recursive";
             seen.add(t);
@@ -7240,8 +7247,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // An empty-list clause is its own choice: merged with a cons clause, its
             // input type would reject every non-empty argument.
             const empty = input.k === "list" && input.items?.length === 0 ? "empty:" : "";
-            return empty + (input.k === "variant" ? input.name : input.k === "var" ? "*" : text(input)) + patterns + ";" +
-                domain(t.output, seen);
+            const variable = input.k === "var" ? `*${named.get(input) ?? named.set(input, named.size).get(input)}` : "";
+            return empty + (input.k === "variant" ? input.name : input.k === "var" ? variable : text(input)) + patterns + ";" +
+                domain(t.output, seen, named);
         };
         const bindsSelf = (p: Pattern): boolean => {
             switch (p.p) {
@@ -7260,9 +7268,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const definition: Definition = { name, clauses };
         const firstKey = new Map<string, string>();
         for (const [index, c] of clauses.entries()) {
-            repeatsTest = clauses.length > 1;
             const t = inferDefinition(definition, false, () => functionType(c.params, c.body, scope, name));
-            repeatsTest = false;
             const head = resultHead(t, c.params.length);
             if (head) recordHead(c.body, head);
             let key = `${c.params.some(bindsSelf) ? "self:" : ""}${domain(t)}`, existing = groups.get(key);
@@ -7533,8 +7539,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // Accepted as a typed parameter of the target type accepts it.
         fits: (target, actual) => {
             budget = STATEMENT_BUDGET;
-            const t = resolve(target as Ty), a = resolve(actual as Ty);
-            return succeeds(() => convert(copy(t.k === "type" ? t.value : t), copy(a), { t: "placeholder" }, false, new Map(), true));
+            const t = resolve(target as Ty), a = resolve(actual as Ty), wanted = resolve(t.k === "type" ? t.value : t);
+            const at: Expr = { t: "placeholder" };
+            // A record type takes a list of its fields' values in order, as a call does.
+            if (wanted.k === "record" && a.k === "list" && a.items) {
+                const fields = [...wanted.fields.values()];
+                return fields.length === a.items.length && succeeds(() => {
+                    const vars = new Map<Ty, Ty>();
+                    fields.forEach((field, n) => convert(copy(field, vars), copy(a.items![n]), at, false, new Map(), true));
+                });
+            }
+            return succeeds(() => convert(copy(wanted), copy(a), at, false, new Map(), true));
         },
         concrete: type => !variables(resolve(type as Ty)).size,
     });

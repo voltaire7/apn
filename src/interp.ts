@@ -6327,6 +6327,10 @@ export class Interpreter {
             this.env = scope;
             try { type = this.schemaPatternType(p.type, true); } finally { this.env = caller; }
             type = this.asType(type) ?? type;
+            // Every typed pattern first asks whether the checker's type for the
+            // value fits it, so a run takes the clause the checker chose; then
+            // whether e : T converts the value (converts), each kind below.
+            if (!this.staticallyFits(p.type, v)) return false;
             if (type.kind === "type" && this.counted(type)) {
                 return this.converts(type, v) && this.matchPattern(p.value, this.conform(type, v), binds);
             }
@@ -6348,14 +6352,14 @@ export class Interpreter {
                 // (List Int xs): a list, its elements converted as they are used
                 // (as a variant's payload is), so an infinite one matches too.
                 if (this.isListType(type)) {
-                    if (!this.isList(this.demand(actual)) || !this.staticallyFits(p.type, v)) return false;
+                    if (!this.isList(this.demand(actual))) return false;
                     return this.matchPattern(p.value, this.conform(type, actual), binds);
                 }
                 // (IO T a): an action, what it yields made a T when it runs; a
                 // return no context has decided yet is one.
                 if (this.isIOType(type)) {
                     const action = this.demand(actual);
-                    if (action.kind !== "io" && action.kind !== "pending" || !this.staticallyFits(p.type, v)) return false;
+                    if (action.kind !== "io" && action.kind !== "pending") return false;
                     return this.matchPattern(p.value, this.conform(type, this.realize(action, type)), binds);
                 }
                 if (!type.family) return this.matchPattern({ p: "constr", tag: type.name, args: [p.value] }, actual, binds);
@@ -6366,7 +6370,6 @@ export class Interpreter {
                     if (made) variant = actual = this.dataValue(made);
                 }
                 if (variant.kind !== "variant" || variant.family !== type.family) return false;
-                if (type.arguments?.length && !this.staticallyFits(p.type, v)) return false;
             }
             if (type.kind === "record") {
                 const input = this.recordPatternInput(type, this.demand(actual));
@@ -6378,7 +6381,7 @@ export class Interpreter {
             if ((this.isList(type) && !this.isList(this.demand(actual))) || (type.kind === "functionType" && !this.matchesValueType("Function", actual))) return false;
             // An endless type ([Int..]) takes no list of written items: what the
             // checker typed the value decides, as for (List Int xs).
-            if (this.repeatedType(type) && (this.demand(actual).kind === "list" || !this.staticallyFits(p.type, v))) return false;
+            if (this.repeatedType(type) && this.demand(actual).kind === "list") return false;
             // A written list of types ([Int,Int], which is Vect 2 Int) takes what
             // converts to it; another does not match.
             if (this.isList(type) && !this.repeatedType(type) && !this.hasSchemaCapture(type) && !this.converts(type, actual)) return false;

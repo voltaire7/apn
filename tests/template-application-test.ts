@@ -178,6 +178,11 @@ for (const checked of [true, false]) for (const [source, expected] of [
     ['f (ys : Vect 2 Int) = ys\nf _ = 0\n[f [1], f ["a","b"], f [1,2], f [1.0,2], f [1,2.5]]', '[0,0,[1,2],[1,2],0]'],
     ['g (ys : [Float,Float]) = ys\nh (ys : Vect 2 Float) = ys\n[g [1,2], h [1,2]]', '[[1.0,2.0],[1.0,2.0]]'],
     ['p = [x : Int]\nf (v : p) = v.x\nf _ = 0\n[f [x = 3], f [x = "a"], f 5, f [x = 2.0]]', '[3,0,0,2]'],
+    // A builtin's typing rule is its value's, whatever name it is bound to.
+    ['g = typeOf\nhead (g [1,"a"])', 'Int'],
+    ['len = length\nf (xs : Vect (len [1,2]) Int) = 1\nf _ = 0\n[f [1,2], f [1]]', '[1,0]'],
+    ['w = while\nn = Mutable 0\nw [n < 3] (set n (n + 1))\nn + 0', '3'],
+    ['i = isType\n[i (a -> a) (x -> x), i Int 1]', '[True,True]'],
     // A repeated name is a test the run makes, deciding no type.
     ['f x x = True\nf x y = False\n[f 1 1, f 1 2, f 1 "a"]', '[True,False,False]'],
     ['same (x : t) (y : t) = True\nsame x y = False\n[same 1 2, same 1 True]', '[True,False]'],
