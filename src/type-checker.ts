@@ -1908,9 +1908,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // So does a refinement of one (Int32 = (n : Int) | ...), its condition kept.
     function namedSubtype(name: string, t: Ty): Ty | undefined {
         const type = resolve(t);
-        let base = type.k === "type" ? resolve(type.value) : undefined;
-        if (type.k === "type" && type.refined && base?.k === "variant" && base.base) base = resolve(base.base);
-        if (base?.k !== "atom" || !NAMED_BASES.has(base.name)) return undefined;
+        const base = type.k === "type" ? resolve(type.value) : undefined;
+        // A refinement of a named one (Small = (n : Positive) | n < 10) is a
+        // subtype of it, its base, which ends in a scalar.
+        let scalar = base;
+        if (type.k === "type" && type.refined) while (scalar?.k === "variant" && scalar.base) scalar = resolve(scalar.base);
+        if (scalar?.k !== "atom" || !NAMED_BASES.has(scalar.name)) return undefined;
         const refined = type.k === "type" && type.refined ? { refined: { ...type.refined, name } } : {};
         return { k: "type", value: { k: "variant", name, args: [], base }, ...refined };
     }
@@ -3172,6 +3175,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // F = Float32 rounds like Float32 .1. Another name must be unwrapped.
             if (t.k === "variant" && t.base) {
                 const given = resolve(argument.type);
+                // A value of a type it refines (a Positive given to Small) is one
+                // of its base's, as at runtime; any other must be unwrapped.
+                const refines = (x: Ty | undefined): boolean => { const r = x && resolve(x); return r?.k === "variant" && given.k === "variant" && (r.name === given.name || refines(r.base)); };
+                if (given.k === "variant" && given.base && given.name !== t.name && refines(t.base)) { application({ k: "type", value: t.base }, argument, e); return t; }
                 if (given.k === "variant" && given.base) { if (given.name !== t.name) problem(`${t.name} requires explicit unwrapping of ${given.name}`, e); return t; }
                 application({ k: "type", value: t.base }, argument, e);
                 return t;
@@ -4537,7 +4544,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (["var", "dynamic", "operation", "union"].includes(given.k)) return [0, 1];
             if (!p.typed) return [0, 0];
             const own = resolve(scope.get(tag)?.type ?? dynamic), value = own.k === "type" ? resolve(own.value) : undefined;
-            // A refinement's values are its base's in the checker: which it is waits for the run.
             if (value?.k !== "variant") return [0, 1];
             return value.name === named ? [1, 1] : [0, 0];
         }
@@ -7118,8 +7124,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const [only] = clauses, to = clauses.length === 1 && !only.params.length && only.body.t === "var" ? constructorNames.get(only.body.name) ?? scope.get(only.body.name)?.ownTag : undefined;
         if (to) constructorNames.set(name, to); else constructorNames.delete(name);
         const defined = scope.get(name), named = defined && namedSubtype(name, defined.type);
-        if (defined && named) scope.set(name, { ...defined, type: named });
-        // A refinement is known by its name in what it rejects.
+        // A scalar type's refinement is a named type of its own (Pos = (n :
+        // Int) | n > 0), as at runtime; any refinement is known by its name in
+        // what it rejects (namedSubtype keeps it for one of a scalar).
+        if (defined && named) { scope.set(name, { ...defined, type: named }); return; }
         const refined = defined && resolve(defined.type);
         if (refined && refined.k === "type" && refined.refined) scope.set(name, { ...defined, type: { ...refined, refined: { ...refined.refined, name } } });
     }
