@@ -163,6 +163,7 @@ Read the relevant doc and its tests before changing an area:
 | Templates, type aliases, zero initialization | `docs/templates-and-types.md`, `docs/zero-initialization.md` | `tests/template-application-test.ts`, `tests/zero-initialization-test.ts` |
 | Patterns and function contracts | `docs/pattern-functions.md` | `tests/pattern-functions-test.ts`, `tests/dotted-pattern-test.ts` |
 | Arrays and numeric collections | `docs/arrays.md` | `tests/array-test.ts` |
+| Intrinsics (built-in types and natives, in APN) | `docs/intrinsics.md` | `tests/intrinsics-test.ts` |
 | Standard library | `docs/standard-library.md`, `docs/combinators.md` | `tests/standard-library-test.ts`, `tests/http-test.ts`; also run `deno test --allow-read --allow-net tests/http-test.ts` |
 | REPL | `docs/repl.md` | `tests/repl-*-test.ts`, `tests/repl-interrupt-pty.py` |
 | Error rendering | `docs/errors.md` | `tests/cli-options-test.ts` |
