@@ -858,8 +858,10 @@ until the action runs. The effectful builtins all return actions: `print`,
 error, as in Haskell: `print (readFile "f")`, `print [print "hi"]`, `toString` of one, or
 the REPL echoing a list holding one (run it first: `x <- readFile "f"`, then `print x`).
 The check reports it before the run where it sees the action. `typeOf` gives its type:
-`typeOf (print 1)` is `IO []`, and `probe` shows code, a list's items as written (`probe
-[print "hi"]` is `[print "hi"]`).
+`typeOf (print 1)` is `IO []`, and a do-block yields what its last statement does,
+known without running it when that statement reads no name the block binds (`typeOf
+{ print 1; return 5 }` is `IO Int`; `{ x <- readFile "f"; return x }` is `IO a`). `probe`
+shows code, a list's items as written (`probe [print "hi"]` is `[print "hi"]`).
 
 Actions run in exactly two places:
 

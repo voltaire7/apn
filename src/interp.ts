@@ -1911,7 +1911,7 @@ export class Interpreter {
                                 // The rest of the block runs in the scope as it is here.
                                 const block = e, start = si, here = this.env;
                                 if (!value || value.kind === "io") {
-                                    r = { kind: "io", run: () => this.runDoBlock(block, here, start, value) };
+                                    r = { kind: "io", result: this.blockResult(block, here, start), run: () => this.runDoBlock(block, here, start, value) };
                                     break;
                                 }
                                 if (value.kind === "pending") {
@@ -3444,9 +3444,34 @@ export class Interpreter {
     }
 
 
+    // What a do-block yields, known without running it when its last statement
+    // reads no name the block binds: { print 1; return 5 } yields an Int, its
+    // last statement evaluated (an action made, never run) where the block runs.
+    // A definition last yields []; one reading a bound name (x <- e; return x)
+    // is known only by running it.
+    private blockResult(block: Extract<Expr, { t: "block" }>, here: Env, start: number): () => string {
+        return () => {
+            const last = block.stmts[block.stmts.length - 1];
+            if (!last || last.t === "stmDef" || last.t === "typeDef" || last.t === "patDef" && !last.eager) return "[]";
+            if (last.t === "patDef") return "a";
+            const bound = new Set(block.stmts.slice(start).flatMap(s => s.t === "patDef" ? patternVariables(s.pattern) : s.t === "stmDef" ? [s.name] : []));
+            if (mentions(last, bound)) return "a";
+            const caller = this.env;
+            this.env = here;
+            try {
+                const made = this.demand(this.eval(last));
+                if (made.kind === "io") return typeof made.result === "function" ? made.result() : made.result ?? "a";
+                if (made.kind === "pending" && made.step.op === "return") return this.typeText(made.step.value);
+                return "a";
+            } catch (error) {
+                if (error instanceof APNError) return "a";
+                throw error;
+            } finally { this.env = caller; }
+        };
+    }
     // A do-block in a monad other than IO: its statements chained with >>=.
     private desugarDo(e: Extract<Expr, { t: "block" }>, env: Env, start: number, target: Value, first?: Value): Value {
-        if (this.isIOType(target)) return { kind: "io", run: () => this.runDoBlock(e, env, start, first) };
+        if (this.isIOType(target)) return { kind: "io", result: this.blockResult(e, env, start), run: () => this.runDoBlock(e, env, start, first) };
         const lastAction = (what: string): never => {
             throw new APNError("runtime", `the last statement of a do-block must be an action, not ${what}`, { hint: "end the block with `return x`" });
         };
