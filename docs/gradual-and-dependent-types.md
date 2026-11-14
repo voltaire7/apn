@@ -284,7 +284,11 @@ cellType 1 "text"                      # String
 What evaluation cannot decide is checked when the program runs, never
 guessed: a value depending on a parameter or on program input, one that
 reads a `Mutable` cell (its contents depend on when it runs), or one that does
-not finish within the step budget.
+not finish within the step budget. The budget is 300000 steps per value;
+`apn --check-budget=N` sets it, and `--check-budget=none` lifts it, so the
+checker decides what takes longer, and runs forever on what never finishes
+(`loopy n = loopy (n + 1)` in a type), where by default the run would. Either
+way checking performs no effect: the budget bounds work, not what the code may do.
 
 - A type chosen by an undecided condition is one of its choices. A value
   must fit at least one (`SelectedType (n > 3) [1]` is a static error); the

@@ -637,9 +637,15 @@ const STRICT_NATIVES = new Set([
     "head", "tail", "null", "length", "chars", "fromChars", "upper", "lower", "toString", "intToString",
     "parse", "print", "echo", "emit", "debug", "assert", "set", "seq", "readFile", "use",
 ]);
-// Static evaluation limits: nesting (recursion) depth, and work per root value.
-const EVALUATION_DEPTH = 5000;
-const EVALUATION_BUDGET = 300000;
+// Static evaluation limits: nesting (recursion) depth, and work per root value
+// (apn --check-budget=N sets the work; none lifts both, so checking code that
+// never finishes never finishes either, though it still performs no effect).
+let EVALUATION_DEPTH = 5000;
+let EVALUATION_BUDGET = 300000;
+export function setCheckBudget(steps: number): void {
+    EVALUATION_BUDGET = steps;
+    EVALUATION_DEPTH = steps === Infinity ? Infinity : 5000;
+}
 const SYMBOLIC_BUDGET = 200;
 // A value no check has asked for yet is computed now only if it is quick.
 const QUICK_BUDGET = 2000;

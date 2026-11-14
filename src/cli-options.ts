@@ -17,6 +17,9 @@ export const CLI_HELP = `Usage:
                                   ([1, 2], [x = 1, y = 2], x = 1, { x }, (x))
   apn --no-prelude ...            Any of the above without the prelude: only
                                   intrinsics.* and what the program defines
+  apn --check-budget=N ...        Let the checker evaluate N steps per value (default
+                                  300000) before leaving it to the run; none lifts
+                                  the limit (checking then may not finish)
 
 Files and REPL submissions are statically checked by default.
 Use -- before a filename beginning with '-'. Options after FILE.apn are
@@ -24,13 +27,21 @@ script arguments, not APN options. Type :help inside the REPL for language help.
 The apn launcher also accepts --allow-ffi[=PATH,...] as its first argument.`;
 
 /** Validate APN options without interpreting arguments belonging to a script. */
-export function readCliOptions(input: string[]): { args: string[]; literalFile: boolean; loose: boolean; noPrelude: boolean; error?: string } {
-    // --loose and --no-prelude come first, each once, in either order.
-    const leading = new Set<string>();
+export function readCliOptions(input: string[]): { args: string[]; literalFile: boolean; loose: boolean; noPrelude: boolean; checkBudget?: number; error?: string } {
+    // --loose, --no-prelude and --check-budget=N come first, each once, in any order.
+    const leading = new Map<string, string>();
     let rest = input;
-    while (["--loose", "--no-prelude"].includes(rest[0]) && !leading.has(rest[0])) { leading.add(rest[0]); rest = rest.slice(1); }
+    for (;;) {
+        const [flag, value] = (rest[0] ?? "").split(/=(.*)/s);
+        if (!["--loose", "--no-prelude", "--check-budget"].includes(flag) || leading.has(flag) || (flag === "--check-budget") !== (value !== undefined)) break;
+        leading.set(flag, value);
+        rest = rest.slice(1);
+    }
+    const budget = leading.get("--check-budget");
+    const checkBudget = budget === undefined ? undefined : budget === "none" ? Infinity : /^[1-9][0-9]*$/.test(budget) ? Number(budget) : NaN;
+    if (Number.isNaN(checkBudget)) return { args: rest, literalFile: false, loose: false, noPrelude: false, error: "--check-budget takes a number of steps or none (--check-budget=1000000)" };
     const { args, literalFile, error } = readMode(rest);
-    return { args, literalFile, loose: leading.has("--loose"), noPrelude: leading.has("--no-prelude"), ...error ? { error } : {} };
+    return { args, literalFile, loose: leading.has("--loose"), noPrelude: leading.has("--no-prelude"), ...checkBudget === undefined ? {} : { checkBudget }, ...error ? { error } : {} };
 }
 function readMode(input: string[]): { args: string[]; literalFile: boolean; error?: string } {
     const args = [...input];
@@ -40,7 +51,7 @@ function readMode(input: string[]): { args: string[]; literalFile: boolean; erro
     const first = args[0];
     const result = { args, literalFile: false };
     if (!first || !first.startsWith("-")) return result;
-    if (first === "--loose" || first === "--no-prelude") return { ...result, error: `${first} is given once, before the rest` };
+    if (first === "--loose" || first === "--no-prelude" || first.startsWith("--check-budget")) return { ...result, error: `${first.split("=")[0]} is given once, before the rest` };
     if (["--help", "-h", "--lsp", "--version"].includes(first)) {
         return args.length === 1 ? result : { ...result, error: `${first} does not accept arguments` };
     }

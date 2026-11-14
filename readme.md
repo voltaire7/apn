@@ -101,7 +101,8 @@ Spacing is strict (`x = 1`, `[1,2,3]`, `[x = 1, y = 2]`, `{ x }`) and lines hold
 characters; put `--loose`
 first (`apn --loose file.apn`) to relax it. `apn --no-prelude file.apn` runs (and
 checks) a file without the prelude: only `intrinsics.*` and what it defines, so even `+`
-is the program's to bind. `apn --version` prints the version.
+is the program's to bind. `apn --check-budget=N` (or `none`) sets how many steps the
+checker evaluates a value before leaving it to the run. `apn --version` prints the version.
 Try live diagnostics, completion, hover, and an outline in a temporary Neovim
 session with `./editors/neovim/try-apn examples/editor-playground.apn`.
 The launcher loads your usual Neovim/LazyVim setup; its configuration files stay untouched.
