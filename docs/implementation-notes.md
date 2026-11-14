@@ -693,7 +693,10 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   pattern names, 0 for a lossless conversion or no type named) using static
   argument types, and decides whether it definitely matches or fails; equal
   scores are ordered by `clausePlaces`, each side reading types through its
-  own `Contains` (`containsPattern` at runtime, `builtinContains` here). Choices whose clauses all fail, or all come
+  own `Contains` (`containsPattern` at runtime; here `containsIn`, built-in
+  names through `builtinContains`, a program's types by their declarations).
+  The checker reads a refinement as its base, so which of a refinement's and
+  its base's clauses a value takes waits for the run. Choices whose clauses all fail, or all come
   certainly after a definitely matching clause, are dropped. Keep
   `patternScore` in step with the runtime's scoring.
 - A deferred call (`deferredCall`) keeps what is known about its argument's

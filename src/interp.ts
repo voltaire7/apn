@@ -3666,7 +3666,14 @@ export class Interpreter {
         }
         const binding = this.env.get(pattern.tag);
         if (binding && this.counted(this.reference(binding))) return this.isList(this.dataValue(arg)) ? 1 : -1000;
-        if (!this.builtinType(pattern.tag)) return 0;
+        if (!this.builtinType(pattern.tag)) {
+            // A program's own type takes a value of it as it is; a constructor
+            // pattern, a value that constructor made.
+            const type = binding && this.reference(binding);
+            if (pattern.typed && type && type.kind === "type") return this.belongsToType(type, arg) ? 1 : 0;
+            const made = this.dataValue(arg);
+            return made.kind === "variant" && made.tag === pattern.tag ? 1 : 0;
+        }
         // An undecided call fits a typed pattern as an exact type would.
         const undecided = this.reference(arg);
         if (undecided.kind === "pending" && undecided.step.op === "call") return 1;
@@ -3693,8 +3700,22 @@ export class Interpreter {
         const literal: Value | undefined = p.p === "int" ? mkInt(p.v) : p.p === "float" ? { kind: "float", v: p.v }
             : p.p === "string" ? { kind: "string", v: p.v } : p.p === "char" ? { kind: "char", v: p.v } : p.p === "bool" ? mkBool(p.v) : undefined;
         if (literal) return q.p === "constr" && !!q.args.length && this.belongsToType(t, literal);
+        const holds = (q as { args: Pattern[] }).args.length > 0;
+        // A constructor's pattern (Circle r, None) is within its type's.
+        if (p.p === "constr" && !p.typed) {
+            const bound = this.env.get(p.tag), made = bound && this.reference(bound);
+            const family = made?.kind === "native" || made?.kind === "variant" ? made.family : undefined;
+            if (family) return holds && t.kind === "type" && t.family === family;
+        }
         const s = typeOf(p);
-        return !!s && (q as { args: Pattern[] }).args.length === (p as { args: Pattern[] }).args.length && (this.sameType(s, t) || this.within(s, t));
+        if (!s || holds !== (p as { args: Pattern[] }).args.length > 0) return false;
+        // A named type's pattern is within its base's, which takes its values
+        // too (Money within Float), as a type within another is.
+        for (let x: Value | undefined = s, n = 0; x && n < 32; n++) {
+            if (this.sameType(x, t) || this.within(x, t)) return true;
+            x = x.kind === "type" && x.family?.base ? this.reference(x.family.base) : undefined;
+        }
+        return false;
     };
     // How specifically a function given as a match alternative takes a value:
     // as its best clause does.

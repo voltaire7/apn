@@ -195,6 +195,11 @@ for (const checked of [true, false]) for (const [source, expected] of [
     ['h (x : Int8) = "int8"\nh (x : Int) = "int"\nh _ = "any"\n[h 5, h (5 : Int8), h "a"]', '["int","int8","any"]'],
     ['g (x : Int8) = "int8"\ng _ = "other"\n[g 5, g 500]', '["int8","other"]'],
     ['d Number = "number"\nd Int = "int"\n[d Int, d Float]', '["int","number"]'],
+    // A program's own types too, the checker choosing as the run does: a named
+    // type's pattern within its base's, a constructor's within its type's.
+    ['Money = Float\nf (x : Float) = 1\nf (x : Money) = "m"\ng (s : String) = s\nh (n : Int) = n\n[g (f (1.5 : Money)), h (f 1.5)]', '["m",1]'],
+    ['Shape = Circle Float | Square Float\nf (s : Shape) = 1\nf (Circle r) = "c"\ng (s : String) = s\nh (n : Int) = n\n[g (f (Circle 1.0)), h (f (Square 1.0))]', '["c",1]'],
+    ['Pos = (n : Int) | n > 0\nf (x : Int) = "i"\nf (x : Pos) = "p"\n[f 3, f (3 : Pos)]', '["i","p"]'],
     // A repeated name is a test the run makes, deciding no type.
     ['f x x = True\nf x y = False\n[f 1 1, f 1 2, f 1 "a"]', '[True,False,False]'],
     ['same (x : t) (y : t) = True\nsame x y = False\n[same 1 2, same 1 True]', '[True,False]'],

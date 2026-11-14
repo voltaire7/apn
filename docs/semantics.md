@@ -1509,7 +1509,9 @@ add (x : Number) (y : Number) = x + y
 
 A clause is tried before another when its patterns match only values the
 other's match: a type is the set of its values, so `0` before `(x : Int)`
-before `(x : Number)` before `x`, `(x : Money)` before `(x : Float)`, as
+before `(x : Number)` before `x`, `(x : Money)` before `(x : Float)` (a
+named type's pattern takes only its values, its base's those too), `Circle r`
+before `(s : Shape)`, as
 `[x,y]` before `x :: rest` before `xs`, `Some x` before `_`, `f x x` before
 `f x y`, and a guarded clause before the same patterns unguarded. One thing
 comes before that: how many arguments a clause takes as they are, each a

@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, type Binding, clausePlaces, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, type Binding, clausePlaces, type Contains, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -4528,6 +4528,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function patternScore(p: Pattern, argument: Entry): [number, number] {
         if (["int", "float", "bool", "string", "char"].includes(p.p)) return [1, 1];
         const tag = wholeList(p) ? "List" : p.p === "constr" ? p.tag : "";
+        // A program's own type, or a constructor's pattern: 1 for a value of
+        // it (one that constructor made) as it is, which the static type may
+        // tell; 0 otherwise.
+        if (p.p === "constr" && !TYPE_NAMES.includes(tag)) {
+            const given = resolve(argument.type), named = given.k === "variant" ? given.name : undefined;
+            if (!p.typed && argument.tag) return argument.tag === tag ? [1, 1] : [0, 0];
+            if (["var", "dynamic", "operation", "union"].includes(given.k)) return [0, 1];
+            if (!p.typed) return [0, 0];
+            const own = resolve(scope.get(tag)?.type ?? dynamic), value = own.k === "type" ? resolve(own.value) : undefined;
+            // A refinement's values are its base's in the checker: which it is waits for the run.
+            if (value?.k !== "variant") return [0, 1];
+            return value.name === named ? [1, 1] : [0, 0];
+        }
         if (!TYPE_NAMES.includes(tag)) return [0, 0];
         const c = category(argument.type);
         if (tag === "Dynamic") return [1, 1];
@@ -5302,6 +5315,45 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function readPatterns(s: unknown, scope: Scope): void {
         readStatementPatterns(s, name => boundAs(name, scope));
     }
+    // Whether a pattern naming a type takes every value another does, in
+    // scope, as at runtime (Interpreter.containsPattern): a built-in type by
+    // its name (builtinContains); a program's, by its declaration: a
+    // constructor's pattern is within its type's, and a named type's within
+    // its base's (Money = Float within Float, a refinement within what it refines).
+    const containers = new WeakMap<Scope, Contains>();
+    function containsIn(scope: Scope): Contains {
+        const known = containers.get(scope);
+        if (known) return known;
+        const typeName = (x: Pattern) => x.p === "constr" && (x.typed && x.args.length === 1 || !x.args.length) ? x : undefined;
+        const declared = (name: string) => { const t = resolve(scope.get(name)?.type ?? dynamic); return t.k === "type" ? resolve(t.value) : undefined; };
+        const nameOf = (t: Ty | undefined) => t?.k === "variant" || t?.k === "atom" ? t.name : undefined;
+        const contains: Contains = (q, p) => {
+            const builtin = builtinContains(q, p);
+            const typed = typeName(q);
+            if (!typed || builtin !== undefined && TYPE_NAMES.includes(typed.tag) && !(p.p === "constr" && !TYPE_NAMES.includes(p.tag))) return builtin;
+            const holds = typed.args.length > 0, own = declared(typed.tag);
+            if (!own && !TYPE_NAMES.includes(typed.tag)) return undefined;
+            if (p.p === "constr" && !p.typed) {
+                const entry = scope.get(p.tag);
+                if (entry && isConstructor(entry)) {
+                    let made = resolve(entry.type);
+                    while (made.k === "fn") made = resolve(made.output);
+                    return holds && nameOf(made) !== undefined && nameOf(made) === nameOf(own);
+                }
+            }
+            const other = typeName(p);
+            if (!other || holds !== other.args.length > 0) return builtin ?? false;
+            for (let name: string | undefined = other.tag, n = 0; name && n < 32; n++) {
+                if (name === typed.tag) return true;
+                if (TYPE_NAMES.includes(name) && TYPE_NAMES.includes(typed.tag)) return !!builtinContains(typed, { ...other, tag: name });
+                const value = declared(name), next = value?.k === "variant" ? nameOf(value.base && resolve(value.base)) : nameOf(value);
+                name = next !== name ? next : undefined;
+            }
+            return false;
+        };
+        containers.set(scope, contains);
+        return contains;
+    }
     // What a name is bound to in scope, in the terms the pattern rules use, as
     // at runtime (Interpreter.binding).
     function boundAs(name: string, scope: Scope): Binding {
@@ -5859,13 +5911,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return settle(matchStep(match, env, scope, depth));
     }
     function matchStep(match: CoreMatch, env: Map<string, Known>, scope: Scope, depth: number): Known | Tail | undefined {
-        const clauses = matchClauses(match);
+        const clauses = matchClauses(match, scope);
         return clauses && callStep({ scope, clauses }, [evaluateKnown(match.value, env, scope, depth) ?? {}], depth, new Map(env));
     }
     // A match's alternatives as clauses (none when one is guarded), made once.
     const alternativeClauses = new WeakMap<CoreMatch, Summary["clauses"] | null>();
-    function matchClauses(match: CoreMatch): Summary["clauses"] | undefined {
-        const places = clausePlaces(match.alternatives, builtinContains);
+    function matchClauses(match: CoreMatch, scope: Scope): Summary["clauses"] | undefined {
+        const places = clausePlaces(match.alternatives, containsIn(scope));
         if (!alternativeClauses.has(match)) alternativeClauses.set(match, match.alternatives.some(x => x.guard) ? null : match.alternatives.map(({ params, body }, index) => {
             const names = params.flatMap(patternNames);
             return { index, place: places[index], params, body, refutable: new Set(names.filter((name, i) => names.indexOf(name) !== i)) };
@@ -5927,7 +5979,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         bind(st.name, once(() => evaluateKnown(st.clauses[0].body, before, scope, depth)));
                         continue;
                     }
-                    const places = clausePlaces(st.clauses, builtinContains);
+                    const places = clausePlaces(st.clauses, containsIn(scope));
                     const summary: Summary = { scope, clauses: st.clauses.map((c, index) => {
                         const names = c.params.flatMap(patternNames);
                         return { index, place: places[index], params: c.params, body: c.body, refutable: new Set([st.name, ...names.filter((x, i) => names.indexOf(x) !== i)]) };
@@ -6442,6 +6494,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (p.p === "range") return !!argument.index && !argument.index.terms.size && argument.index.constant >= p.lo && argument.index.constant <= p.hi;
         const n = naturalArgument(p, argument);
         if (n !== undefined) return p.p === "constr" && (p.tag === "Z" ? n === 0n : n > 0n && irrefutable(p.args[0]));
+        // A value of a program's own type, as it is, binding it whole.
+        if (p.p === "constr" && p.typed && p.args.length === 1 && !TYPE_NAMES.includes(p.tag)) return score === 1 && irrefutable(p.args[0]);
         // A constructor the argument was visibly built with, its fields bound plainly.
         if (p.p === "constr" && !TYPE_NAMES.includes(p.tag)) return argument.tag === p.tag && p.args.every(irrefutable);
         // A certain member or lossless conversion (a conversion's score is
@@ -6777,7 +6831,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The alternative a value known enough certainly takes: the only one that
     // may, as among clauses, certainly matching and unguarded.
     function takenAlternative(value: Expr, input: Ty, alternatives: PatternLambda[], scope: Scope): number | undefined {
-        const places = clausePlaces(alternatives, builtinContains);
+        const places = clausePlaces(alternatives, containsIn(scope));
         const clauses = alternatives.map(({ params }, index) => {
             const names = params.flatMap(patternNames);
             return { index, place: places[index], params, refutable: new Set(names.filter((x, n) => names.indexOf(x) !== n)) };
@@ -6927,7 +6981,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : p.p === "constr" && p.args.length === 1 && p.args[0].p === "var" ? { name: p.args[0].name, exact: false }
             : { exact: false });
         const shape = shapeOf(body, named, scope);
-        const matched = matchedClauses(params, body, !!parent.get("~")?.builtin) ?? [{ params, body }], places = clausePlaces(matched, builtinContains);
+        const matched = matchedClauses(params, body, !!parent.get("~")?.builtin) ?? [{ params, body }], places = clausePlaces(matched, containsIn(parent));
         const summary: Summary = { scope: parent, clauses: matched.map((c, index) => {
             const all = c.params.flatMap(patternNames);
             return { index, place: places[index], params: c.params, body: c.body, refutable: new Set([...recursiveName ? [recursiveName] : [], ...all.filter((x, n) => all.indexOf(x) !== n)]) };
@@ -7285,7 +7339,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 default: return false;
             }
         };
-        const orders = new Map<string, ClauseOrder[]>(), places = clausePlaces(clauses, builtinContains);
+        const orders = new Map<string, ClauseOrder[]>(), places = clausePlaces(clauses, containsIn(scope));
         const definition: Definition = { name, clauses };
         const firstKey = new Map<string, string>();
         for (const [index, c] of clauses.entries()) {
