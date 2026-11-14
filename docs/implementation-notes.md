@@ -688,9 +688,12 @@ Behavior: `docs/gradual-and-dependent-types.md`.
 - Overload choices carry their clauses (`ClauseOrder`: source index, patterns,
   names that make a variable refutable); partial applications collect the
   call's arguments (`callArgs`). For a complete call, `rankClause` gives each
-  clause a score interval from `patternScore`, which mirrors the `clauseFn`
-  scoring in `interp.ts` using static argument types, and decides whether it
-  definitely matches or fails. Choices whose clauses all fail, or all come
+  clause a score interval from `patternScore`, which mirrors the run's
+  `patternScore` (1 for an argument taken as it is by a type or literal its
+  pattern names, 0 for a lossless conversion or no type named) using static
+  argument types, and decides whether it definitely matches or fails; equal
+  scores are ordered by `clausePlaces`, each side reading types through its
+  own `Contains` (`containsPattern` at runtime, `builtinContains` here). Choices whose clauses all fail, or all come
   certainly after a definitely matching clause, are dropped. Keep
   `patternScore` in step with the runtime's scoring.
 - A deferred call (`deferredCall`) keeps what is known about its argument's

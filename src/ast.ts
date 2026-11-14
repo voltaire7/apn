@@ -467,48 +467,60 @@ export type PatternHead = { kind: "type"; arity: number } | { kind: "constructor
 // Clauses (a match's alternatives too) are tried most specific first: one
 // whose patterns match only values another's match goes before it, wherever
 // either was written; patterns neither of which contains the other keep the
-// order they were written in. covers(q, p): q matches every value p matches,
-// from the patterns alone (a name its clause repeats tests, so takes less).
-function covers(q: Pattern, p: Pattern, qTests: Set<string>, pTests: Set<string>): boolean {
-    if (p.p === "as") return covers(q, p.left, qTests, pTests) || covers(q, p.right, qTests, pTests);
+// order they were written in. covers(q, p): q matches every value p matches
+// (a name its clause repeats tests, so takes less). A pattern naming a type
+// takes what the type holds, which where it runs decides (Contains: a type
+// within it, Int within Number; a literal of it): types are sets of values,
+// and a more specific one is a subset.
+export type Contains = (q: Pattern, p: Pattern) => boolean | undefined;
+function covers(q: Pattern, p: Pattern, qTests: Set<string>, pTests: Set<string>, contains?: Contains): boolean {
+    if (p.p === "as") return covers(q, p.left, qTests, pTests, contains) || covers(q, p.right, qTests, pTests, contains);
+    const typed = contains?.(q, p);
+    if (typed !== undefined) {
+        const inner = (x: Pattern) => x.p === "constr" && x.args.length ? x.args[x.args.length - 1] : x;
+        return typed && (q.p !== "constr" || !q.args.length || covers(inner(q), inner(p), qTests, pTests, contains));
+    }
     switch (q.p) {
         case "wildcard": return true;
         case "var": return !qTests.has(q.name);
-        case "as": return covers(q.left, p, qTests, pTests) && covers(q.right, p, qTests, pTests);
-        case "typeBind": return !qTests.has(q.name) && covers(q.value, p.p === "typeBind" ? p.value : p, qTests, pTests);
+        case "as": return covers(q.left, p, qTests, pTests, contains) && covers(q.right, p, qTests, pTests, contains);
+        case "typeBind": return !qTests.has(q.name) && covers(q.value, p.p === "typeBind" ? p.value : p, qTests, pTests, contains);
         case "int": case "float": case "bool": case "string": case "char":
             return p.p === q.p && String(p.v) === String(q.v);
         case "range": return p.p === "int" ? p.v >= q.lo && p.v <= q.hi : p.p === "range" && p.lo >= q.lo && p.hi <= q.hi;
-        case "list": return p.p === "list" && p.v.length === q.v.length && q.v.every((x, n) => covers(x, p.v[n], qTests, pTests));
+        case "list": return p.p === "list" && p.v.length === q.v.length && q.v.every((x, n) => covers(x, p.v[n], qTests, pTests, contains));
         case "cons":
-            if (p.p === "cons") return (p.op ?? "::") === (q.op ?? "::") && covers(q.head, p.head, qTests, pTests) && covers(q.tail, p.tail, qTests, pTests);
-            return !q.op && p.p === "list" && p.v.length > 0 && covers(q.head, p.v[0], qTests, pTests) && covers(q.tail, { p: "list", v: p.v.slice(1) }, qTests, pTests);
+            if (p.p === "cons") return (p.op ?? "::") === (q.op ?? "::") && covers(q.head, p.head, qTests, pTests, contains) && covers(q.tail, p.tail, qTests, pTests, contains);
+            return !q.op && p.p === "list" && p.v.length > 0 && covers(q.head, p.v[0], qTests, pTests, contains) && covers(q.tail, { p: "list", v: p.v.slice(1) }, qTests, pTests, contains);
         case "constr": return p.p === "constr" && p.tag === q.tag && !!p.typed === !!q.typed && p.args.length === q.args.length
-            && q.args.every((x, n) => covers(x, p.args[n], qTests, pTests));
+            && q.args.every((x, n) => covers(x, p.args[n], qTests, pTests, contains));
         case "recPat": return p.p === "recPat" && q.v.every(([key]) => p.v.some(([other]) => other === key));
         default: return false;
     }
 }
 // Whether clause b's patterns take every argument clause a's do.
-export function takesAll(b: { params: Pattern[] }, a: { params: Pattern[] }): boolean {
+export function takesAll(b: { params: Pattern[] }, a: { params: Pattern[] }, contains?: Contains): boolean {
     if (a.params.length !== b.params.length) return false;
     const tests = (c: { params: Pattern[] }) => { const all = c.params.flatMap(patternNames); return new Set(all.filter((x, n) => all.indexOf(x) !== n)); };
     const at = tests(a), bt = tests(b);
-    return b.params.every((q, n) => covers(q, a.params[n], bt, at));
+    return b.params.every((q, n) => covers(q, a.params[n], bt, at, contains));
 }
 // Clause a goes before clause b: b's patterns take every argument a's do,
 // and not the other way round (or the same, and only a has a guard).
-function moreSpecific(a: { params: Pattern[]; guard?: Expr }, b: { params: Pattern[]; guard?: Expr }): boolean {
-    return takesAll(b, a) && (!takesAll(a, b) || !!a.guard && !b.guard);
+function moreSpecific(a: { params: Pattern[]; guard?: Expr }, b: { params: Pattern[]; guard?: Expr }, contains?: Contains): boolean {
+    return takesAll(b, a, contains) && (!takesAll(a, b, contains) || !!a.guard && !b.guard);
 }
-// Each clause's place in the order they are tried in (see covers).
-const placesOf = new WeakMap<object, number[]>();
-export function clausePlaces(clauses: readonly { params: Pattern[]; guard?: Expr }[]): number[] {
+// Each clause's place in the order they are tried in (see covers), for each
+// side's reading of types (contains).
+const placesBy = new WeakMap<object, WeakMap<object, number[]>>(), untyped = {};
+export function clausePlaces(clauses: readonly { params: Pattern[]; guard?: Expr }[], contains?: Contains): number[] {
+    const key = contains ?? untyped, placesOf = placesBy.get(key) ?? new WeakMap<object, number[]>();
+    placesBy.set(key, placesOf);
     const known = placesOf.get(clauses);
     if (known && known.length === clauses.length) return known;
     const places = new Array<number>(clauses.length), left = new Set(clauses.keys());
     for (let place = 0; left.size; place++) {
-        const next = [...left].find(i => ![...left].some(j => j !== i && moreSpecific(clauses[j], clauses[i])))
+        const next = [...left].find(i => ![...left].some(j => j !== i && moreSpecific(clauses[j], clauses[i], contains)))
             ?? Math.min(...left);
         places[next] = place;
         left.delete(next);

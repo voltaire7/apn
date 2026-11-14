@@ -17,7 +17,10 @@ for (const [code, expected] of [
     ['addOp = (+); addOp 1', '(1 +)'],
     ['(+ 1)', '(+ 1)'],
     ['g = x, y, z -> x * y * z; g 2 (1 + 1)', 'z -> 2 * (1 + 1) * z'],
-    ['h (x : Int) y = x + y; h x 0 = x; h 1', 'y -> 1 + y\n0 -> 1'],
+    // Remaining clauses in the order a call tries them: (Int, y) and (x, 0)
+    // are incomparable, so written order leaves h x 0 no call it would take.
+    ['h (x : Int) y = x + y; h x 0 = x; h 1', 'y -> 1 + y'],
+    ['h x y = x + y; h x 0 = x; h 1', '0 -> 1\ny -> 1 + y'],
 ]) Deno.test(`function display: ${code}`, () => {
     const i = new Interpreter();
     const result = i.renderString(i.run(parse(code)));

@@ -1,5 +1,6 @@
 import { type Numeric, type Real, isNumeric, integer, floating, toReal, toExact, toInexact, isInteger, exact, equalNumbers, asFloat, rounding, arithmetic, numberText, numericNative } from "./numbers.ts";
 import { APNError } from "./errors.ts";
+import type { Pattern } from "./ast.ts";
 
 export const NUMERIC_TYPES = ["Int", "UInt", ...[8, 16, 32, 64, 128].flatMap((n) => [`Int${n}`, `UInt${n}`]), "Float", "Float32", "Float64", "Fraction", "Complex", "ComplexExact", "Number", "Real", "Integer", "Exact", "Inexact"];
 // The built-in types a value of a type the program defines converts to through
@@ -25,6 +26,21 @@ export function numericWithin(a: string, b: string): boolean {
     const concrete = NUMERIC_TYPES.filter(name => !HOLDERS[name]);
     if (HOLDERS[a]) return concrete.filter(HOLDERS[a]).every(name => numericWithin(name, b));
     return !!HOLDERS[b]?.(a);
+}
+// Whether a pattern naming a built-in type takes every value another does
+// (see clausePlaces in ast.ts), by the names alone: a literal of the type, or
+// a built-in type within it. undefined for a pattern naming no built-in type.
+// (The run decides a program's own types too, by their values.)
+export function builtinContains(q: Pattern, p: Pattern): boolean | undefined {
+    const named = (x: Pattern) => x.p === "constr" && TYPE_NAMES.includes(x.tag) && (x.typed && x.args.length === 1 || !x.args.length) ? x : undefined;
+    const typed = named(q);
+    if (!typed) return undefined;
+    const t = typed.tag, holds = typed.args.length > 0;
+    if (p.p === "int" || p.p === "float") return holds && NUMERIC_TYPES.includes(t) && matchesType(t, p.p === "int" ? integer(p.v) : floating(p.v));
+    if (p.p === "string" || p.p === "char" || p.p === "bool") return holds && t === { string: "String", char: "Char", bool: "Bool" }[p.p];
+    const other = named(p), s = other?.tag;
+    if (!other || !s || holds !== other.args.length > 0) return false;
+    return NUMERIC_TYPES.includes(s) && NUMERIC_TYPES.includes(t) ? numericWithin(s, t) : s === t;
 }
 export function numericType(value: Numeric): string {
     return value.typeName ?? (value.kind === "int" ? "Int" : value.kind === "float" ? "Float" : value.kind === "rational" ? "Fraction" : "Complex");

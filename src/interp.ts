@@ -2415,7 +2415,7 @@ export class Interpreter {
         // Only a constructor pattern's rank depends on the value.
         if (!ranked) {
             const dynamic = alternatives.some(a => a.params[0].p === "constr");
-            ranked = dynamic ? null : this.ranked(alternatives, a => LITERAL_PATTERNS.has(a.params[0].p) ? 40 : 0, clausePlaces(alternatives));
+            ranked = dynamic ? null : this.ranked(alternatives, a => LITERAL_PATTERNS.has(a.params[0].p) ? 1 : 0, clausePlaces(alternatives, this.containsPattern));
             rankedAlternatives.set(alternatives, ranked);
         }
         // A literal pattern tried first demands the value at once.
@@ -2452,7 +2452,7 @@ export class Interpreter {
         const caller = this.env;
         this.env = scope;
         try {
-            const order = ranked ?? this.ranked(clauses, c => c.params.reduce((score, p, i) => score + this.patternScore(p, args[i]), 0), clausePlaces(clauses));
+            const order = ranked ?? this.ranked(clauses, c => c.params.reduce((score, p, i) => score + this.patternScore(p, args[i]), 0), clausePlaces(clauses, this.containsPattern));
             for (const clause of order) {
                 this.env = scope;
                 const binds = new Map<string, Value>(self ? [self] : []);
@@ -3640,41 +3640,62 @@ export class Interpreter {
         try { return this.reference(args.reduce<Value>((t, arg) => this.apply(t, arg!), head)); }
         catch (error) { if (error instanceof APNError) return undefined; throw error; }
     }
+    // How an argument fits a pattern, the first thing clauses are ordered by
+    // (see choose): 1 when it is, as it is, a value of the type or literal the
+    // pattern names; 0 when the pattern names none, or converts it losslessly;
+    // -1 when a to instance converts it; -1000 when it cannot match. Among
+    // equals the more specific pattern comes first (clausePlaces): so 0 before
+    // (x : Int) before (x : Number), and (x : Int) takes 5 before (x : Int8)
+    // would convert it, while (x : Int8) still takes it before _.
     private patternScore(pattern: Pattern, arg: Value): number {
-        if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
-        // The type itself before a type holding it (describe Int, then describe Number).
+        if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 1;
         const bare = this.bareType(pattern, arg);
-        if (bare !== undefined) return bare === "same" ? 40 : bare ? 38 : -1000;
+        if (bare !== undefined) return bare ? 1 : -1000;
         // Only a pattern naming a type reads whether its argument is one.
         const closed = pattern.p === "constr" && pattern.args.length ? this.closedType(pattern) : undefined;
         const given = closed && this.reference(arg);
         if (given && (given.kind === "type" || given.kind === "functionType" || this.isList(given) && this.isTypeValue(given))) {
-            return this.sameType(closed!, given) ? 40 : this.within(given, closed!) ? 38 : -1000;
+            return this.sameType(closed!, given) || this.within(given, closed!) ? 1 : -1000;
         }
-        // A named subtype's own pattern outranks its base's: (Money x) first.
         // Only a constructor pattern looks at its argument.
         if (pattern.p !== "constr") return 0;
         const named = this.reference(arg);
         if (named.kind === "variant" && named.family?.base) {
-            if (pattern.tag === named.family.name) return 35;
+            if (pattern.tag === named.family.name) return 1;
             if (this.builtinType(pattern.tag)) arg = named.v[0];
         }
         const binding = this.env.get(pattern.tag);
-        if (binding && this.counted(this.reference(binding))) return this.isList(this.dataValue(arg)) ? 30 : -1000;
+        if (binding && this.counted(this.reference(binding))) return this.isList(this.dataValue(arg)) ? 1 : -1000;
         if (!this.builtinType(pattern.tag)) return 0;
         // An undecided call fits a typed pattern as an exact type would.
         const undecided = this.reference(arg);
-        if (undecided.kind === "pending" && undecided.step.op === "call") return 30;
+        if (undecided.kind === "pending" && undecided.step.op === "call") return 1;
         const value = pattern.tag === "Mutable" ? this.reference(arg) : pattern.tag === "Type" ? this.demand(arg) : this.dataValue(arg);
-        // A conversion through a to instance fits less than any pattern of the
-        // value's own type.
         if (SCALAR_TYPES.has(pattern.tag) && this.builtinValue(pattern.tag, value)) return -1;
-        if (!NUMERIC_TYPES.includes(pattern.tag)) return this.matchesValueType(pattern.tag, value) ? 30 : -1000;
+        if (!NUMERIC_TYPES.includes(pattern.tag)) return this.matchesValueType(pattern.tag, value) ? 1 : -1000;
         if (!isNumeric(value)) return -1000;
-        if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(pattern.tag)) return matchesType(pattern.tag, value) ? 10 : -1000;
-        if (matchesType(pattern.tag, value)) return 30;
-        try { castNumeric(pattern.tag, value); return 1; } catch { return -1000; }
+        if (matchesType(pattern.tag, value)) return 1;
+        if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(pattern.tag)) return -1000;
+        try { castNumeric(pattern.tag, value); return 0; } catch { return -1000; }
     }
+    // Whether a typed (or bare) type pattern takes every value another pattern
+    // does, by the types they name (see clausePlaces): a literal of it, or a
+    // type within it (Int within Number, Money within Float). undefined for a
+    // pattern naming no type.
+    private readonly containsPattern = (q: Pattern, p: Pattern): boolean | undefined => {
+        const typeOf = (x: Pattern): Value | undefined => {
+            if (x.p !== "constr" || !(x.typed && x.args.length === 1 || !x.args.length)) return undefined;
+            const bound = this.env.get(x.tag), t = bound && this.reference(bound);
+            return t && t.kind !== "variant" && this.isTypeValue(t) ? t : undefined;
+        };
+        const t = typeOf(q);
+        if (!t) return undefined;
+        const literal: Value | undefined = p.p === "int" ? mkInt(p.v) : p.p === "float" ? { kind: "float", v: p.v }
+            : p.p === "string" ? { kind: "string", v: p.v } : p.p === "char" ? { kind: "char", v: p.v } : p.p === "bool" ? mkBool(p.v) : undefined;
+        if (literal) return q.p === "constr" && !!q.args.length && this.belongsToType(t, literal);
+        const s = typeOf(p);
+        return !!s && (q as { args: Pattern[] }).args.length === (p as { args: Pattern[] }).args.length && (this.sameType(s, t) || this.within(s, t));
+    };
     // How specifically a function given as a match alternative takes a value:
     // as its best clause does.
     private alternativeScore(f: Value, arg: Value): number {
@@ -3684,12 +3705,6 @@ export class Interpreter {
         try { return Math.max(...f.clauses.map(c => this.patternScore(c.params[f.applied.length], arg))); }
         finally { this.env = caller; }
     }
-    // The most a pattern can score for any argument.
-    private bestPatternScore(pattern: Pattern): number {
-        if (["int", "float", "bool", "string", "char"].includes(pattern.p)) return 40;
-        return pattern.p === "constr" && this.builtinType(pattern.tag) ? 30 : 0;
-    }
-
     // A named subtype's value as its base: Money 1.2 is 1.2 to builtins.
     private baseValue(v: Value): Value {
         return v.kind === "variant" && v.family?.base ? this.dataValue(v.v[0]) : v;
@@ -3753,21 +3768,23 @@ export class Interpreter {
         // hides those ranked below it, unless the rest of their patterns could
         // still rank them higher.
         const k = f.applied.length, caller = this.env;
-        const matched: Array<{ clause: DefClause; index: number; score: number; binds: Map<string, Value> }> = [];
+        const matched: Array<{ clause: DefClause; place: number; score: number; binds: Map<string, Value> }> = [];
         this.env = f.env;
         try {
+            const places = clausePlaces(f.clauses, this.containsPattern);
             f.clauses.forEach((clause, index) => {
                 const binds = new Map<string, Value>();
                 if (!f.applied.every((x, i) => this.matchPattern(clause.params[i], x, binds))) return;
-                matched.push({ clause, index, binds, score: f.applied.reduce((score: number, x, i) => score + this.patternScore(clause.params[i], x), 0) });
+                matched.push({ clause, place: places[index], binds, score: f.applied.reduce((score: number, x, i) => score + this.patternScore(clause.params[i], x), 0) });
             });
         } finally { this.env = caller; }
-        matched.sort((a, b) => b.score - a.score || a.index - b.index);
-        const lines: string[] = [], catchAll: Array<{ score: number; index: number }> = [];
+        matched.sort((a, b) => b.score - a.score || a.place - b.place);
+        const lines: string[] = [], catchAll: Array<{ score: number; place: number }> = [];
         for (const m of matched) {
             const rest = m.clause.params.slice(k);
-            const best = m.score + rest.reduce((score, p) => score + this.bestPatternScore(p), 0);
-            if (catchAll.some(c => c.score > best || c.score === best && c.index < m.index)) continue;
+            // The most the rest can add: 1 for each pattern naming a literal or a type.
+            const best = m.score + rest.filter(p => LITERAL_PATTERNS.has(p.p) || p.p === "constr" && this.builtinType(p.tag)).length;
+            if (catchAll.some(c => c.score > best || c.score === best && c.place < m.place)) continue;
             lines.push(residualSource(rest, m.clause.body, m.clause.guard, new Map([...m.binds].map(([name, x]) => [name, shown(x)]))));
             if (!m.clause.guard && rest.every(p => p.p === "var" || p.p === "wildcard")) catchAll.push(m);
         }

@@ -1507,12 +1507,17 @@ add (x : Float) (y : Float) = x + y : Float
 add (x : Number) (y : Number) = x + y
 ```
 
-Literal matches outrank exact concrete type matches, which outrank aggregate
-matches, which outrank conversion matches. Among equals, a clause whose
-patterns match only values another's match is tried before it: `[x,y]` before
-`x :: rest` before `xs`, `Some x` before `_`, `f x x` before `f x y`, a guarded
-clause before the same patterns unguarded. Patterns neither of which contains
-the other (`[x, 0]` and `[0, y]`) keep the order they were written in. So no
+A clause is tried before another when its patterns match only values the
+other's match: a type is the set of its values, so `0` before `(x : Int)`
+before `(x : Number)` before `x`, `(x : Money)` before `(x : Float)`, as
+`[x,y]` before `x :: rest` before `xs`, `Some x` before `_`, `f x x` before
+`f x y`, and a guarded clause before the same patterns unguarded. One thing
+comes before that: how many arguments a clause takes as they are, each a
+value of a type or literal its pattern names. So `(x : Int)` takes `5` before
+`(x : Int8)` would convert it, while `(x : Int8)` still takes it before `_`
+(a pattern naming no type takes nothing as such), and a conversion through a
+to instance comes after both. Patterns neither of which contains the other
+(`[x, 0]` and `[0, y]`) keep the order they were written in. So no
 clause hides another by coming first, and clauses added elsewhere (a module's
 instance, a REPL session's) take their place by what they match. Converting
 either a typed or an untyped input must be lossless; explicit floating-point

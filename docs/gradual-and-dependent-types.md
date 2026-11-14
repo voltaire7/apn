@@ -517,11 +517,9 @@ empty-list clause and a cons clause are separate overload choices, so
 
 When several clauses could apply, the result must fit each of them, unless one
 definitely matches: then, as at runtime, clauses that come after it cannot run.
-The runtime ranks clauses by a score, then source order: literal patterns 40,
-a typed pattern 30 for the argument's exact type, 10 for a matching numeric
-aggregate (`Number`, `Real`, `Integer`, `Exact`, `Inexact`), 1 for a lossless
-conversion, and other patterns 0. The checker computes the same ranking from
-argument types and, where the value is known, from the value: `(3 : UInt)`
+Clauses are tried in the order [clause ranking](semantics.md#clause-ranking)
+gives. The checker computes the same order from argument types and, where the
+value is known, from the value: `(3 : UInt)`
 converts losslessly to `Int`, `300` does not fit `Int8`, and `2.5` is not an
 integer. Where only an unknown value decides, it keeps both possibilities. A clause definitely matches when every argument fits
 its pattern for certain: a variable or `_` (not a repeated name), a list

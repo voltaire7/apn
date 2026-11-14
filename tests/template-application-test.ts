@@ -189,6 +189,12 @@ for (const checked of [true, false]) for (const [source, expected] of [
     ['f x y = "free"\nf x x = "same"\n[f 1 1, f 1 2]', '["same","free"]'],
     ['len xs = 0\nlen (x :: r) = 1 + len r\nlen [1,2,3]', '3'],
     ['g [x,0] = "a"\ng [0,y] = "b"\ng [0,0]', '"a"'],
+    // A type is the set of its values: the smaller first, a value taken as it
+    // is before one converted, a conversion before a pattern naming no type.
+    ['f (x : Number) = "num"\nf (x : Int) = "int"\nf 0 = "zero"\n[f 0, f 5, f 2.5]', '["zero","int","num"]'],
+    ['h (x : Int8) = "int8"\nh (x : Int) = "int"\nh _ = "any"\n[h 5, h (5 : Int8), h "a"]', '["int","int8","any"]'],
+    ['g (x : Int8) = "int8"\ng _ = "other"\n[g 5, g 500]', '["int8","other"]'],
+    ['d Number = "number"\nd Int = "int"\n[d Int, d Float]', '["int","number"]'],
     // A repeated name is a test the run makes, deciding no type.
     ['f x x = True\nf x y = False\n[f 1 1, f 1 2, f 1 "a"]', '[True,False,False]'],
     ['same (x : t) (y : t) = True\nsame x y = False\n[same 1 2, same 1 True]', '[True,False]'],

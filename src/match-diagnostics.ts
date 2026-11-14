@@ -1,5 +1,6 @@
 import { clausePlaces, importedPath, isLoadCall, matchOperands, sourceLocations, takesAll, type Expr, type Pattern, type TopLevel } from "./ast.ts";
 import type { Diagnostic } from "./lint.ts";
+import { builtinContains } from "./type-system.ts";
 import { loadPath, readLoad, resolveModule } from "./modules.ts";
 import { parseDocument } from "./parser.ts";
 
@@ -114,9 +115,9 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
             const alternativesList = written.alternatives;
             const alternatives = alternativesList.v.flatMap<Clause & { at: Expr }>(a => a.t === "patternLambda" ? [{ params: a.params, guard: a.guard, body: a.body, at: a }]
                 : a.t === "lambda" ? [{ params: a.params.map(name => ({ p: "var", name })), body: a.body, at: a }] : []);
-            const places = clausePlaces(alternatives);
+            const places = clausePlaces(alternatives, builtinContains);
             alternatives.forEach((alt, n) => {
-                const before = alternatives.find((other, m) => places[m] < places[n] && !other.guard && takesAll(other, alt));
+                const before = alternatives.find((other, m) => places[m] < places[n] && !other.guard && takesAll(other, alt, builtinContains));
                 if (before) unreachable(lineOf(alt.body) ?? lineOf(alt.at), "This alternative never runs: an earlier one takes every value it does.");
             });
             const family = familyOf(written.value, scope);

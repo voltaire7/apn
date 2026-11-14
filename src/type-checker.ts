@@ -5,7 +5,7 @@ import { RETIRED_NATIVES } from "./native-exports.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
 import { IMPORT_ONE, standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
-import { castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, numericWithin, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
+import { builtinContains, castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_TYPES, numericWithin, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
 import { APNError, didYouMean, formatFileReadError, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import { bindingItem, DEFAULT_FIXITY, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
@@ -4520,24 +4520,25 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (["fn", "overload", "intrinsic"].includes(t.k)) return { kind: "Function" };
         return undefined;
     }
-    // The runtime's dispatch score for one pattern, as the range the argument's
-    // static type allows: literals 40; a typed pattern 30 for the exact type, 10
-    // for a matching numeric aggregate, 1 for a lossless conversion, -1000 when
-    // it cannot match; other patterns 0.
+    // How the run scores an argument against a pattern (Interpreter.
+    // patternScore), as the range the argument's static type allows: 1 when
+    // it is a value of the type or literal the pattern names, 0 when the
+    // pattern names none or converts it losslessly, -1000 when it cannot
+    // match. Among equals the more specific comes first (clausePlaces).
     function patternScore(p: Pattern, argument: Entry): [number, number] {
-        if (["int", "float", "bool", "string", "char"].includes(p.p)) return [40, 40];
+        if (["int", "float", "bool", "string", "char"].includes(p.p)) return [1, 1];
         const tag = wholeList(p) ? "List" : p.p === "constr" ? p.tag : "";
         if (!TYPE_NAMES.includes(tag)) return [0, 0];
         const c = category(argument.type);
-        if (tag === "Dynamic") return [30, 30];
-        if (tag === "Vect") return !c ? [-1000, 30] : "kind" in c && c.kind === "List" ? [30, 30] : [-1000, -1000];
-        if (tag === "Mutable" || tag === "Pointer") return [-1000, 30];
-        if (!NUMERIC_TYPES.includes(tag)) return !c ? [-1000, 30] : "kind" in c && c.kind === tag ? [30, 30] : [-1000, -1000];
+        if (tag === "Dynamic") return [1, 1];
+        if (tag === "Vect") return !c ? [-1000, 1] : "kind" in c && c.kind === "List" ? [1, 1] : [-1000, -1000];
+        if (tag === "Mutable" || tag === "Pointer") return [-1000, 1];
+        if (!NUMERIC_TYPES.includes(tag)) return !c ? [-1000, 1] : "kind" in c && c.kind === tag ? [1, 1] : [-1000, -1000];
         if (c && "kind" in c) return [-1000, -1000];
         const name = c?.numeric;
         const int = name !== undefined && /^U?Int(8|16|32|64|128)?$/.test(name), float = name !== undefined && /^Float(32)?$/.test(name);
         if (["Number", "Real", "Integer", "Exact", "Inexact"].includes(tag)) {
-            if (!name) return [-1000, 10];
+            if (!name) return [-1000, 1];
             const known: Record<string, boolean | undefined> = {
                 Number: true,
                 Real: name === "Complex" || name === "ComplexExact" ? undefined : true,
@@ -4546,17 +4547,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 Inexact: float ? true : int || name === "Fraction" || name === "ComplexExact" ? false : undefined,
             };
             const result = known[tag];
-            return result === undefined ? [-1000, 10] : result ? [10, 10] : [-1000, -1000];
+            return result === undefined ? [-1000, 1] : result ? [1, 1] : [-1000, -1000];
         }
         // A known value decides it exactly, as at runtime: its own type, a
         // lossless conversion, or no match.
         const value = numericOf(argument);
         if (value) {
-            if (matchesType(tag, value)) return [30, 30];
-            try { castNumeric(tag, value); return [1, 1]; } catch { return [-1000, -1000]; }
+            if (matchesType(tag, value)) return [1, 1];
+            try { castNumeric(tag, value); return [0, 0]; } catch { return [-1000, -1000]; }
         }
-        if (!name) return [-1000, 30];
-        return (tag === "Float64" ? "Float" : tag) === name ? [30, 30] : [-1000, 1];
+        if (!name) return [-1000, 1];
+        return (tag === "Float64" ? "Float" : tag) === name ? [1, 1] : [-1000, 0];
     }
     // Score range of a clause for a complete call, and whether it definitely
     // matches (every pattern certain to succeed) or definitely fails.
@@ -5864,7 +5865,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A match's alternatives as clauses (none when one is guarded), made once.
     const alternativeClauses = new WeakMap<CoreMatch, Summary["clauses"] | null>();
     function matchClauses(match: CoreMatch): Summary["clauses"] | undefined {
-        const places = clausePlaces(match.alternatives);
+        const places = clausePlaces(match.alternatives, builtinContains);
         if (!alternativeClauses.has(match)) alternativeClauses.set(match, match.alternatives.some(x => x.guard) ? null : match.alternatives.map(({ params, body }, index) => {
             const names = params.flatMap(patternNames);
             return { index, place: places[index], params, body, refutable: new Set(names.filter((name, i) => names.indexOf(name) !== i)) };
@@ -5926,7 +5927,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         bind(st.name, once(() => evaluateKnown(st.clauses[0].body, before, scope, depth)));
                         continue;
                     }
-                    const places = clausePlaces(st.clauses);
+                    const places = clausePlaces(st.clauses, builtinContains);
                     const summary: Summary = { scope, clauses: st.clauses.map((c, index) => {
                         const names = c.params.flatMap(patternNames);
                         return { index, place: places[index], params: c.params, body: c.body, refutable: new Set([st.name, ...names.filter((x, i) => names.indexOf(x) !== i)]) };
@@ -6443,12 +6444,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (n !== undefined) return p.p === "constr" && (p.tag === "Z" ? n === 0n : n > 0n && irrefutable(p.args[0]));
         // A constructor the argument was visibly built with, its fields bound plainly.
         if (p.p === "constr" && !TYPE_NAMES.includes(p.tag)) return argument.tag === p.tag && p.args.every(irrefutable);
-        // A certain exact-type (30) or aggregate (10) match, binding the value whole.
+        // A certain member or lossless conversion (a conversion's score is
+        // certain only for a known value), binding the value whole.
         if (p.p === "constr" && TYPE_NAMES.includes(p.tag) && p.tag !== "Vect" && p.args.length === 1) {
-            // A lossless conversion (1) is certain only for a known value.
-            return (score === 30 || score === 10 || score === 1) && irrefutable(p.args[0]);
+            return score > -1000 && irrefutable(p.args[0]);
         }
-        if (wholeList(p)) return score === 30 && irrefutable(p.value);
+        if (wholeList(p)) return score === 1 && irrefutable(p.value);
         // (t x) takes any value; a repeated t ((t x) (t y)) requires one type.
         if (p.p === "typeBind") return (p.name === "_" || !refutable.has(p.name)) && irrefutable(p.value);
         if (p.p === "list") return p.v.every(irrefutable) && listLength(argument, p.v.length) === true;
@@ -6776,7 +6777,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The alternative a value known enough certainly takes: the only one that
     // may, as among clauses, certainly matching and unguarded.
     function takenAlternative(value: Expr, input: Ty, alternatives: PatternLambda[], scope: Scope): number | undefined {
-        const places = clausePlaces(alternatives);
+        const places = clausePlaces(alternatives, builtinContains);
         const clauses = alternatives.map(({ params }, index) => {
             const names = params.flatMap(patternNames);
             return { index, place: places[index], params, refutable: new Set(names.filter((x, n) => names.indexOf(x) !== n)) };
@@ -6926,7 +6927,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : p.p === "constr" && p.args.length === 1 && p.args[0].p === "var" ? { name: p.args[0].name, exact: false }
             : { exact: false });
         const shape = shapeOf(body, named, scope);
-        const matched = matchedClauses(params, body, !!parent.get("~")?.builtin) ?? [{ params, body }], places = clausePlaces(matched);
+        const matched = matchedClauses(params, body, !!parent.get("~")?.builtin) ?? [{ params, body }], places = clausePlaces(matched, builtinContains);
         const summary: Summary = { scope: parent, clauses: matched.map((c, index) => {
             const all = c.params.flatMap(patternNames);
             return { index, place: places[index], params: c.params, body: c.body, refutable: new Set([...recursiveName ? [recursiveName] : [], ...all.filter((x, n) => all.indexOf(x) !== n)]) };
@@ -7284,7 +7285,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 default: return false;
             }
         };
-        const orders = new Map<string, ClauseOrder[]>(), places = clausePlaces(clauses);
+        const orders = new Map<string, ClauseOrder[]>(), places = clausePlaces(clauses, builtinContains);
         const definition: Definition = { name, clauses };
         const firstKey = new Map<string, string>();
         for (const [index, c] of clauses.entries()) {
