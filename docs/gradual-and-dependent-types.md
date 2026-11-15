@@ -518,11 +518,14 @@ an argument is (`g ((x : Float) :: _) = x` gives `g [1,2]` a `Float`), and a
 typed head keeps its own type beside the rest's: `(s : String) :: (n : Int) ::
 _` takes a list of either, the items checked in order where they are known.
 So do the parameters of a function of one clause given a list (or record)
-whose items differ in type (an empty list among them, `[[], "a"]`, whatever
-its element would be): `f p = "k" ++ head p` takes `["a", 1]` and rejects
+whose items differ in type: `f p = "k" ++ head p` takes `["a", 1]` and rejects
 `[1, "a"]`, its body typed for its arguments from that one on, a later one
 too (`g p q = p ++ head q` takes `"!" ["a", 1]`), also through a partial
-application kept as a value. A function of several clauses is typed so as
+application kept as a value. An empty list is an item of its own type
+(`[[], "a"]` is mixed, whatever its element would be), and in a typed call it
+is known empty: taking its `head` is an error, as at runtime, and a `&&` or
+`||` whose left side is known does not run its right (`length (head p) == 0
+|| head (head p) > 1` takes it). A function of several clauses is typed so as
 the run dispatches it: each clause that may take the arguments, up to one
 that certainly does (`f [] = ""; f (x :: _) = "k" ++ x` takes `["a", 1]`),
 the call any of their results. A typed part takes its argument converted and

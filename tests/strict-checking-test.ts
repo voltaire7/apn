@@ -156,6 +156,13 @@ for (const [source, error] of [
     ['f p = head p == "" ? "k" ++ head p : "none"\nf [[], "a"]', ""],
     ['f p = "k" ++ head (tail p)\nf [[], "a"]', ""],
     ['f r = null r.xs ? "none" : "k" ++ head r.xs\nf [xs = [], n = 1]', ""],
+    // Inside a typed call, a list known empty has no first item to take, and a
+    // && or || its left side decides does not run its right.
+    ['f p = head (head p)\nf [[], "a"]', "length mismatch: expected at least 1, got 0"],
+    ['f r = 1 + head r.xs\nf [xs = [], n = "a"]', "length mismatch: expected at least 1, got 0"],
+    ['f r = null r.xs ? 0 : head r.xs\nf [xs = [], n = "a"]', ""],
+    ['f p = length (head p) == 0 || head (head p) > 1\nf [[], "a"]', ""],
+    ['f p = True && head (head p)\nf [[], "a"]', "length mismatch"],
     // Calls a function decided are told apart by it.
     ['f g p = g 1 > 0 ? "k" ++ head p : "none"\n[f (x -> x - 5) [1, "a"], f (x -> x + 5) [1, "a"]]', "cannot append String and Int"],
     // A length a typed call cannot find is unknown, as anywhere: rejected.

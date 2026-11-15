@@ -3087,6 +3087,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A list whose items are known: its first and the rest, each its own,
         // with what is known of its value.
         const item = (n: number): Entry => ({ ...element(argument, n) ?? {}, type: (a as Extract<Ty, { k: "list" }>).items![n] });
+        // A list known empty has no first item: taking one is an error, as
+        // the run's head [] is.
+        if (param.p === "cons" && a.k === "list" && a.items?.length === 0) { bind(param, a, scope, e); return; }
         if (param.p === "cons" && a.k === "list" && a.items?.length) {
             const rest = a.items.slice(1);
             bindArgument(param.head, item(0), scope, e);
@@ -3608,7 +3611,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (f.k === "fn") {
             const at = parameterAt(f), given = resolve(argument.type);
             const params = at >= 0 ? f.summary!.clauses[0].params : [], param = params[at];
-            if (at === 0 && param.p === "cons" && given.k === "list" && given.items?.length) {
+            // (A list known empty too, in a call typed for its arguments: it has
+            // nothing to take apart.)
+            if (at === 0 && param.p === "cons" && given.k === "list" && given.items && (given.items.length || typingCall > 0)) {
                 const typed = typedCall(f.summary!, [argument], e);
                 if (typed) return typed;
             } else if (at >= 0 && !choosing) {
@@ -4704,6 +4709,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "binop": {
                 if (e.reassociate) return infer(regrouped(e, scope), scope, expected);
+                // In a call typed for its arguments, a && or || its left side's
+                // known value decides gives that, the right side not run (False
+                // && head []), as a conditional takes its branch.
+                if (typingCall > 0 && (e.op === "&&" || e.op === "||") && builtinAt(e, scope)) {
+                    const known = peek(() => resolveKnown(computed(e.l, scope)), {} as Known);
+                    if (known.boolean === (e.op === "||")) {
+                        callFrames.forEach(frame => frame.decided = true);
+                        infer(e.l, scope);
+                        return atom("Bool");
+                    }
+                }
                 // Against a type, a lambda written in place is read as one, as
                 // at runtime: (a -> b) == typeOf f.
                 if (e.op === "==" || e.op === "!=") {
