@@ -48,3 +48,13 @@ Deno.test("fail is the prelude's", () => {
     const result = i.renderString(i.run(parse('f x = x > 0 ? x : fail "negative"; f 1')));
     if (result !== "1") throw new Error(result);
 });
+// A record's pairs keep their keys: each is a String key and a value of one
+// of the fields' types, however different those types are.
+for (const source of [
+    'f o = h (pairs (o : [a : String, l : List [String,String], t : Int]))\nh [] = "none"\nh ([name,_] :: _) = fail name\nf []',
+    'r = [a = "x", b = 1, c = [1]]\nmap ([name,_] -> name ++ "!") (pairs r)',
+    'r = [a = "x", b = 1, c = [1]]\n[k,v] = head (pairs r)\nk ++ "!"',
+]) Deno.test(`record pairs keep String keys: ${source}`, () => {
+    const issues = checkSource(source, "<test>", { strict: true }).issues;
+    if (issues.length) throw new Error(issues.map(i => i.message).join("; "));
+});

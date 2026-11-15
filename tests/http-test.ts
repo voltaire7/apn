@@ -62,7 +62,7 @@ Deno.test("fetch returns a response record", () => {
     if (run('fetchText "data:text/plain,hi" [method = "GET", timeout = 5000]', i) !== '"hi"') throw new Error("fetchText");
 });
 for (const [source, message, kind] of [
-    ['std <- import "std"\nuse std.http\nfetch "data:text/plain,x" [methd = "GET"]', 'fetch: [methd = "GET"] holds an option that is not a field of FetchOptions', "runtime"],
+    ['std <- import "std"\nuse std.http\nfetch "data:text/plain,x" [methd = "GET"]', "unknown option 'methd'; the options are method, headers, body, timeout", "runtime"],
     ['std <- import "std"\nuse std.http\nfetch "data:text/plain,x" [headers = [["a", 1]]]', "cannot use Int where String is required", "type"],
     ['std <- import "std"\nuse std.http\nfetch "data:text/plain,x" [headers = [a = "1"]]', "where List (Vect 2 String) is required", "type"],
     ['std <- import "std"\nuse std.http\nfetch "data:text/plain,x" [timeout = -1]', "timeout must not be negative", "runtime"],

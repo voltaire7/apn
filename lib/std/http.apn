@@ -5,16 +5,20 @@
 # FetchOptions, each field optional ([] for none), the zero value of one (no
 # body, a timeout of 0) none: [method = "POST", headers = [["Accept","*/*"]]].
 std <- import "std"
-use std.option
+use std.[option,text]
 FetchOptions = [method : String = "GET", headers : List [String,String], body : String, timeout : Int]
+_options = pairs ([] : FetchOptions)
 # Ascribed, options keep the fields FetchOptions does not have, after its own.
 fetch url options = {
     given = options : FetchOptions
-    length (pairs given) > length (pairs ([] : FetchOptions))
-        ? fail ("fetch: " ++ to String options ++ " holds an option that is not a field of FetchOptions")
-        : (given.timeout < 0 ? fail "fetch: timeout must not be negative (milliseconds; 0 for none)"
+    others = drop (length _options) (pairs given)
+    !null others ? _unknown (head others) : (given.timeout < 0
+        ? fail "fetch: timeout must not be negative (milliseconds; 0 for none)"
         : sendRequest url (upper given.method) given.headers given.body given.timeout)
 }
+_unknown [name,_] = fail ("fetch: unknown option '" ++ name ++ "'; the options are "
+    ++ joinWith ", " (map ([key,_] -> key) _options))
+
 # The body of a successful (2xx) response; any other status fails.
 fetchText url options = {
     response <- fetch url options

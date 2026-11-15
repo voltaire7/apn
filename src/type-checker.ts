@@ -1259,9 +1259,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             let key: Ty, value: Ty;
             if (a.k === "map") { key = a.key; value = a.value; }
             else if (a.k === "record" && t.op === "pairs") {
-                // One [key, value] pair per field, in field order.
-                const items = [...a.fields.values()].map(field => pair(atom("String"), field));
-                return { k: "list", element: union(items), items, length: constant(BigInt(items.length)) };
+                // One [key, value] pair per field, in field order; any one of
+                // them is a String key and a value of one of the fields' types.
+                const values = [...a.fields.values()], items = values.map(field => pair(atom("String"), field));
+                return { k: "list", element: pair(atom("String"), union(values)), items, length: constant(BigInt(items.length)) };
             }
             else if (a.k === "list" && t.op === "enumerate") return { k: "list", element: pair(atom("Int"), a.element), ...sameLength(a) };
             // [] is the empty record too.
@@ -1877,9 +1878,32 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function principalOf(f: Extract<Ty, { k: "overload" }>): Ty | undefined {
         if (f.undecided || f.choices.length < 2) return undefined;
         choosing++;
+        // The clauses' parameters and result without their own lengths (tk 0 _
+        // = [] beside tk n (x :: r)), what they hold kept as written (a pair
+        // [name,_] stays one); failing that, without any length.
+        const outer = (type: Ty): Ty => {
+            for (let t = resolve(type), seen = new Set<Ty>(); !seen.has(t); t = resolve(t.output)) {
+                seen.add(t);
+                for (const part of t.k === "fn" ? [t.input] : [t]) {
+                    const p = resolve(part);
+                    if (p.k === "list") { p.length = undefined; p.items = undefined; }
+                }
+                if (t.k !== "fn") break;
+            }
+            return type;
+        };
+        const unified = (strip: (t: Ty) => Ty): Ty => {
+            const whole = strip(copy(f.choices[0]));
+            for (const other of f.choices.slice(1)) unify(whole, strip(copy(other)), { t: "placeholder" });
+            return whole;
+        };
         try {
-            const whole = withoutLengths(copy(f.choices[0]));
-            for (const other of f.choices.slice(1)) unify(whole, withoutLengths(copy(other)), { t: "placeholder" });
+            let whole: Ty;
+            try { whole = unified(outer); }
+            catch (error) {
+                if (!error || typeof error !== "object" || !("message" in error)) throw error;
+                whole = unified(t => withoutLengths(t));
+            }
             // A type, not one choice's clauses or result shape (tk 0 _ = []'s
             // length 0): none of them decides its calls.
             for (let t = resolve(whole), seen = new Set<Ty>(); t.k === "fn" && !seen.has(t); t = resolve(t.output)) {
