@@ -7678,7 +7678,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("p5Object", [str, list(variable())], p5Record(objectFields()));
     native("p5SketchType", [], { k: "type", value: p5Record(sketchFields()) });
     // HTTP and JSON (the http and json modules): a response is a record; decoded JSON is Dynamic.
-    native("fetch", [str, variable()], io({ k: "record", fields: new Map<string, Ty>([
+    native("sendRequest", [str, str, list({ k: "list", element: str, items: [str, str], length: constant(2n) }), str, int], io({ k: "record", fields: new Map<string, Ty>([
         ["status", int], ["ok", bool], ["statusText", str], ["url", str], ["headers", list({ k: "list", element: str, items: [str, str], length: constant(2n) })], ["body", str],
     ]) }));
     for (const name of ["toJson", "prettyJson"]) native(name, [variable()], str);

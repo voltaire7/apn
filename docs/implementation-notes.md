@@ -168,10 +168,12 @@ Behavior: `docs/standard-library.md` (`http`, `json`).
   crosses a fixed shared buffer in chunks. The worker is terminated after each
   request so it never keeps the process alive. In a browser build
   (`typeof Deno === "undefined"`) a synchronous `XMLHttpRequest` replaces it.
-- `fetch` and `prettyJson` are standard natives exported only through their
-  modules, and `to JSON`/`from JSON` reach `toJson`/`fromJson` only through
-  `convertTo`; none is in `EVALUATED_NATIVES`, so static checking never sends
-  a request. The retired names (`RETIRED_NATIVES`) are bound nowhere.
+- `fetch` is APN (`lib/std/http.apn`): it ascribes its options to
+  `FetchOptions` and calls `sendRequest`, a native every standard module sees
+  through its builtins but none exports. `prettyJson` is a standard native
+  exported only through its module, and `to JSON`/`from JSON` reach
+  `toJson`/`fromJson` only through `convertTo`; none is in
+  `EVALUATED_NATIVES`, so static checking never sends a request. The retired names (`RETIRED_NATIVES`) are bound nowhere.
 - `src/json.ts` parses JSON itself so integers stay exact `bigint`s; an
   object decodes to its `[key,value]` pairs as `string` and value cells, so
   keys are never renamed. Encoding reads a list as an object only once every

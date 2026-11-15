@@ -28,7 +28,7 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
     if (name === "zoneOffset") return mkInt(-new Date().getTimezoneOffset());
     if (name === "toJson" || name === "prettyJson") return mkStr(toJson(i, args[0], name === "prettyJson" ? 2 : 0, name));
     if (name === "fromJson") return fromJson(str(args[0]));
-    if (name === "fetch") return fetchNative(i, str(args[0]), args[1]);
+    if (name === "sendRequest") return sendRequest(i, args, str);
     if (name === "readFile" || name === "readStdin") {
         try {
             if (name === "readFile") {
@@ -52,38 +52,16 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
     return mkStr(textNatives[name as "upper" | "lower"](str(args[0])));
 }
 
-// fetch url options: options is a record of method, headers (an association
-// list of strings), body and timeout (milliseconds), each optional, or [] for
-// none. The response is a record of status, ok, statusText, url, headers (an
-// association list by lowercase name) and body.
-function fetchNative(i: Interpreter, url: string, optionsValue: Value): Value {
+// sendRequest url method headers body timeout: the request lib/std/http.apn's
+// fetch makes from its options (headers [name,value] pairs of strings, an
+// empty body none, a timeout in milliseconds, 0 for none). The response is a
+// record of status, ok, statusText, url, headers (an association list by
+// lowercase name) and body.
+function sendRequest(i: Interpreter, args: Value[], str: (v: Value) => string): Value {
     const fail = (message: string, hint?: string): never => { throw new APNError("runtime", `fetch: ${message}`, hint ? { hint } : {}); };
-    const text = (value: Value, what: string): string => {
-        const v = i.dataValue(value);
-        return v.kind === "string" ? v.v : fail(`${what} must be a string`);
-    };
-    const options = i.dataValue(optionsValue);
-    const fields: Array<[string, Value]> = options.kind === "record" ? options.v : i.isList(options) && !i.items(options).length ? [] :
-        fail("options must be a record such as [method = \"POST\"], or [] for none");
-    let method = "GET", body: string | undefined, timeout: number | undefined;
-    const headers: Array<[string, string]> = [];
-    for (const [option, value] of fields) {
-        if (option === "method") method = text(value, "method").toUpperCase();
-        else if (option === "body") body = text(value, "body");
-        else if (option === "timeout") {
-            const v = i.dataValue(value);
-            if (v.kind !== "int" || v.v <= 0n) fail("timeout must be a positive Int (milliseconds)");
-            timeout = Number((v as { v: bigint }).v);
-        } else if (option === "headers") {
-            const pairs = i.dataValue(value), hint = 'headers = [["Content-Type", "text/plain"]]';
-            if (!i.isList(pairs)) fail("headers must be an association list of strings", hint);
-            for (const entry of i.items(pairs)) {
-                const pair = i.dataValue(entry), parts = i.isList(pair) ? i.items(pair) : [];
-                if (parts.length !== 2) fail("headers must be [name,value] pairs", hint);
-                headers.push([text(parts[0], "a header name"), text(parts[1], "a header value")]);
-            }
-        } else fail(`unknown option '${option}'`, "fetch options are method, headers, body and timeout");
-    }
+    const url = str(args[0]), method = str(args[1]), body = str(args[3]) || undefined;
+    const headers = i.items(i.dataValue(args[2])).map(pair => i.items(i.dataValue(pair)).map(str) as [string, string]);
+    const timeout = Number((i.dataValue(args[4]) as { v: bigint }).v) || undefined;
     let response;
     try { response = fetchSync({ url, method, headers, body, timeout }); }
     catch (error) {

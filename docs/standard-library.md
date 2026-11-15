@@ -388,10 +388,16 @@ response, whatever its status, as a record:
 | `headers` | an association list by lowercase name (`r.headers "content-type"`) |
 | `body` | the body as text |
 
-`options` is a record whose fields are all optional, or `[]` for none: `method`
-(`"GET"` by default), `headers` (an association list of strings, as a JSON
-object is), `body` (a `String`) and `timeout` (milliseconds). Any other field
-is an error.
+`options` is a record the module's `FetchOptions` converts, `[]` for none:
+
+```apn
+FetchOptions = [method : String = "GET", headers : List [String,String], body : String, timeout : Int]
+```
+
+Each field is optional, and its zero value is none (no headers, no body, no
+timeout); `headers` is an association list, as a JSON object is. A field of
+the wrong type is a type error, and a field `FetchOptions` does not have is an
+error when the request is made.
 
 ```apn
 std <- import "std"

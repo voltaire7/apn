@@ -1,11 +1,20 @@
 # HTTP requests. fetch url options sends one and returns its response, whatever
 # its status, as [status : Int, ok : Bool, statusText : String, url : String,
 # headers : List [String,String], body : String] (headers an association list
-# by lowercase name: response.headers "content-type"). options is a record of
-# method (default "GET"), headers (an association list of strings), body (a
-# String) and timeout (milliseconds), each optional; [] for none:
-# [method = "POST", headers = [["Content-Type", "text/plain"]]].
-
+# by lowercase name: response.headers "content-type"). Its options are a
+# FetchOptions, each field optional ([] for none), the zero value of one (no
+# body, a timeout of 0) none: [method = "POST", headers = [["Accept","*/*"]]].
+std <- import "std"
+use std.option
+FetchOptions = [method : String = "GET", headers : List [String,String], body : String, timeout : Int]
+# Ascribed, options keep the fields FetchOptions does not have, after its own.
+fetch url options = {
+    given = options : FetchOptions
+    length (pairs given) > length (pairs ([] : FetchOptions))
+        ? fail ("fetch: " ++ to String options ++ " holds an option that is not a field of FetchOptions")
+        : (given.timeout < 0 ? fail "fetch: timeout must not be negative (milliseconds; 0 for none)"
+        : sendRequest url (upper given.method) given.headers given.body given.timeout)
+}
 # The body of a successful (2xx) response; any other status fails.
 fetchText url options = {
     response <- fetch url options
@@ -20,8 +29,6 @@ fetchJson url options = {
 
 # Requests as commands, as in Elm's Http: the browser sends them without
 # blocking, and the expectation turns the answer into a message.
-std <- import "std"
-use std.option
 _decode <- import "std/decode"
 HttpError = BadUrl String | Timeout | NetworkError | BadStatus Int | BadBody String
 HttpEffect = | HttpGet Dynamic Dynamic

@@ -334,7 +334,8 @@ reasons:
 - **Effects** act on the `World`, whose operations are the interpreter's:
   `print`, `echo`, `emit`, `exit`, `repl`, `set`, `while`, `for`, `compile`,
   `intrinsics.import`, `intrinsics.readFileFrom`, and the standard library's
-  `readFile`, `readStdin`, `getArgs`, `fetch`, `bracket`, `withFile`,
+  `readFile`, `readStdin`, `getArgs`, `sendRequest` (behind `http`'s
+  `fetch`, which reads its options in APN), `bracket`, `withFile`,
   `entropy`, `currentTime`, `zoneOffset` and the C interface (`withLibrary`,
   `allocate`, `peek`, `poke`, `offset`, `nullPointer`). Each is an action, a
   function of the world: `print x` is `IO (world -> [[], write (to String x ++

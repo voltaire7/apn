@@ -49,7 +49,7 @@ export const STANDARD_NATIVES: Array<[string, number]> = [
     ...FFI_NATIVES,
     ["bracket", 3], ["withFile", 2], ["readFile", 1], ["readStdin", 0], ["getArgs", 0],
     ["seq", 2], ["fail", 1], ["chars", 1], ["fromChars", 1], ["upper", 1], ["lower", 1],
-    ["fetch", 2], ["toJson", 1], ["prettyJson", 1], ["fromJson", 1],
+    ["sendRequest", 5], ["toJson", 1], ["prettyJson", 1], ["fromJson", 1],
     ["entropy", 0], ["currentTime", 0], ["zoneOffset", 0], ["p5Object", 2], ["p5SketchType", 0],
 ];
 const ARITIES = new Map([...NATIVES, ...STANDARD_NATIVES]);
@@ -61,7 +61,7 @@ export const nativeArity = (name: string): number | undefined => ARITIES.get(nam
 export const ACTIONS = new Map(Object.entries({
     "intrinsics.import": "Module", "intrinsics.readFileFrom": "String", compile: "[]", print: "[]", echo: "[]",
     emit: "[]", repl: "[]", exit: "[]", set: "[]", while: "[]", for: "[]", readFile: "String",
-    readStdin: "String", getArgs: "[String]", fetch: "Record", bracket: "a", withFile: "a",
+    readStdin: "String", getArgs: "[String]", sendRequest: "Record", bracket: "a", withFile: "a",
     withLibrary: "a", entropy: "Int", currentTime: "Int", zoneOffset: "Int",
 }));
 // Natives that show their argument as text, which an action has none of.
@@ -86,7 +86,6 @@ export const NATIVE_EXPORTS: Record<string, string[]> = {
     io: ["withFile", "readFile", "readStdin", "getArgs"],
     function: ["bracket", "seq", "do"],
     text: ["upper", "lower"],
-    http: ["fetch"],
     json: ["prettyJson"],
     random: ["entropy"],
     time: ["currentTime", "zoneOffset"],

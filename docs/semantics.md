@@ -858,7 +858,7 @@ only for its own types.
 APN code is pure; effects are **IO actions**, ordinary values describing what
 to do. `print "hi"` builds the action that prints `hi`; nothing is printed
 until the action runs. The effectful builtins all return actions: `print`,
-`echo`, `emit` and `repl` (yielding `[]`), `readFile`, `readStdin`, `getArgs`, `fetch`, `exit`,
+`echo`, `emit` and `repl` (yielding `[]`), `readFile`, `readStdin`, `getArgs`, `exit`,
 `set` (writing a `Mutable` cell), `bracket`, `withFile` and
 `ffi.withLibrary`. An action has no value to show until it runs, so showing one is an
 error, as in Haskell: `print (readFile "f")`, `print [print "hi"]`, `toString` of one, or
