@@ -2986,13 +2986,44 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // while its typing is under way (a recursive one, as branch calls limb
     // calls branch) is the type that typing finds, not typed once more; one
     // given other types is typed for them in turn.
-    const typingCalls = new WeakMap<Summary, Map<string, Ty>>();
+    const typingCalls = new WeakMap<Summary, Map<string, CallFrame[]>>();
+    // A known scalar of a value: a number, string, character, Bool or tag.
+    function knownScalar(k: Known): Known {
+        const r = resolveKnown(k);
+        return {
+            ...r.index && !r.index.terms.size ? { index: r.index } : {}, ...r.boolean === undefined ? {} : { boolean: r.boolean },
+            ...r.string === undefined ? {} : { string: r.string }, ...r.char === undefined ? {} : { char: r.char },
+            ...r.float === undefined ? {} : { float: r.float }, ...r.number ? { number: r.number } : {},
+            ...r.tag && !r.payload?.length ? { tag: r.tag } : {},
+        };
+    }
+    // A known value's scalars and shape, as a key (a value not known is "").
+    function knownPrint(k: Known, depth = 0): string {
+        const r = resolveKnown(k);
+        const parts = [
+            r.index && !r.index.terms.size ? `i${r.index.constant}` : "", r.boolean === undefined ? "" : `b${r.boolean}`,
+            r.string === undefined ? "" : `s${JSON.stringify(r.string)}`, r.char === undefined ? "" : `c${r.char}`,
+            r.float === undefined ? "" : `f${r.float}`, r.number ? `n${numberText(r.number)}` : "", r.tag ? `t${r.tag}` : "",
+            r.size === undefined ? "" : `z${r.size}`,
+            depth < 3 && r.items ? `[${r.items.map(x => knownPrint(x, depth + 1)).join(",")}]` : "",
+        ];
+        return parts.join("");
+    }
+    // A call's typing, by its arguments' types and what is known of their
+    // values: the latter tell calls apart only where a known value decided a
+    // conditional in it (decided), as h p n = n == 0 ? ... does for h p 3 and
+    // h p 1; else calls of the same types are one (branch p a h l and its
+    // own recursive calls).
+    type CallFrame = { result: Ty; values: string; decided: boolean };
+    const typedCalls = new WeakMap<Summary, Map<string, CallFrame[]>>(), callFrames: CallFrame[] = [];
     function typedCall(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
         if (typingCall > 256) problem(CALL_COST, e);
-        const calls = typingCalls.get(summary) ?? new Map<string, Ty>(), key = args.map(a => text(resolve(a.type))).join("\u0000");
+        const types = args.map(a => text(resolve(a.type))).join("\u0000"), values = args.map(a => knownPrint(a)).join("\u0000");
+        const fits = (frame: CallFrame) => !frame.decided || frame.values === values;
+        const calls = typingCalls.get(summary) ?? new Map<string, CallFrame[]>();
         typingCalls.set(summary, calls);
-        const pending = calls.get(key);
-        if (pending) return pending;
+        const pending = calls.get(types)?.find(fits);
+        if (pending) return pending.result;
         // A recursive call given other types (its function's typing under way)
         // costs a step for each part of its arguments' types, so a recursion
         // whose arguments grow (f (p ++ p) (n - 1)) reaches the step bound,
@@ -3008,25 +3039,27 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (r.k === "list") r.items?.forEach(count);
         };
         if (calls.size) args.forEach(a => count(a.type));
-        // (One whose parameters are all names depends on their types alone:
-        // typed once, for each of its calls given them.)
+        // (One whose parameters are all names depends on their types, and the
+        // values that decided it: typed once, for each of its calls given them.)
         const names = summary.clauses.every(c => c.params.slice(0, args.length).every(q => q.p === "var"));
-        const done = names ? typedCalls.get(summary)?.get(key) : undefined;
-        if (done) return copy(done);
-        const result = variable();
-        calls.set(key, result);
+        const finished = typedCalls.get(summary) ?? new Map<string, CallFrame[]>();
+        typedCalls.set(summary, finished);
+        const done = names ? finished.get(types)?.find(fits) : undefined;
+        if (done) return copy(done.result);
+        const frame: CallFrame = { result: variable(), values, decided: false };
+        calls.set(types, [...calls.get(types) ?? [], frame]);
+        callFrames.push(frame);
         try {
             const typed = typedOnce(summary, args, e);
-            if (typed) unify(result, typed, e);
-            if (typed && names) {
-                const finished = typedCalls.get(summary) ?? new Map<string, Ty>();
-                typedCalls.set(summary, finished);
-                finished.set(key, result);
-            }
-            return typed && result;
-        } finally { calls.delete(key); }
+            if (typed) unify(frame.result, typed, e);
+            if (typed && names) finished.set(types, [...finished.get(types) ?? [], frame]);
+            return typed && frame.result;
+        } finally {
+            callFrames.pop();
+            const rest = (calls.get(types) ?? []).filter(x => x !== frame);
+            if (rest.length) calls.set(types, rest); else calls.delete(types);
+        }
     }
-    const typedCalls = new WeakMap<Summary, Map<string, Ty>>();
     function typedOnce(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
         if (summary.clauses.length > 1) return typedClauses(summary, args, e);
         const clause = summary.clauses[0];
@@ -3042,10 +3075,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         } finally { typingCall--; }
     }
     function bindArgument(param: Pattern, argument: Entry, scope: Scope, e: Expr): void {
-        // (A name takes its argument's type: its value, known, would have the
-        // body evaluated for it, f (p ++ p) (n - 1) all the way down, which
-        // typing does not need; a typed part checks a known value itself.)
-        if (param.p === "var") { scope.set(param.name, { type: argument.type }); return; }
+        // (A name takes its argument's type and, where its value is a known
+        // scalar, the value, which decides the body's conditionals: see
+        // "ternary". A known record, list or function stays unevaluated: its
+        // actions would run here.)
+        if (param.p === "var") { scope.set(param.name, { ...knownScalar(argument), type: argument.type }); return; }
         if (param.p === "wildcard") return;
         const a = resolve(argument.type);
         // A list whose items are known: its first and the rest, each its own,
@@ -3066,7 +3100,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // fields by name, a known value checked: 300 is no UInt8).
         const t = variable();
         bind(param, t, scope, e);
+        // (A trial: what it finds unknown is not the call's.)
+        const unknown = [dynamicBoundaries, firstUnknown, unknownLength] as const;
+        const fits = param.p === "schema" && succeeds(() => unify(copy(t), copy(argument.type), e));
+        [dynamicBoundaries, firstUnknown, unknownLength] = unknown;
         application({ k: "fn", input: t, output: t, coerce: true, pattern: param }, argument, e);
+        // (A value the type takes as it is, (p : Vect 2 _) given ["a", 1],
+        // keeps its own items.)
+        if (fits && param.p === "schema") bindArgument(param.value, argument, scope, e);
     }
     // A call of a function of several clauses typed for its arguments, as the
     // run dispatches it: each clause that may take them typed with them
@@ -3567,15 +3608,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const typed = typedCall(f.summary!, [argument], e);
                 if (typed) return typed;
             } else if (at >= 0 && !choosing) {
-                // A call given items of different types is typed for them (a
-                // partial one is the function of the rest that holds them), or (a
-                // body this cannot type, or only at a cost) takes the function's
-                // own type.
+                // A call given items of different types is typed for them once
+                // its arguments are all given, with what is known of each; till
+                // then it is the function of the rest, carrying them (applied).
                 const args = [...f.applied ?? [], argument];
-                const ready = f.summary!.clauses.length === 1 || at === params.length - 1;
-                if (args.length === at + 1 && ready && args.some(x => holdsMixed(x.type))) {
-                    const typed = boundedTypedCall(f.summary!, args, e);
-                    if (typed) return typed;
+                if (args.length === at + 1 && args.some(x => holdsMixed(x.type))) {
+                    const rest = resolve(f.output);
+                    if (at < params.length - 1 && rest.k === "fn" && rest.summary === f.summary) return { ...rest, applied: args };
+                    if (at === params.length - 1) {
+                        const typed = boundedTypedCall(f.summary!, args, e);
+                        if (typed) return typed;
+                    }
                 }
             }
             // A recursive call another clause's call has not typed for (ln [1]
@@ -4640,7 +4683,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 return rec.fields.get(e.field)!;
             }
-            case "ternary": return infer(ternaryExpansion(e), scope, expected);
+            case "ternary": {
+                // In a call typed for its arguments, a condition their known
+                // values decide takes its branch, as the run does (the
+                // function's own definition types both).
+                if (typingCall > 0) {
+                    const known = peek(() => resolveKnown(computed(e.cond, scope)), {} as Known);
+                    if (known.boolean !== undefined) {
+                        // (Every call being typed now depends on these values.)
+                        callFrames.forEach(frame => frame.decided = true);
+                        infer(e.cond, scope);
+                        return infer(known.boolean ? e.then : e.els, scope, expected);
+                    }
+                }
+                return infer(ternaryExpansion(e), scope, expected);
+            }
             case "binop": {
                 if (e.reassociate) return infer(regrouped(e, scope), scope, expected);
                 // Against a type, a lambda written in place is read as one, as
@@ -4775,7 +4832,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (isIO(final)) return final;
                 // Undecided (a block of returns): pending until used.
                 if (isPending(final)) return monad ? io((final as Extract<Ty, { k: "variant" }>).args[0]) : final;
-                if (final.k === "var") { const t = monad ? io(variable()) : pendingTy(variable()); unify(t, final, last); return t; }
+                // (So does one a call still waiting decides: when c { ... } given
+                // a block whose type a recursive call has yet to find.)
+                if (final.k === "var" || final.k === "operation") { const t = monad ? io(variable()) : pendingTy(variable()); unify(t, final, last); return t; }
                 return notAction();
             }
             case "stmDef":

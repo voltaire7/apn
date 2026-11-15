@@ -126,10 +126,16 @@ for (const [source, error] of [
     });
 }
 for (const [source, error] of [
-    ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\nf ["a", 1] 12', "takes more than 20000 steps"],
+    // A known value decides a conditional, so the recursion follows it: the
+    // list doubles twelve times, then n is 0; with n not known it never ends.
+    ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\nf ["a", 1] 12', ""],
+    ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\ng n = f ["a", 1] n\ng 3', "takes more than 20000 steps"],
     ['g [] = ""\ng (x :: rest) = x ++ g rest\nf p = g p\nf ["a", 1]', "cannot append Int and String"],
     ['g [] = ""\ng (x :: rest) = x ++ g rest\nf p = g p\nf ["a","b"]', ""],
-    ['step [x,y] = [y,x]\nf p n = n == 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 4', "cannot append String and Int"],
+    ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n == 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 4', ""],
+    ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n == 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 3', "cannot append String and Int"],
+    ['g 0 p = head p + 1\ng n p = ""\ng 0 ["a", 1]', "cannot combine"],
+    ['g 0 p = head p + 1\ng n p = ""\ng 1 ["a", 1]', ""],
     // A length a typed call cannot find is unknown, as anywhere: rejected.
     ['f [a,b] = a\ng p = f (filter (x -> True) p)\ng [1, "a"]', "cannot establish static types"],
 ] as const) Deno.test(`a recursive typed call ends: ${source}`, () => {
