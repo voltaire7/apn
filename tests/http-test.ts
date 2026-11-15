@@ -21,18 +21,23 @@ function fails(source: string, text: string, kind?: string): void {
 // JSON.stringify and JSON.parse: to JSON, prettyJson, from JSON.
 for (const [source, expected] of [
     ['std <- import "std"; use std.json; to JSON [ids = ["jawed"]]', '"{\\"ids\\":[\\"jawed\\"]}"'],
-    ['std <- import "std"\nuse std.json\nto JSON [1,2.5,True,"a",\'c\',[]]', '"[1,2.5,true,\\"a\\",\\"c\\",[]]"'],
+    ['std <- import "std"\nuse std.json\nto JSON [1, 2.5, True, "a", \'c\', []]', '"[1,2.5,true,\\"a\\",\\"c\\",[]]"'],
     ['std <- import "std"\nuse std.json\nto JSON [`Content-Type` = "x", n = 123456789012345678901234567890]', '"{\\"Content-Type\\":\\"x\\",\\"n\\":123456789012345678901234567890}"'],
-    ['std <- import "std"; use std.json; to JSON ([["k",1]] : HashMap _ _)', '"{\\"k\\":1}"'],
+    ['std <- import "std"; use std.json; to JSON ([["k", 1]] : HashMap _ _)', '"{\\"k\\":1}"'],
     ['std <- import "std"; use std.json; to JSON [1..3]', '"[1,2,3]"'],
+    // An object is an association list: a non-empty list of [String,value] pairs.
+    ['std <- import "std"; use std.json; to JSON [["ids", ["jawed"]], ["n", 1]]', '"{\\"ids\\":[\\"jawed\\"],\\"n\\":1}"'],
+    ['std <- import "std"; use std.json; to JSON [["a", 1], [2,3]]', '"[[\\"a\\",1],[2,3]]"'],
+    ['std <- import "std"; use std.json; to JSON [[1,2]]', '"[[1,2]]"'],
     ['std <- import "std"; use std.json; prettyJson [a = [1]]', '"{\\n  \\"a\\": [\\n    1\\n  ]\\n}"'],
-    ['std <- import "std"\nuse std.json\nfrom JSON "{\\"status\\": 1, \\"odd-key\\": [true, null, 2.5]}"', '[status = 1, `odd-key` = [True,[],2.5]]'],
+    ['std <- import "std"\nuse std.json\nfrom JSON "{\\"status\\": 1, \\"odd-key\\": [true, null, 2.5]}"', '[["status", 1], ["odd-key", [True, [], 2.5]]]'],
     ['std <- import "std"; use std.json; from JSON "{\\"odd-key\\": 3}" "odd-key"', '3'],
-    ['std <- import "std"\nuse std.json\nv = [a = [1,2], `b c` = "x", `Content-Type` = 1, q = 2]; from JSON (to JSON v) == v', 'True'],
+    ['std <- import "std"\nuse std.json\nv = [["a", [1,2]], ["b c","x"], ["q", [["r", 2]]]]; from JSON (to JSON v) == v', 'True'],
+    ['std <- import "std"; use std.json; from JSON "{\\"a\\": {}}"', '[["a", []]]'],
     ['std <- import "std"\nuse std.json\nfrom JSON "123456789012345678901234567890"', '123456789012345678901234567890'],
     ['std <- import "std"; use std.json; from JSON "\\"\\\\u00e9\\""', '"é"'],
-    ['std <- import "std"; use std.json; from JSON "{\\"a\\": 1, \\"a\\": 2}"', '[a = 2]'],
-    ['std <- import "std"; use std.json; v = [a = [1,2], `b c` = "x"]; from JSON (to JSON v) == v', 'True'],
+    ['std <- import "std"; use std.json; from JSON "{\\"a\\": 1, \\"a\\": 2}"', '[["a", 2]]'],
+    ['std <- import "std"; use std.json; v = [a = [1,2], `b c` = "x"]; from JSON (to JSON v) == pairs v', 'True'],
 ] as const) Deno.test(`json: ${source}`, () => {
     const actual = run(source);
     if (actual !== expected) throw new Error(`${source}: got ${actual}`);
@@ -50,15 +55,16 @@ for (const [source, message] of [
 Deno.test("fetch returns a response record", () => {
     const i = session();
     run('std <- import "std"\nuse std.[http,json]\nresponse <- fetch "data:application/json,{\\"a\\":[1,2]}" []; []', i);
-    if (run("[response.status,response.ok,response.body]", i) !== '[200,True,"{\\"a\\":[1,2]}"]') throw new Error(run("response", i));
-    if (run('lookup "content-type" response.headers', i) !== '"application/json"') throw new Error("headers");
-    if (run("(from JSON response.body).a", i) !== "[1,2]") throw new Error("json body");
+    if (run("[response.status,response.ok,response.body]", i) !== '[200, True, "{\\"a\\":[1,2]}"]') throw new Error(run("response", i));
+    if (run('response.headers "content-type"', i) !== '"application/json"') throw new Error("headers");
+    if (run('from JSON response.body "a"', i) !== "[1,2]") throw new Error("json body");
     if (run('fetchJson "data:application/json,[true]" []', i) !== "[True]") throw new Error("fetchJson");
     if (run('fetchText "data:text/plain,hi" [method = "GET", timeout = 5000]', i) !== '"hi"') throw new Error("fetchText");
 });
 for (const [source, message, kind] of [
     ['std <- import "std"\nuse std.http\nfetch "data:text/plain,x" [methd = "GET"]', "unknown option 'methd'", "runtime"],
-    ['std <- import "std"\nuse std.http\nfetch "data:text/plain,x" [headers = [a = 1]]', "a header value must be a string", "runtime"],
+    ['std <- import "std"\nuse std.http\nfetch "data:text/plain,x" [headers = [["a", 1]]]', "a header value must be a string", "runtime"],
+    ['std <- import "std"\nuse std.http\nfetch "data:text/plain,x" [headers = [a = "1"]]', "headers must be an association list", "runtime"],
     ['std <- import "std"\nuse std.http\nfetch "data:text/plain,x" [timeout = 0]', "timeout must be a positive Int", "runtime"],
     ['std <- import "std"; use std.http; fetch "data:text/plain,x" 5', "options must be a record", "runtime"],
     ['std <- import "std"\nuse std.http\nr <- fetch "data:text/plain,x" []; r.missing', "missing field", "type"],
@@ -88,16 +94,16 @@ Deno.test({ name: "fetch sends method, headers and body to a server", ignore: !n
 response <- fetch "${base}/api/channels" [
     method = "POST"
     headers = [
-        Authorization = "Basic token"
-        \`Content-Type\` = "application/json"
+        ["Authorization","Basic token"]
+        ["Content-Type","application/json"]
     ]
     body = to JSON [ids = ["jawed"]]
 ]
 data = from JSON response.body
 []`, i);
-        if (run("[response.status,data.method,data.auth,data.type,data.body]", i) !== '[200,"POST","Basic token","application/json","{\\"ids\\":[\\"jawed\\"]}"]') throw new Error(run("data", i));
-        if (run('lookup "x-echo" response.headers', i) !== '"yes"') throw new Error("response headers");
-        if (run(`missing <- fetch "${base}/missing" []\n[missing.status,missing.ok,missing.statusText,missing.body]`, i) !== '[404,False,"Not Found","nope"]') throw new Error("404");
+        if (run('[response.status, data "method", data "auth", data "type", data "body"]', i) !== '[200, "POST", "Basic token", "application/json", "{\\"ids\\":[\\"jawed\\"]}"]') throw new Error(run("data", i));
+        if (run('response.headers "x-echo"', i) !== '"yes"') throw new Error("response headers");
+        if (run(`missing <- fetch "${base}/missing" []\n[missing.status,missing.ok,missing.statusText,missing.body]`, i) !== '[404, False, "Not Found", "nope"]') throw new Error("404");
         if (run(`big <- fetchText "${base}/big" []; length big`, i) !== "3000000") throw new Error("big body");
         fails(`std <- import "std"; use std.http; fetchText "${base}/missing" []`, "answered 404 Not Found");
         fails(`std <- import "std"\nuse std.http\nfetchText "${base}/slow" [timeout = 100]`, "timed out after 100 ms");

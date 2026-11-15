@@ -66,7 +66,7 @@ for (const [source, error] of [
     ['map Int32 [1,2]', 'Int32 is a type, not a function'],
     ['[1..4] * Int32', 'Int32 is a type, not a function'],
     ['f g = g 5\nf Float', 'Float is a type, not a function'],
-    ['HashMap [["a",1]]', 'HashMap is a type, not a function'],
+    ['HashMap [["a", 1]]', 'HashMap is a type, not a function'],
     ['cast Int 1', "unbound variable 'cast'"],
 ] as const) Deno.test(`ascription rejects: ${source}`, () => {
     try { result(source); } catch (e) {
@@ -77,7 +77,7 @@ for (const [source, error] of [
 });
 // (x : t) with t a parameter is checked at each call, with the type it is given.
 for (const [source, expected] of [
-    ['ascribe t x = (x : t)\nascribe (HashMap _ _) [["a",1]]', '([["a",1]] : HashMap _ _)'],
+    ['ascribe t x = (x : t)\nascribe (HashMap _ _) [["a", 1]]', '([["a", 1]] : HashMap _ _)'],
     ["ascribe t x = (x : t)\nascribe Int (2 / 2)", "1"],
     ['ascribe t x = (x : t)\nascribe Int "a"', "error: cannot use String where Int is required"],
 ] as const) Deno.test(`checked ascription to a parameter: ${source}`, () => {

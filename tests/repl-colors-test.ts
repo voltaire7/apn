@@ -10,7 +10,7 @@ function echo(interp: Interpreter, value: import("../src/types.ts").Value): stri
     return output;
 }
 
-for (const source of ["[1]", "[x = 1]", '[x = [1,"hi",True]]', "take 3 [1..]"]) {
+for (const source of ["[1]", "[x = 1]", '[x = [1, "hi", True]]', "take 3 [1..]"]) {
     Deno.test(`streamed REPL colors: ${source}`, () => {
         const interp = new Interpreter();
         const value = interp.run(parse(source));

@@ -1,9 +1,9 @@
 # Decoding JSON values, as in Elm's Json.Decode. A decoder turns a value (as
-# from JSON gives it: records, lists, numbers, strings, Bool, []) into Ok of
-# the result or Err of what went wrong. A type decodes as fromType reads it, so
-# one stands wherever a decoder goes (field "year" Int, list Quote). int, float
-# and list are also random's names: a program using both imports one qualified
-# (decode <- import "std/decode").
+# from JSON gives it: an object's [key,value] pairs, lists, numbers, strings,
+# Bool, []) into Ok of the result or Err of what went wrong. A type decodes as
+# fromType reads it, so one stands wherever a decoder goes (field "year" Int,
+# list Quote). int, float and list are also random's names: a program using
+# both imports one qualified (decode <- import "std/decode").
 std <- import "std"
 use std.option
 Decoder a = | Decoder (value -> Result a String)
@@ -12,13 +12,14 @@ string = expecting "a STRING" (isType String)
 int = expecting "an INT" isInteger
 float = Decoder (value -> isNumber value ? Ok (inexact value) : Err "Expecting a FLOAT")
 bool = expecting "a BOOL" (isType Bool)
-# The value an object holds under name, or the error saying it has none.
+# The value an object (its [key,value] pairs) holds under name, or the error
+# saying it has none.
 _field name value = {
-    fields = isType Record value ? (pairs (value : Record) : HashMap _ _) : ([] : HashMap _ _)
-    has name fields
-        ? Ok (lookup name fields)
-        : Err ("Expecting an OBJECT with a field named `" ++ name ++ "`")
+    found = isType (List _) value ? filter (_names name) value : []
+    null found ? Err ("Expecting an OBJECT with a field named `" ++ name ++ "`") : Ok (head found 1)
 }
+_names name [(key : String), _] = key == name
+_names _ _ = False
 # The values of a list of Results, or the first error.
 _all results = results ~ [
     [] -> Ok []

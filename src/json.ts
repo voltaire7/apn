@@ -1,7 +1,8 @@
 // JSON text and APN values (the json module): toJson and prettyJson encode,
-// fromJson decodes. Integers stay exact both ways; null becomes []. A record's
-// key is a name, any text, so a JSON object's keys are its fields' names
-// (r.status, r.`Content-Type`, r "Content-Type").
+// fromJson decodes. Integers stay exact both ways; null becomes []. A JSON
+// object is an association list, its [key,value] pairs in order (o "status"
+// looks one up): a non-empty list of [String,value] pairs is written as one,
+// as are a record's fields and a HashMap with string keys.
 import { APNError } from "./errors.ts";
 import type { Interpreter } from "./interp.ts";
 import { type Value, mkBool, mkList, mkStr } from "./types.ts";
@@ -32,9 +33,21 @@ export function toJson(i: Interpreter, value: Value, indent = 0, name = "toJson"
                 }), "{", "}");
             case "variant":
                 return fail(`cannot encode the variant ${v.tag}`, "convert it to a record, list or string first");
-            default:
-                if (i.isList(v)) return join(i.items(v).map(item => encode(item, depth + 1)), "[", "]");
-                return fail(`cannot encode a ${v.kind} value`);
+            default: {
+                if (!i.isList(v)) return fail(`cannot encode a ${v.kind} value`);
+                const items = i.items(v);
+                const pairs = items.map(item => {
+                    const pair = i.dataValue(item);
+                    if (!i.isList(pair)) return undefined;
+                    const parts = i.items(pair);
+                    const key = parts.length === 2 ? i.dataValue(parts[0]) : undefined;
+                    return key?.kind === "string" ? [key.v, parts[1]] as const : undefined;
+                });
+                if (items.length && pairs.every(Boolean)) {
+                    return join(pairs.map(pair => `${JSON.stringify(pair![0])}:${indent ? " " : ""}${encode(pair![1], depth + 1)}`), "{", "}");
+                }
+                return join(items.map(item => encode(item, depth + 1)), "[", "]");
+            }
         }
     };
     return encode(value, 0);
@@ -61,7 +74,8 @@ export function fromJson(text: string, name = "fromJson"): Value {
             pos++;
             const fields: Array<[string, Value]> = [];
             space();
-            if (text[pos] === "}") { pos++; return { kind: "record", v: fields }; }
+            const object = () => mkList(fields.map(([key, item]) => mkList([mkStr(key), item])));
+            if (text[pos] === "}") { pos++; return object(); }
             for (;;) {
                 space();
                 if (text[pos] !== '"') fail("expected a string key");
@@ -75,7 +89,7 @@ export function fromJson(text: string, name = "fromJson"): Value {
                 space();
                 if (text[pos] === ",") { pos++; continue; }
                 expect("}");
-                return { kind: "record", v: fields };
+                return object();
             }
         }
         if (c === "[") {

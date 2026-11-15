@@ -5,7 +5,7 @@ std <- import "std"
 use std.[sequence,number,text,map]
 take 10 primes
 mean [1,2]                         # Some 3/2
-frequencies $ words $ "one two one" # ([["one",2],["two",1]] : HashMap _ _)
+frequencies $ words $ "one two one" # ([["one", 2], ["two", 1]] : HashMap _ _)
 ```
 
 The prelude, `lib/prelude.apn`, needs no import: it defines every binary
@@ -243,12 +243,12 @@ Run `apn examples/standard-library.apn` for a complete example.
 ## Code as data — `syntax`
 
 ```apn
-toAST [f x + 1]                        # ["[]",["+",["f","x"],1]]   (prelude)
+toAST [f x + 1]                        # ["[]", ["+", ["f","x"], 1]]   (prelude)
 std <- import "std"
 use std.syntax
 fromAST (toAST [n -> n * 2 + 1])       # "[n -> n * 2 + 1]"
-doubled e = ["*",e,2]
-eval (doubled ["sqrt",16])             # 8
+doubled e = ["*", e, 2]
+eval (doubled ["sqrt", 16])             # 8
 ```
 
 `toAST code` gives [code](semantics.md#code), a list's items as written,
@@ -385,13 +385,13 @@ response, whatever its status, as a record:
 | --- | --- |
 | `status`, `ok`, `statusText` | `Int`, `Bool` (a 2xx status), `String` |
 | `url` | the final URL, after redirects |
-| `headers` | a `HashMap` by lowercase name (`lookup "content-type" r.headers`) |
+| `headers` | an association list by lowercase name (`r.headers "content-type"`) |
 | `body` | the body as text |
 
 `options` is a record whose fields are all optional, or `[]` for none: `method`
-(`"GET"` by default), `headers` (a record or a `HashMap` of strings), `body`
-(a `String`) and `timeout` (milliseconds). Any other field is an error. A header
-name that is not a name is in backticks (`` `Content-Type` = "application/json" ``).
+(`"GET"` by default), `headers` (an association list of strings, as a JSON
+object is), `body` (a `String`) and `timeout` (milliseconds). Any other field
+is an error.
 
 ```apn
 std <- import "std"
@@ -399,12 +399,12 @@ use std.[http,json]
 response <- fetch "https://www.youtube-transcript.io/api/channels" [
     method = "POST"
     headers = [
-        Authorization = "Basic <your-api-token>"
-        `Content-Type` = "application/json"
+        ["Authorization","Basic <your-api-token>"]
+        ["Content-Type","application/json"]
     ]
-    body = to JSON [ids = ["jawed"]]
+    body = to JSON [["ids", ["jawed"]]]
 ]
-channels = from JSON response.body
+channels = from JSON response.body "channels"
 ```
 
 `fetchText url options` yields a successful (2xx) response's body and fails
@@ -423,23 +423,36 @@ sending one without blocking.
 ## JSON — `json`
 
 `to JSON value` (prelude) is `JSON.stringify`, `prettyJson value` the same
-indented by two spaces, and `from JSON text` (prelude) is `JSON.parse`:
+indented by two spaces, and `from JSON text` (prelude) is `JSON.parse`. A JSON
+object is an association list, its `[key,value]` pairs in order, so a key is
+looked up by [applying it](templates-and-types.md#association-list-lookup):
+
+```apn
+std <- import "std"
+use std.json
+reply = from JSON "{\"status\": 200, \"items\": [{\"name\": \"a\"}]}"
+reply                          # [["status", 200], ["items", [[["name","a"]]]]]
+reply "items" 0 "name"         # "a"
+to JSON [["ids", ["jawed"]]]   # "{\"ids\":[\"jawed\"]}"
+```
 
 | APN | JSON |
 | --- | --- |
-| record, `HashMap` with string keys | object, each key's text as it is |
-| list (also lazy or a range, if finite) | array |
+| a non-empty list of `[String,value]` pairs, a record, a `HashMap` with string keys | object, each key's text as it is |
+| any other list (also lazy or a range, if finite) | array |
 | `String`, `Char` | string |
 | `Int` (exact, any size), `Float` | number |
 | `Bool` | `True`, `False` |
 
 A fraction, complex number, variant or function has no JSON form and is an
-error; convert it first. A record key's text is the JSON key, so `status`
-writes `"status"`. `from JSON` returns an object as a record named by the JSON
-keys (`r.status`, ``r.`odd-key` ``), an integer as an exact `Int`,
-other numbers as `Float`, and `null` as `[]`, so `from JSON (to JSON v)` gives
-back `v`. Its result is `Dynamic`; give it a type with a
-pattern or an ascription where the program needs one.
+error; convert it first. `from JSON` returns an object as its pairs (a key
+repeated keeps its last value, as `JSON.parse` does), an integer as an exact
+`Int`, other numbers as `Float`, and `null` and `{}` as `[]`, so `from JSON
+(to JSON v)` gives back `v` for a list of pairs (but `to JSON` writes an array
+of string-keyed pairs as an object). Its result is `Dynamic`; give it a
+type with a [decoder](browser-html.md) (`decode.decodeValue (decode.list
+Point) value`, which reads each object's fields by name) or an ascription where
+the program needs one.
 
 ## Browser modules
 

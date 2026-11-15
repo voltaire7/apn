@@ -40,7 +40,7 @@ for (const checked of [false, true]) {
             ["f ([x] : [t]) = [t,x]; f [extra = 2, x = (1 : Int32)]", "[Int32,1]"],
             [
                 'f ([x,y] : [a,b]) = [a,b,x,y]; f [y = "hi", x = 1]',
-                '[Int,String,1,"hi"]',
+                '[Int, String, 1, "hi"]',
             ],
             ["f ([x] : [Int]) = x; f [x = 1]", "1"],
             ["f ([x] : [Float]) = x; f [x = 1]", "1.0"],

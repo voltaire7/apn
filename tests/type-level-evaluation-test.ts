@@ -67,7 +67,7 @@ Deno.test("the checker runs the runtime's text functions", () => {
     const ok = new Interpreter();
     ok.enableChecking();
     const shown = ok.renderString(ok.run(parseDocument('std <- import "std"; use std.text; [upper "straße", (to (List Char) "a😀" : Vect 2 Char)]')));
-    if (shown !== '["STRASSE",[\'a\',\'😀\']]') throw new Error(shown);
+    if (shown !== '["STRASSE", [\'a\',\'😀\']]') throw new Error(shown);
 });
 
 Deno.test("a condition reading a cell is not decided out of order", () => {

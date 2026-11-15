@@ -22,7 +22,7 @@ for (const [source, expected] of [
     // A list's type is exact: its items, as written.
     ['typeOf [1,2,3,4]', '[Int,Int,Int,Int]'],
     ['typeOf []', '[]'],
-    ['typeOf [1,"hello"]', '[Int,String]'],
+    ['typeOf [1, "hello"]', '[Int,String]'],
     ['typeOf [[1,2],[3]]', '[[Int,Int],[Int]]'],
     // A list's type is the list of its items' types, as its literal's would be,
     // made as it is read: an item or tail is read only when its type is.

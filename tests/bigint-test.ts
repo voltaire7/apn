@@ -36,7 +36,7 @@ example("from String retains large integer digits", 'from String "90071992547409
 example("integer string formatting has no BigInt suffix", 'format "% / %" [9007199254740993,-9007199254740993]', '"9007199254740993 / -9007199254740993"');
 example("to String uses exact decimal text", "to String 9007199254740993", '"9007199254740993"');
 example("code retains exact digits", "intrinsics.written [9007199254740993]", '"[9007199254740993]"');
-example("toAST retains large numeric leaves", "toAST [9007199254740993 + 1]", '["[]",["+",9007199254740993,1]]');
+example("toAST retains large numeric leaves", "toAST [9007199254740993 + 1]", '["[]", ["+", 9007199254740993, 1]]');
 example("large finite ranges advance exactly", "[9007199254740993..9007199254740995]", "[9007199254740993,9007199254740994,9007199254740995]");
 example("large stepped ranges advance exactly", "[9007199254740993,9007199254740995..9007199254740997]", "[9007199254740993,9007199254740995,9007199254740997]");
 example("descending ranges retain exact endpoints", "[9007199254740995..9007199254740993]", "[9007199254740995,9007199254740994,9007199254740993]");
@@ -48,7 +48,7 @@ example("literal patterns match exact large integers", "pick 9007199254740993 = 
 example("large record keys round-trip exactly", "r = [`9007199254740993` = 7]\n[r.`9007199254740993`, r \"9007199254740993\"]", "[7,7]");
 example("large take counts end at a finite list", "take 9007199254740993 [1,2]", "[1,2]");
 example("large drop counts end at a finite list", "drop 9007199254740993 [1,2]", "[]");
-example("negative list and record indexes still work", '[[1,2] -1, [a = 1, b = 2] -1]', '[2,["b",2]]');
+example("negative list and record indexes still work", '[[1,2] -1, [a = 1, b = 2] -1]', '[2, ["b", 2]]');
 example("negative integer iteration still counts down", "-3 * x -> x", "[0,-1,-2]");
 example("floats keep fractional arithmetic", "[7.0 / 2.0, 0.5 + 0.25]", "[3.5,0.75]");
 failure("huge positive indexes fail without rounding", "[1,2] 9007199254740993", "index 9007199254740993 out of range");

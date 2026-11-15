@@ -91,7 +91,10 @@ Spacing is part of the syntax (a parse error otherwise):
 - A `,` follows its item directly. When no item it separates has a space in
   it (outside string and character literals), it takes nothing after it:
   `[1,2,3]`, `[0,-1,1/2,v.x]`, `["a b","c"]`; otherwise it takes one space:
-  `[1 + 1, 2]`, `[Some 1, None]`, `[x = 1, y = 2]`. The items are a line's in one
+  `[1 + 1, 2]`, `[Some 1, None]`, `[x = 1, y = 2]`. Literals of different kinds
+  take one space too: `["a", 1]`, `[[1], 2]`, `[True, 'c']` (the kinds are
+  number, string, character, Bool and list, so `[1,2.5,1/2]` and `["a","b"]`
+  stay as they are). The items are a line's in one
   bracket, so `[[1,2],[3]]` but `[[1 + 1], [3]]`, and `[1, 2]` or `[1 + 1,2]` is
   an error. This covers list items and patterns, record fields, bare
   selections (`v.[x,y]`), ranges (`[1,3..9]`), `match` clause lists and import
@@ -1803,14 +1806,14 @@ returns `[2,4]`, evaluating the input expression in the surrounding scope.
 ## Type descriptions
 
 A list value's type is exact, the list of its items' types: `typeOf [1,2,3]`
-displays `[Int,Int,Int]`, `typeOf [1,"a"]` is `[Int,String]`, and `typeOf []`
+displays `[Int,Int,Int]`, `typeOf [1, "a"]` is `[Int,String]`, and `typeOf []`
 is `[]`, the empty list's type. A record's is the record of its fields' types,
 each found when it is shown: `typeOf [x = 1, y = Float]` is
 `[x : Int, y : Type]`, and `typeOf [p = [q = 1.5]]` is `[p : [q : Float]]`. A
 record a record type made has that type (`typeOf ([] : Quote)` is `Quote`). A list's type
 is made as it is read, an item or tail read only when its type is
 (`head (typeOf [1,missing])` is `Int`), so a list built with `::` is exact too
-(`typeOf ([1,2]::[3,4])` is `[[Int,Int],Int,Int]`, as for `[[1,2],3,4]`). An endless
+(`typeOf ([1,2]::[3,4])` is `[[Int,Int],Int,Int]`, as for `[[1,2], 3, 4]`). An endless
 list is endlessly many of its elements' type: `typeOf [1..]` is `[Int..]`, and
 so is `typeOf ones` for `ones = 1 :: ones`. That is a range of a type, which
 repeats it as a range of numbers counts (a range is `enumFrom` and its
@@ -1828,7 +1831,7 @@ program writes reuse them rather than declaring their own. `List Int` is the uni
 each a different member (`List Int == [Int]` is `False`, as a union is none of
 its members), and endless lists belong too, as their unfoldings never end:
 `[Int..]` is `Int :: [Int..]`, so `isType (List Int) [1..]` is `True`, and
-`isType (List Int) [1,"a"]` is `False`. A type test reads a list as it
+`isType (List Int) [1, "a"]` is `False`. A type test reads a list as it
 unfolds, accepting a cell it meets again (`ones = 1 :: ones`) or an endless
 range, whose elements share one type. Any union of this shape
 (`Seq a = Nil | Cons a (Seq a)`) is the same type. Any other union of list types is
@@ -1839,9 +1842,9 @@ lists of trees; `(xs : Pairs Int)` matches a value of it, and the static check
 leaves such a union to the run. A [family](gradual-and-dependent-types.md#indexed-families)
 is the same alternatives, each saying its index. A list's type is a list,
 made as it is read, so any list's is exact: `typeOf (filter (> 0) [1,2,3])` is
-`[Int,Int,Int]`, `head (typeOf [1,"a"])` is `Int`, and `length (typeOf xs)` is
+`[Int,Int,Int]`, `head (typeOf [1, "a"])` is `Int`, and `length (typeOf xs)` is
 `length xs`. `(List a) xs` binds `a` to the type
-every item has: `Int | String` for `[1,"a"]`. Type errors use the same
+every item has: `Int | String` for `[1, "a"]`. Type errors use the same
 notation.
 
 Functions display argument/result descriptions: `f (x : Int) = x` gives

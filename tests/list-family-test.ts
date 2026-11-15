@@ -23,7 +23,7 @@ for (const [source, expected] of [
     [LST + "([1,2] : Lst 2 Int)", "[1,2]"],
     [LST + "typeOf ([1,2] : Lst 2 Int)", "Vect 2 Int"],
     [LST + "len (_ : Lst n _) = n\nlen [7,8,9]", "3"],
-    [LST + "f (xs : Lst n Int) = [n,xs]\nf [1,2]", "[2,[1,2]]"],
+    [LST + "f (xs : Lst n Int) = [n,xs]\nf [1,2]", "[2, [1,2]]"],
     [LST + "app ([] : Lst n a) (ys : Lst m a) = ys : Lst (n + m) a\napp (x :: r : Lst n a) (ys : Lst m a) = x :: app r ys : Lst (n + m) a\ntypeOf (app [1] [2,3])", "Vect 3 Int"],
     [SUGAR + "len (_ : Lst n _) = n\nlen [7,8,9]", "3"],
     ["Pairs n a = [] -> Pairs Z a | a :: a :: Pairs k a -> Pairs (S k) a\nf (xs : Pairs n a) = n\nf [1,2,3,4]", "2"],
@@ -32,9 +32,9 @@ for (const [source, expected] of [
     [PAIRS + "f (xs : Pairs n a) = [n,a]\n[f [1,2,3,4], f []]", "[[2,Int],[0,a]]"],
     [PAIRS + "h (xs : Pairs n Int) = 0 :: 0 :: xs : Pairs (n + 1) Int\nh [5,6]", "[0,0,5,6]"],
     // Another shape runs its clauses backwards.
-    ["Mixed Z a = []\nMixed (S k) a = a :: Int :: Mixed k a\nf (xs : Mixed n a) = [n,a]\nf [\"x\",1,\"y\",2]", "[2,String]"],
+    ["Mixed Z a = []\nMixed (S k) a = a :: Int :: Mixed k a\nf (xs : Mixed n a) = [n,a]\nf [\"x\", 1, \"y\", 2]", "[2,String]"],
     // (a is the checker's to compare: [1,"b"] is a Pairs 1 (Int | String).)
-    [PAIRS + "g (xs : Pairs n a) = \"pairs\"\ng xs = \"other\"\n[g [1,2,3], g [\"a\",\"b\"], g [1,\"b\"]]", '["other","pairs","pairs"]'],
+    [PAIRS + "g (xs : Pairs n a) = \"pairs\"\ng xs = \"other\"\n[g [1,2,3], g [\"a\",\"b\"], g [1, \"b\"]]", '["other","pairs","pairs"]'],
 ] as const) {
     Deno.test(`families of lists: ${JSON.stringify(source)}`, () => {
         const actual = run(source);
@@ -58,7 +58,7 @@ for (const [source, message] of [
 // [] and :: only write them another way. A union or a family naming them, by
 // what the names are bound to, is one of lists.
 for (const [source, expected] of [
-    ["Cons 1 (Cons 2 Nil)", "[1,2]"], ["[Cons 1 Nil == [1], Nil == [], 1 :: Nil]", "[True,True,[1]]"],
+    ["Cons 1 (Cons 2 Nil)", "[1,2]"], ["[Cons 1 Nil == [1], Nil == [], 1 :: Nil]", "[True, True, [1]]"],
     ["len Nil = 0\nlen (Cons _ xs) = 1 + len xs\nlen [1,2,3]", "3"],
     ["f (Cons x (Cons y _)) = x + y\nf (5 :: 6 :: [])", "11"], ["g (x :: xs) = xs\ng (Cons 1 Nil)", "[]"],
     ["typeOf (Cons 1 (Cons 2 Nil) : Vect 2 Int)", "Vect 2 Int"],

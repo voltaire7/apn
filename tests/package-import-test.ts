@@ -18,7 +18,7 @@ for (const checked of [false, true]) {
         const source = 'hello <- import "hello"\nshapes <- import "shapes"\nuse hello\nuse shapes.[square,cube]\nuse shapes.solid.box\n'
             + '[greet "you", square 3, cube 2, volume 2]';
         const actual = result(i, source);
-        if (actual !== '["hi you",9,8,8]') throw new Error(actual);
+        if (actual !== '["hi you", 9, 8, 8]') throw new Error(actual);
         // A folder's record holds its entries, each a module: files and subfolders.
         if (result(i, 'sh <- import "shapes"; sh.square.square 4') !== "16") throw new Error("namespaced");
         if (result(interpreter(checked), 'sh <- import "shapes"; map head (pairs sh)') !== '["cube","solid","square"]') throw new Error("entries");

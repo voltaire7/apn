@@ -152,7 +152,7 @@ print (head [3..])
 example("head leaves unused list elements deferred",
     "print (head [1,missing])", ["1"]);
 example("head leaves unused nested lists deferred",
-    "print (head [1,[missing]])", ["1"]);
+    "print (head [1, [missing]])", ["1"]);
 example("a pattern clause does not demand unrelated variable arguments",
     "first 0 y = 7\nprint (first 0 missing)", ["7"]);
 example("mixed arithmetic becomes inexact",
@@ -286,7 +286,7 @@ a::b::rest = [5,6,7]
 print [a,b,rest]
 h::t <- return [8,9]
 print t
-`, ["[1,[2,3,4]]", "[5,6,[7]]", "[9]"]);
+`, ["[1, [2,3,4]]", "[5, 6, [7]]", "[9]"]);
 failure("take rejects negative counts", "print (take -1 [])", "non-negative int");
 failure("drop rejects non-integer counts", "print (drop 1.0 [])", "non-negative int");
 failure("head still rejects empty lists", "print (head [])", "head of empty list");
@@ -421,12 +421,12 @@ print (-head [2,3])
 // v n = [key,value] writes entry n as v n reads it.
 example("a record's entry is written by position as a pair", `
 v = [x = 1, y = 2, z = 3]
-v 0 = ["x1",22]
+v 0 = ["x1", 22]
 print v
-v -1 = ["z",30]
-print [v 0, v -1]`, ["[x1 = 22, y = 2, z = 3]", '[["x1",22],["z",30]]']);
+v -1 = ["z", 30]
+print [v 0, v -1]`, ["[x1 = 22, y = 2, z = 3]", '[["x1", 22], ["z", 30]]']);
 failure("a record's entry is a pair", "v = [x = 1]\nv 0 = [x1 = 22]", "an entry is a [key,value] pair");
-failure("a record's entry keeps keys distinct", 'v = [x = 1, y = 2]\nv 0 = ["y",22]', "the record already has a field 'y'");
+failure("a record's entry keeps keys distinct", 'v = [x = 1, y = 2]\nv 0 = ["y", 22]', "the record already has a field 'y'");
 example("a list item may be a binding, in scope for the items after it", `
 print [x = 1, x + 1]
 print (do [x = 1, x + 1])
@@ -490,7 +490,7 @@ for (const source of ["f (Int x) = x\nprint (f 1)", "f ((Int) x) = x\nprint 1", 
     failure(`a typed pattern writes its type after the value: ${source}`, source, "writes its type after the value");
 }
 example("types that construct, and typed patterns of any parameters", `
-m = ([["a",1]] : HashMap _ _)
+m = ([["a", 1]] : HashMap _ _)
 c = Mutable 0
 f (xs : List _) = length xs
 g { x : Int } = x + 1
@@ -500,12 +500,12 @@ f (x::rest) = rest
 g (x :: rest) = rest
 one (x::[]) = x
 lam = x::rest -> rest
-print [f [1,2], g [3,4], one [5], lam [6,7]]`, ["[[2],[4],5,[7]]"]);
+print [f [1,2], g [3,4], one [5], lam [6,7]]`, ["[[2], [4], 5, [7]]"]);
 example("boolean literal patterns", `
 h x = x ~ [False -> "f", True -> "t"]
 f True = 1
 f b = 2
-print [h False, h True, f True, f False]`, ['["f","t",1,2]']);
+print [h False, h True, f True, f False]`, ['["f", "t", 1, 2]']);
 example("character and float literal patterns", `
 f 'a' = "letter a"
 f 1.5 = "one and a half"
@@ -539,7 +539,7 @@ l = [] : Line
 l.from.x = 4
 print l`, ['[quote = "x", year = 3]', '[quote = "x", year = 3, more = 1, again = 2]', "[from = [x = 4, y = 0], to = [x = 0, y = 0]]"]);
 for (const source of [
-    "q = [] : Quote\nq.yaer = 1", 'q = ["a",1] : Quote\nq "yaer" = 1', "q = [] : Quote\nq._ = [yaer = 1]",
+    "q = [] : Quote\nq.yaer = 1", 'q = ["a", 1] : Quote\nq "yaer" = 1', "q = [] : Quote\nq._ = [yaer = 1]",
     "f (q : Quote) = { q.yaer = 1; q }\nprint (f [quote = \"a\", year = 1])",
     "Line = [from : Quote, to : Quote]\nl = [] : Line\nl.from.yaer = 1",
 ]) failure(`a new field on a record its type made: ${source}`, `Quote = [quote : String, year : Int]\n${source}`, "has no field 'yaer'");
@@ -618,7 +618,7 @@ failure("an x <- m item binds when the code runs", "w = [x <- [1,2], return (x *
 failure("a binding by a pattern is replaced as an item", "pc = [[a,b] = [3,4], a + b]\npc.a = 9",
     "replace the item");
 example("List a = [] | a :: List a: each element an a, endless lists too", `
-print [isType (List Int) [], isType (List Int) [1,2], isType (List Int) [1,"a"]]
+print [isType (List Int) [], isType (List Int) [1,2], isType (List Int) [1, "a"]]
 ones = 1 :: ones
 print [isType (List Int) [1..], isType (List Int) ones, isType (List String) ones]
 print [isType (List Int) (0 :: [1..]), List Int == [Int], isType (List Int) 5]
@@ -629,7 +629,7 @@ example("types compare as the sets of their values", `
 U = (Int | String)
 V = (String | Int)
 print [U == V, Int <= Number, Number <= Int, Int < Number, Integer <= Real]
-print [typeOf [1,2,3] <= List Int, typeOf [1,"a"] <= List Int, List Int <= typeOf [1,2]]
+print [typeOf [1,2,3] <= List Int, typeOf [1, "a"] <= List Int, List Int <= typeOf [1,2]]
 print [[Int..] <= List Int, List Int == typeOf [1,2,3], List Int == [Int]]
 Seq a = [] | a :: Seq a
 E = [] | Int :: List Int
@@ -642,7 +642,7 @@ print [[Int,Int] <= Two, [Int,Int,Int] <= Two, Two <= List Int]`, ["[True,True,F
     "[True,False,True]"]);
 example("a type pattern matches each type within the one it names", `
 print (typeOf [1,2,3] ~ [List Int -> "ints", _ -> "other"])
-print (typeOf [1,"a"] ~ [List Int -> "ints", _ -> "other"])
+print (typeOf [1, "a"] ~ [List Int -> "ints", _ -> "other"])
 describe Int = "int"
 describe Number = "number"
 print [describe Int, describe Float, describe Number]
@@ -661,7 +661,7 @@ print [kind 1, kind "a", kind 1.5, typeOf "a" ~ [(Int | String) -> "either", _ -
 g (Int | String) = "either"
 g _ = "other"
 print [g 1, g 1.5]
-print g`, ['[1,"a","no"]', '["either","either","other","other"]', '["either","other"]',
+print g`, ['[1, "a", "no"]', '["either","either","other","other"]', '["either","other"]',
     '(Int | String) -> "either"\n_ -> "other"']);
 example("| is the union of types, written anywhere", `
 print (Int | String)
@@ -675,7 +675,7 @@ print (f 5)`, ["Int | String", "[True,True]", "True", "True", "5"]);
 failure("operators of one level and two associativities need parentheses", "print ([Int] | [Int,Int] == typeOf [1])", "share a level but not an associativity");
 example("a union of list types unfolds as a value is read", `
 Pairs a = [] | a :: a :: Pairs a
-print [isType (Pairs Int) [1,2], isType (Pairs Int) [1,2,3], isType (Pairs Int) [1,"a"]]
+print [isType (Pairs Int) [1,2], isType (Pairs Int) [1,2,3], isType (Pairs Int) [1, "a"]]
 ones = 1 :: ones
 print [isType (Pairs Int) ones, isType (Pairs Int) [1..], isType (Pairs String) [1..]]
 print [Pairs Int == Pairs Int, Pairs Int == Pairs String]

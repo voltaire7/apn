@@ -52,7 +52,7 @@ type Ty =
     // possibly symbolic in a parameter), so clause ranking can use it later.
     // written: where a call deferred to its enclosing function's calls was written.
     // within: the top-level definition being checked when it was deferred.
-    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known; written?: Expr; within?: object; decided?: Ty; lossless?: boolean[]; ascribed?: true }
+    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known; written?: Expr; within?: object; decided?: Ty; lossless?: boolean[]; ascribed?: true; conversion?: [boolean, boolean] }
     | { k: "dynamic"; explicit?: boolean }
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
@@ -1154,7 +1154,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (t.op === "insert") {
             if (b.k !== "map") return problem("insert expects a HashMap");
-            if (a.k === "record") return problem("insert takes an association list", undefined, 'write its entries as [key,value] pairs: insert [["a",1]] m');
+            if (a.k === "record") return problem("insert takes an association list", undefined, 'write its entries as [key,value] pairs: insert [["a", 1]] m');
             unify(list(pair(b.key, b.value)), a);
             return b;
         }
@@ -1242,6 +1242,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A requirement on a call that still waits for an unknown argument waits
         // too, rather than settling for the call's provisional solution.
         if (t.op === "require") { if (t.args.some(x => waiting(x))) return t; unify(a, b); return a; }
+        if (t.op === "convert") {
+            if (t.args.some(x => waiting(x))) return t;
+            return convert(a, b!, activeExpression ?? { t: "placeholder" }, t.conversion?.[0], new Map(), t.conversion?.[1]);
+        }
         if (isExplicit(a) || b && isExplicit(b)) return explicitDynamic;
         if (a.k === "dynamic" || b?.k === "dynamic") return unknown();
         if (a.k === "union" && a.undecided || b?.k === "union" && b.undecided) return ambiguous((a.k === "union" && a.undecided ? a : b) as Extract<Ty, { k: "union" }>);
@@ -2640,6 +2644,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // Anything converts to Dynamic, without deciding its own type.
         if (isExplicit(t)) return target;
         if (isExplicit(a) && (runtimeProjection || explicitFloat)) { runtimeChecks++; return target; }
+        // A value a call decides later is converted then, as written: an
+        // ascription (decodeValue d x : Result T String) takes a Dynamic.
+        if (a.k === "operation" && (runtimeProjection || explicitFloat) && t.k !== "var" && t.k !== "operation") {
+            if (!a.solution) a.solution = t.k === "list" ? list(t.element) : t;
+            requirements.push({ k: "operation", op: "convert", args: [target, actual], conversion: [explicitFloat, runtimeProjection] });
+            return target;
+        }
         // An undecided call takes the overload this type names.
         if (a.k === "union" && a.undecided) {
             const choice = a.choices.find(c => succeeds(() => convert(target, c, e, explicitFloat, new Map(), runtimeProjection)));
@@ -3251,7 +3262,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // Int): its keys are k's and its values v's.
             if (t.k === "map" && !f.applied) {
                 if (a.k === "map") { convert(t.key, a.key, e); convert(t.value, a.value, e); return t; }
-                if (a.k === "record") return problem("a HashMap is made from an association list", e, 'write its entries as [key,value] pairs: ([["a",1]] : HashMap _ _)');
+                if (a.k === "record") return problem("a HashMap is made from an association list", e, 'write its entries as [key,value] pairs: ([["a", 1]] : HashMap _ _)');
                 const key = variable(), value = variable();
                 unify(list(pair(key, value)), a, e);
                 convert(t.key, key, e);
@@ -4290,7 +4301,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                             runtimeChecks++;
                             return { k: "record", fields: new Map(), closed: false };
                         }
-                        return problem(`an entry is a [key,value] pair, as reading it gives: ["x1",22], not ${text(incoming)}`, e.value);
+                        return problem(`an entry is a [key,value] pair, as reading it gives: ["x1", 22], not ${text(incoming)}`, e.value);
                     }
                     const [name, type] = entry, [old, held] = entries[n];
                     if (name !== old && rec.fields.has(name)) return problem(`the record already has a field '${name}'`, e.value);
@@ -7668,7 +7679,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("p5SketchType", [], { k: "type", value: p5Record(sketchFields()) });
     // HTTP and JSON (the http and json modules): a response is a record; decoded JSON is Dynamic.
     native("fetch", [str, variable()], io({ k: "record", fields: new Map<string, Ty>([
-        ["status", int], ["ok", bool], ["statusText", str], ["url", str], ["headers", { k: "map", key: str, value: str }], ["body", str],
+        ["status", int], ["ok", bool], ["statusText", str], ["url", str], ["headers", list({ k: "list", element: str, items: [str, str], length: constant(2n) })], ["body", str],
     ]) }));
     for (const name of ["toJson", "prettyJson"]) native(name, [variable()], str);
     native("fromJson", [str], explicitDynamic);

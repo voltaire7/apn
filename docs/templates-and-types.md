@@ -54,7 +54,7 @@ construction `(.2 : Int)` also errors; use `(floor .2 : Int)` to round down expl
 
 ```apn
 [(* 2), (* 3)].[1,2]       # [2,6]
-([1,"hi"] : [Int,String])  # [1,"hi"], a list of types converting
+([1, "hi"] : [Int,String])  # [1, "hi"], a list of types converting
 to Int * [1,2,3]           # mapping, separate from template application
 map (to Int) [0..]         # lazy mapping over an infinite list
 ```
@@ -141,13 +141,13 @@ For updates and swaps, see [computed keys and multiple indices](#computed-keys-a
 Applying a list to a string looks up the first matching `[string,value]` pair:
 
 ```apn
-entries = [["x",1],["y",2]]
+entries = [["x", 1], ["y", 2]]
 entries "x"                 # 1
 key = "y"
 entries key                 # 2
-entries 0                   # ["x",1] (positional indexing)
-entries [1,0]             # [["y",2],["x",1]] (index selection)
-[["x",1],["x",2]] "x"  # 1 (first match wins)
+entries 0                   # ["x", 1] (positional indexing)
+entries [1,0]             # [["y", 2], ["x", 1]] (index selection)
+[["x", 1], ["x", 2]] "x"  # 1 (first match wins)
 ```
 
 Lookup scans incrementally. It does not evaluate skipped values or entries after
@@ -162,7 +162,7 @@ payload's usual slot-conversion rules apply; unrelated payloads are not forced.
 
 ```apn
 entries "x" = 10
-# [["x",10],["y",2]]
+# [["x", 10], ["y", 2]]
 ```
 
 Integer and enumeration arguments still index by position, list arguments still

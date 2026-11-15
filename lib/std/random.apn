@@ -32,7 +32,7 @@ float lo hi = Generator (seed -> {
 uniform first others = map ((index : Int) -> (first :: others) index) (int 0 (length others))
 weighted first others = {
     choices = first :: others
-    # A pair's parts may differ in type ([1,"rare"]): its weight is a Number.
+    # A pair's parts may differ in type ([1, "rare"]): its weight is a Number.
     weight choice = (head choice : Dynamic) : Number
     pick options roll = {
         choice = head options

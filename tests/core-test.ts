@@ -58,7 +58,7 @@ for (const checked of [true, false]) {
         [SHAPE + 'g (s : Shape) = "shape"\n[typeOf (Circle 1), g (Square 1)]', '[Shape,"shape"]'],
         [MIXED + "[Mixed, (Mixed : Type)]", "[Mixed, Int | String]"],
         [MIXED + 'f (m : Mixed) = "mixed"\nf _ = "other"\n[f 1, f "a", f 2.5]', '["mixed","mixed","other"]'],
-        [MIXED + '[(5 : Mixed), isType Mixed "s"]', "[5,True]"],
+        [MIXED + '[(5 : Mixed), isType Mixed "s"]', "[5, True]"],
         [OPTION + "OptOrList a = (Option a | List a)\n[OptOrList Int, isType (OptOrList Int) [1]]", "[OptOrList Int, True]"],
         [CTOR + "map (Rect 1) [2,3]", "[Rect 1.0 2.0, Rect 1.0 3.0]"],
         [CTOR + 'f (Rect w h) = "rect"\nf _ = "other"\n[f (Rect 1 2), f [1,2]]', '["rect","other"]'],
@@ -92,14 +92,14 @@ for (const checked of [true, false]) {
         [OPTION + CTOR + "[List _, Option _, Box _]", "[List _, Option _, Box _]"],
         [OPTION + CTOR + "[typeOf [1,2] <= List _, typeOf 3 <= List _, typeOf (Some 1) <= Option _, typeOf (Box 1) <= Box _]",
             "[True,False,True,True]"],
-        [OPTION + "[isType (List _) [1,\"a\"], ([1] : List _), Option _ <= Option Int, typeOf [1,2] == List _]", "[True,[1],False,False]"],
+        [OPTION + "[isType (List _) [1, \"a\"], ([1] : List _), Option _ <= Option Int, typeOf [1,2] == List _]", "[True, [1], False, False]"],
         // Every value is a set: <= is inclusion, & intersection, | union.
         ["[[1] <= [1,2], [2] <= [1,2], [1,2] <= [1,3], [1] < [1,2], [1] < [1], [] <= [1]]", "[True,False,False,True,False,True]"],
         ['["ab" <= "b", "a" <= "ab", False < True, 2 <= 3, Int <= Number]', "[False,True,True,True,True]"],
         ["[[x = 1] <= [x = 1, y = 2], [x = 2] <= [x = 1, y = 2]]", "[True,False]"],
         ['[[1,2] & [1,3], ["abc" & "abd"], [3 & 5], [3 | 5], [1] | [1,2]]', '[[1],["ab"],[3],[5],[1,2]]'],
         ["[[x = 1, y = 2] & [x = 1, y = 3], [x = 1] | [y = 2]]", "[[x = 1], [x = 1, y = 2]]"],
-        ["Big = (n : Int) | n > 2\n[(5 : Int & Big), Int & Big <= Int, Int <= Int & Big]", "[5,True,False]"],
+        ["Big = (n : Int) | n > 2\n[(5 : Int & Big), Int & Big <= Int, Int <= Int & Big]", "[5, True, False]"],
         // Rules written before a constructor's declaration run first; the
         // declaration is the otherwise.
         ['Var (s : String) : Expr = _\nNum (n : Int) : Expr = _\nAdd x (Num 0) = x\nAdd (Num a) (Num b) = Num (a + b)\nAdd (x : Expr) (y : Expr) : Expr = _\n'
@@ -117,7 +117,7 @@ for (const checked of [true, false]) {
         // result where it has parameters.
         ["func (x : Int) (y : Int) : Int = x + y\n[func 2 3, typeOf func]", "[5, Int -> Int -> Int]"],
         ["adder n : Int -> Int = x -> x + n\nfunc Int Int : Int = 123\n[adder 2 3, func Int Int]", "[5,123]"],
-        ["Twice t : Type = [t,t]\nPi : Float = 3\n[([1,2] : Twice Int), Pi]", "[[1,2],3.0]"],
+        ["Twice t : Type = [t,t]\nPi : Float = 3\n[([1,2] : Twice Int), Pi]", "[[1,2], 3.0]"],
         ["g = {\n    h (x : Int) : Int = x * 2\n    Box x : Box x = _\n    [h 4, Box 1]\n}\ng", "[8, Box 1]"],
         // _ makes data for any name; a name applied in a pattern means what it
         // is bound to: data matches its terms, a free name binds.
@@ -129,14 +129,14 @@ for (const checked of [true, false]) {
         // A definition names the type it gives, whatever its case.
         ["meters = Int\npos = (n : Int) | n > 0\n[typeOf (3 : meters), typeOf (3 : pos), (3 : meters) + 1]", "[meters,pos,4]"],
         // A name for a constructor is it; a block's patterns read its names.
-        ["Box x = _\nNewBox = Box\nfunc (NewBox x) = x\n[func (NewBox 123), NewBox 1 == Box 1, func (Box 5)]", "[123,True,5]"],
+        ["Box x = _\nNewBox = Box\nfunc (NewBox x) = x\n[func (NewBox 123), NewBox 1 == Box 1, func (Box 5)]", "[123, True, 5]"],
         ["g = {\n    sin x = _\n    Pair a b = _\n    d (sin x) = x\n    f (p : Pair Int _) = 1\n    [d (sin 3), f (Pair 1 2)]\n}\ng", "[3,1]"],
         ["func = [x, y] -> [x + x, y + y]\nh [x, y] = [x + x, y + y]\n[func [1,2], h [3,4]]", "[[2,4],[6,8]]"],
         // The checker types set operations on records and numeric types exactly.
         ["r = [x = 1] | [y = 2]\ns = [x = 1, y = 2] & [x = 1, y = 3]\nf (n : Number & Int) = n + 1\n[r.y + 1, s.x, f 2]", "[3,1,3]"],
         // A list or record is a value; it is read as a type where one is expected.
-        ["[[1] | [1,2], [Int] <= [Int,Int], [Int] | [Int,Int], [Int] <= List Int, [Int,Int] == typeOf [1,2]]", "[[1,2],True,[Int,Int],True,True]"],
-        ["Two = [Int] | [Int,Int]\nf (x : [Int] | [Int,Int]) = 1\n[isType Two [1,2], isType Two [1,2,3], f [1], f [1,2]]", "[True,False,1,1]"],
+        ["[[1] | [1,2], [Int] <= [Int,Int], [Int] | [Int,Int], [Int] <= List Int, [Int,Int] == typeOf [1,2]]", "[[1,2], True, [Int,Int], True, True]"],
+        ["Two = [Int] | [Int,Int]\nf (x : [Int] | [Int,Int]) = 1\n[isType Two [1,2], isType Two [1,2,3], f [1], f [1,2]]", "[True, False, 1, 1]"],
         // A conversion instance takes a constructor's own type as written.
         [CTOR + "to (Box Int) (n : Int) = Box n\nf (b : Box Int) = b\n[(3 : Box Int), f 4]", "[Box 3, Box 4]"],
         [MAYBE + "[typeOf Nada, typeOf (Just Nada)]", "[Maybe x, Maybe (Maybe x)]"],

@@ -75,7 +75,7 @@ for (const [name, source, expected] of [
     ["a do-block over a parameter's monad", 'std <- import "std"; use std.option\nf m = {\n    x <- m\n    return (x + 1)\n}\nprint (f (Some 1))\nprint (f [1,2])',
         ["Some 2", "[2,3]"]],
     ["mutually recursive do-blocks over a parameter's monad", counter + '\npair m = {\n    x <- m\n    y <- other m\n    return [x,y]\n}\nother m = {\n    x <- m\n    return (x * 10)\n}\nprint (runCounter (pair tick) 1)',
-        ["[[1,20],3]"]],
+        ["[[1,20], 3]"]],
     ["return takes the monad its annotation names", 'std <- import "std"; use std.option\nprint ({ return 42 } : Option Int)\nprint ({ return 43 } : List Int)\nx <- ({ return 44 } : IO Int)\nprint x',
         ["Some 42", "[43]", "44"]],
     ["return is undecided until used", 'std <- import "std"; use std.option\nr = return 7\nprint (r : Option Int)\nprint (r : List Int)\nz <- r\nprint z', ["Some 7", "[7]", "7"]],
@@ -128,7 +128,7 @@ for (const [name, source, expected] of [
         ['Err "no"', "Some []", "ran"]],
     // As Haskell's: m (List x) in the elements' monad, each in turn.
     ["sequence and mapM work in any monad", 'std <- import "std"; use std.option\nprint (sequence [Some 1, Some "a"])\nprint (sequence [Some 1, None])\nprint (sequence [[1,2],[3,4]])\nprint (mapM (x -> x > 0 ? Ok x : Err x) [1,-2,-3])\nxs <- mapM (x -> return (x * 2)) [1,2]\nprint (xs 1 + 1)\nprint (typeOf sequence)',
-        ['Some [1,"a"]', "None", "[[1,3],[1,4],[2,3],[2,4]]", "Err -2", "5", "List (f a) -> f (List a)"]],
+        ['Some [1, "a"]', "None", "[[1,3],[1,4],[2,3],[2,4]]", "Err -2", "5", "List (f a) -> f (List a)"]],
 ] as const) Deno.test(`monads: ${name}`, () => {
     for (const checked of [true, false]) {
         const actual = run(source, checked);

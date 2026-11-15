@@ -352,7 +352,7 @@ func 1                            # [1,1]
 
 show whole.[x,y] = print [whole,x,y]
 show [x = 1, y = 2, z = 3]        # [[x = 1, y = 2, z = 3], 1, 2]
-show [1,2]                       # [[1,2],1,2]
+show [1,2]                       # [[1,2], 1, 2]
 
 first whole.(x::xs) = x
 unwrap whole.(Some x) = x
@@ -389,7 +389,7 @@ inspect [1]                       # [Int,1]
 inspect ["hello"]                 # [String,"hello"]
 
 inspectPair ([x,y] : [a,b]) = print [a,b,x,y]
-inspectPair [1,"hi"]             # [Int,String,1,"hi"]
+inspectPair [1, "hi"]             # [Int, String, 1, "hi"]
 ```
 
 The first shape describes/captures types, the second destructures values.
@@ -419,7 +419,7 @@ integer [x = 1]                   # 1
 integer [x = .2]                  # rejected: lossy Int conversion
 
 pairTypes ([x,y] : [a,b]) = [a,b,x,y]
-pairTypes [y = "hi", x = 1]       # [Int,String,1,"hi"]
+pairTypes [y = "hi", x = 1]       # [Int, String, 1, "hi"]
 ```
 
 Unlike dotted template application, this selects by the value pattern's names,

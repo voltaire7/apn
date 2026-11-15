@@ -77,7 +77,7 @@ for (const checked of [true, false]) Deno.test(`a union of types is written in p
         if (checked) interpreter.enableChecking();
         return interpreter.renderString(interpreter.run(parseDocument(source)));
     };
-    if (run('IS = (Int | String)\nf (x : IS) = x\n[f 1, f "a", Int <= IS]') !== '[1,"a",True]') throw new Error("union");
+    if (run('IS = (Int | String)\nf (x : IS) = x\n[f 1, f "a", Int <= IS]') !== '[1, "a", True]') throw new Error("union");
     if (run('g (x : Int | String) = x\ng 2') !== '2') throw new Error("written in place");
     try { run('IS = Int | String\n1'); } catch (error) {
         if (String(error).includes("their union is written in parentheses")) return;

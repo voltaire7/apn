@@ -88,7 +88,7 @@ Deno.test("a browser build bundles the local modules a program imports", () => {
         i.sourceDir = "/app/";
         if (checked) i.enableChecking();
         i.run(parse(source));
-        if (i.renderString(i.run(parse("answer"))) !== '["hi pkg",9]') throw new Error(`checked=${checked}`);
+        if (i.renderString(i.run(parse("answer"))) !== '["hi pkg", 9]') throw new Error(`checked=${checked}`);
         try { i.run(parse('both <- import "both"')); } catch (error) {
             if (error instanceof Error && error.message.includes("not bundled")) continue;
             throw error;

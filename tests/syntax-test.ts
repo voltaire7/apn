@@ -19,26 +19,26 @@ function applied(f: string, source: string): string {
 }
 
 for (const [source, expected] of [
-    ["[f x + 1]", '["[]",["+",["f","x"],1]]'],
-    ['[f "x"]', '["[]",["f","\\"x\\""]]'],
-    ["[f x y]", '["[]",["f","x","y"]]'],
+    ["[f x + 1]", '["[]", ["+", ["f","x"], 1]]'],
+    ['[f "x"]', '["[]", ["f","\\"x\\""]]'],
+    ["[f x y]", '["[]", ["f","x","y"]]'],
     ["[_]", '["[]","_"]'],
-    ["[-x]", '["[]",["negate","x"]]'],
-    ["[x = 1, x + 1]", '["[]",["=","x",1],["+","x",1]]'],
-    ["[f n = n * 2]", '["[]",["=",["f","n"],["*","n",2]]]'],
-    ["[Some v = Some 1]", '["[]",["=",["Some","v"],["Some",1]]]'],
-    ["[(x, y -> x)]", '["[]",["->",["x","y"],"x"]]'],
-    ["[[1..]]", '["[]",["..",1,[]]]'],
-    ["[r.x]", '["[]",[".","r","x"]]'],
-    ["[[x = 1]]", '["[]",["[:]",["x",1]]]'],
+    ["[-x]", '["[]", ["negate","x"]]'],
+    ["[x = 1, x + 1]", '["[]", ["=", "x", 1], ["+", "x", 1]]'],
+    ["[f n = n * 2]", '["[]", ["=", ["f","n"], ["*", "n", 2]]]'],
+    ["[Some v = Some 1]", '["[]", ["=", ["Some","v"], ["Some", 1]]]'],
+    ["[(x, y -> x)]", '["[]", ["->", ["x","y"], "x"]]'],
+    ["[[1..]]", '["[]", ["..", 1, []]]'],
+    ["[r.x]", '["[]", [".","r","x"]]'],
+    ["[[x = 1]]", '["[]", ["[:]", ["x", 1]]]'],
     ["[(+)]", '["[]","+"]'],
-    ["[(+ 1)]", '["[]",["()","+",1]]'],
-    ["[(2 +)]", '["[]",["+",2]]'],
-    ["[1 + missing]", '["[]",["+",1,"missing"]]'],
+    ["[(+ 1)]", '["[]", ["()", "+", 1]]'],
+    ["[(2 +)]", '["[]", ["+", 2]]'],
+    ["[1 + missing]", '["[]", ["+", 1, "missing"]]'],
     // An ascription, and a typed pattern, is [":", value, type]: no application.
-    ["[(x : Int)]", '["[]",[":","x","Int"]]'],
-    ["[f (Some (n : Int)) = n]", '["[]",["=",["f",["Some",[":","n","Int"]]],"n"]]'],
-    ["[((x -> x) : Int -> Int) 1]", '["[]",[[":",["->",["x"],"x"],["->",["Int"],"Int"]],1]]'],
+    ["[(x : Int)]", '["[]", [":","x","Int"]]'],
+    ["[f (Some (n : Int)) = n]", '["[]", ["=", ["f", ["Some", [":","n","Int"]]], "n"]]'],
+    ["[((x -> x) : Int -> Int) 1]", '["[]", [[":", ["->", ["x"], "x"], ["->", ["Int"], "Int"]], 1]]'],
 ] as const) Deno.test(`toAST: ${source}`, () => {
     const actual = shown(session(), `std <- import "std"; use std.option\ntoAST ${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -48,7 +48,7 @@ for (const [source, expected] of [
 // only where they are needed (it parses with every rule on).
 for (const source of [
     "f x + 1", "1 + 2 * 3", "(1 + 2) * 3", "a - (b - c)", "a - b - c", "(a :: b) :: c", "a ^ b ^ c",
-    "(a ^ b) ^ c", "f (g x) -1", '"a\\"b\\n"', "'c'", "[1,2,[3]]", "[1 + 1, 2]", "[x = 1, y = [2,3]]",
+    "(a ^ b) ^ c", "f (g x) -1", '"a\\"b\\n"', "'c'", "[1, 2, [3]]", "[1 + 1, 2]", "[x = 1, y = [2,3]]",
     "r.x.y", "xs.(i + 1)", "r.[a,b]", "(f x).y", "[1,3..9]", "[0..]", "[a + 1..b]",
     "c ? 1 : 2", "c ? (d ? 1 : 2) : 3", "c ? 1 : (d ? 2 : 3)", "f (c ? 1 : 2)", "a $ b ? c : d",
     "c ? (a $ b) : d", "x, y -> x * y", "(n : Int), [a,b] | n > 0 -> a", "{ a <- return 1; print a }",
@@ -59,6 +59,7 @@ for (const source of [
     "bracket 1 (_ -> []) (x -> y -> x)", "[(x, y -> x)]", "[x -> x]", "foo Bar (x -> x)",
     "a && (b || c)", "a == (b == c)", "-(a + b)", "f \\ g \\ h", "(f \\ g) \\ h", "1 + (x -> x)",
     "(x : Int)", "f (Some (n : Int)) = n", "(m : HashMap _ _)", "((x -> x) : Int -> Int) 1",
+    '["a", 1]', "[[1], 2]", '[["a", [1,2]]]', '["a","b"]', "[x,1]",
 ]) Deno.test(`fromAST round trip: ${source}`, () => {
     const i = session(), text = JSON.stringify(source);
     const written = shown(i, `fromAST (intrinsics.syntax ${text})`, true);
@@ -70,8 +71,8 @@ for (const source of [
 for (const [source, expected] of [
     ["eval (toAST [1 + 2 * 3])", "[7]"],
     ["eval (toAST [(1.0 : Int), ((x -> x + 1) : Int -> Int) 41])", "[1,42]"],
-    ['eval ["+",1,2]', "3"],
-    ['double e = ["*",e,2]\neval (double (toAST [3 + 1]))', "[8]"],
+    ['eval ["+", 1, 2]', "3"],
+    ['double e = ["*", e, 2]\neval (double (toAST [3 + 1]))', "[8]"],
     ["square n = n * n\neval (toAST [square 7])", "[49]"],
     ["eval (toAST [x = 1, x + 1])", "[2]"],
     ["y = eval (toAST [x = 1])\nx = 5\n[y,x]", "[[x = 1], 5]"],
@@ -89,7 +90,7 @@ Deno.test("eval runs at the top level, not in the caller's scope", () => {
 });
 
 Deno.test("toAST does not evaluate its code", () => {
-    if (shown(session(), "toAST [undefinedName 1]") !== '["[]",["undefinedName",1]]') throw new Error("evaluated");
+    if (shown(session(), "toAST [undefinedName 1]") !== '["[]", ["undefinedName", 1]]') throw new Error("evaluated");
 });
 
 // toLambda desugars code to lambdas and application, as code: probe shows

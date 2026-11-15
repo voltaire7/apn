@@ -24,7 +24,7 @@ h = increment \ double
 });
 
 for (const source of [
-    String.raw`print \ format "%: %" ["x",1]`,
+    String.raw`print \ format "%: %" ["x", 1]`,
     String.raw`std <- import "std"; use std.sequence
 even n = n % 2 == 0
 calculate bottom top = sum \ filter even [bottom..top]

@@ -11,7 +11,7 @@ function result(source: string): string {
 }
 for (const [name, source, expected] of [
     ["named field access", 'obj = [field = 123]\n[obj.field, obj "field"]', '[123,123]'],
-    ["a backticked key", 'obj = [`Content-Type` = "json", `my field` = 1]\n[obj.`Content-Type`, obj "my field"]', '["json",1]'],
+    ["a backticked key", 'obj = [`Content-Type` = "json", `my field` = 1]\n[obj.`Content-Type`, obj "my field"]', '["json", 1]'],
     ["a backticked name is the name", 'obj = [`x` = 1]\nobj.x', '1'],
     ["a dotted string reads its field", 'obj = [`a b` = 1]\nobj."a b"', '1'],
     ["computed keys", 'obj = [field = 123]\nkey = "field"\nobj key', '123'],
@@ -26,7 +26,7 @@ for (const [name, source, expected] of [
     ["pattern dispatch", 'f [x = value] = value + 10\n[f [x = 1], f [x = 2]]', '[11,12]'],
     ["unused values stay deferred", 'unused = missing + 1\nobj = [x = 1, y = unused]\nobj "x"', '1'],
     ["fields are computed when used", 'obj = [x = head [], y = 2]\nobj.y', '2'],
-    ["pairs give the key's text", 'pairs [x = 1, `a b` = 2]', '[["x",1],["a b",2]]'],
+    ["pairs give the key's text", 'pairs [x = 1, `a b` = 2]', '[["x", 1], ["a b", 2]]'],
     ["function source keys", 'f obj = obj.`a b`\nf', 'obj -> obj.`a b`'],
     ["function source patterns", 'f [x = value] = value\nf', '[x = value] -> value'],
     ["function source records", 'f x = [x = x, y = x]\nf', 'x -> [x = x, y = x]'],

@@ -16,7 +16,7 @@ for (const [source, expected] of [
     ['format "" []', '""'],
     ['format "%/%" [1..2]', '"1/2"'],
     ['format "%" ["50%"]', '"50%"'],
-    ['toAST [head $ [1,2]]', '["[]",["$","head",["[]",1,2]]]'],
+    ['toAST [head $ [1,2]]', '["[]", ["$", "head", ["[]", 1, 2]]]'],
 ] as const) Deno.test(`application and format: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

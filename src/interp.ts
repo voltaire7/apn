@@ -26,7 +26,7 @@ import { canonicalTypeText, ioTypeText, compoundArgument, slotField, mkInt, mkBo
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
 import { bindingItem, getPreludeUsed, parse, parseDocument, exprToSource, patternSource, patternVariables, isOperatorName, PRIMITIVE_OPERATORS, DEFAULT_FIXITY, type Fixity, fixitiesOf, getLooseSpacing, preludeFixity, regroup, setLooseSpacing } from "./parser.ts";
-import { charLiteral, itemsText, spacedItem, stringLiteral } from "./separators.ts";
+import { charLiteral, itemsText, literalKind, spacedItem, stringLiteral } from "./separators.ts";
 
 // ---------------- Evaluator ----------------
 
@@ -2122,7 +2122,7 @@ export class Interpreter {
         if (n < 0 || n >= rec.v.length) throw new APNError("runtime", `the record has no entry ${index}`, { hint: `it has ${rec.v.length}` });
         const pair = this.isList(value) ? this.items(value) : [];
         const key = pair.length === 2 ? this.dataValue(pair[0]) : undefined, field = pair[1];
-        if (key?.kind !== "string") throw new APNError("runtime", "an entry is a [key,value] pair, as reading it gives: [\"x1\",22]");
+        if (key?.kind !== "string") throw new APNError("runtime", "an entry is a [key,value] pair, as reading it gives: [\"x1\", 22]");
         const [old, held] = rec.v[n];
         const other = rec.v.findIndex(([k], i) => k === key.v && i !== n);
         if (other >= 0) throw new APNError("runtime", `the record already has a field '${key.v}' (entry ${other})`);
@@ -3558,12 +3558,19 @@ export class Interpreter {
                 this.render(this.repeatedType(v)!, emit, false, ancestors);
                 emit("..]");
             } else if (this.isList(v)) {
-                // Its ',' takes a space when an item has one (itemsText), so the
-                // items are held until one does, the list ends, or sixteen
-                // (or 4096 characters) are held: a list streams after that.
+                // Its ',' takes a space when an item has one or two are literals
+                // of different kinds (itemsText), so the items are held until
+                // that is known, the list ends, or sixteen (or 4096 characters)
+                // are held: a list streams after that.
                 emit("[");
                 type Part = [string, Parameters<typeof emit>[1]] | null;
                 let separator: string | undefined, item = "", held: Part[] = [], heldLength = 0, count = 0;
+                const kinds = new Set<string>();
+                const spaced = (text: string) => {
+                    const kind = literalKind(text);
+                    if (kind) kinds.add(kind);
+                    return spacedItem(text) || kinds.size > 1;
+                };
                 const decide = (spaced: boolean) => {
                     separator = spaced ? ", " : ",";
                     for (const part of held) part ? emit(...part) : emit(separator);
@@ -3583,7 +3590,7 @@ export class Interpreter {
                     if (count++) separator === undefined ? held.push(null) : emit(separator);
                     item = "";
                     this.render(element, out, false, ancestors);
-                    if (separator === undefined && (spacedItem(item) || count >= 16)) decide(spacedItem(item));
+                    if (separator === undefined && (spaced(item) || count >= 16)) decide(spaced(item));
                 }
                 if (separator === undefined) decide(false);
                 emit("]");
@@ -4784,7 +4791,7 @@ export class Interpreter {
 
     associations(value: Value): Array<[Value, Value]> {
         if (value.kind === "hashmap") return [...value.entries.values()];
-        if (!this.isList(value)) throw new APNError("runtime", "a HashMap is made from an association list", { hint: "write its entries as [key,value] pairs: ([[\"a\",1]] : HashMap _ _)" });
+        if (!this.isList(value)) throw new APNError("runtime", "a HashMap is made from an association list", { hint: "write its entries as [key,value] pairs: ([[\"a\", 1]] : HashMap _ _)" });
         const items = this.items(value);
         return items.map((item) => {
             const pair = this.demand(item);

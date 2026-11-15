@@ -20,7 +20,7 @@ for (const [source, expected] of [
     ['to Int * [1,2,3]', '[1,2,3]'],
     ['[].[]', '[]'],
     ['take 2 (map (to Int) [1,2,missing])', '[1,2]'],
-    ['[to Int * 3, 3 * to Int, 3 * (0 : Int)]', '[[0,1,2],[0,1,2],0]'],
+    ['[to Int * 3, 3 * to Int, 3 * (0 : Int)]', '[[0,1,2], [0,1,2], 0]'],
     ['V = [x : Float, y : Float, z : Float]\nv = [] : V\nv.x = 1\n[v, (V : Type)]', '[[x = 1.0, y = 0.0, z = 0.0], [x : Float, y : Float, z : Float]]'],
     ['V = [x : Float, y : Float]\n([x = 1] : V)', '[x = 1.0, y = 0.0]'],
     ['V = [x : Float, y : Float]\n([1,2] : V)', '[x = 1.0, y = 2.0]'],

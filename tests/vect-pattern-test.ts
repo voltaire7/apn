@@ -9,10 +9,10 @@ function run(source: string): string {
     return interpreter.renderString(interpreter.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['inspect (xs : Vect n a) = [n,a,xs]; inspect [1,2]', '[2,Int,[1,2]]'],
-    ['inspect (xs : Vect n a) = [n,a,xs]; inspect ([1,2] : Vect 2 Float)', '[2,Float,[1.0,2.0]]'],
-    ['inspect (xs : Vect n a) = [n,a,xs]; inspect ([] : Vect 0 Int)', '[0,Int,[]]'],
-    ['inspect (xs : Vect n a) = [n,a,xs]; inspect []', '[0,a,[]]'],
+    ['inspect (xs : Vect n a) = [n,a,xs]; inspect [1,2]', '[2, Int, [1,2]]'],
+    ['inspect (xs : Vect n a) = [n,a,xs]; inspect ([1,2] : Vect 2 Float)', '[2, Float, [1.0,2.0]]'],
+    ['inspect (xs : Vect n a) = [n,a,xs]; inspect ([] : Vect 0 Int)', '[0, Int, []]'],
+    ['inspect (xs : Vect n a) = [n,a,xs]; inspect []', '[0, a, []]'],
     ['inspect (xs : Vect n a) (ys : Vect m a) = [n,m,a]; inspect [] [1,2]', '[0,2,Int]'],
     ['inspect (xs : Vect n a) (ys : Vect m a) = [n,m,a]; inspect [True] []', '[1,0,Bool]'],
     ['f (xs : Vect n Int) = xs; f [1,2]', '[1,2]'],
@@ -35,7 +35,7 @@ for (const [source, expected] of [
 // A type variable is the checker's to compare: the run reads no element for
 // it (a is the elements' type, computed if used), so mixed lists match.
 for (const [source, expected] of [
-    ['f (xs : Vect n a) = n; f [1,True]', '2'],
+    ['f (xs : Vect n a) = n; f [1, True]', '2'],
     ['f (xs : Vect n a) (ys : Vect m a) = n; f [1] [True]', '1'],
     ['f (xs : Vect n a) = n; f [fail "unread", 2]', '2'],
     ['f (xs : Vect n _) = n; f [fail "unread", 2]', '2'],

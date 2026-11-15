@@ -160,7 +160,7 @@ print (matchInline 9)       # => other
 #    bare names is still a list — the names resolve to the variables' values.
 #    (An OBJECT is a record literal: [x = 1, y = 2, z = 3].)
 # ---------------------------------------------------------
-print [213,"hello"]         # => [213,"hello"]
+print [213, "hello"]         # => [213, "hello"]
 print [1,2,3]             # => [1,2,3]
 print ([] ++ [1,2] ++ [3])  # => [1,2,3]
 
@@ -182,7 +182,7 @@ nested = [
     [2,3]
     4
 ]
-print nested                  # => [1,[2,3],4]
+print nested                  # => [1, [2,3], 4]
 
 print $ head $ [1,2,3]  # => 1
 print (tail [1,2,3])      # => [2,3]
@@ -212,7 +212,7 @@ nums [1,2] = nums [2,1]
 print nums                       # => [10,30,20]
 nums -1 = 40                     # the last item, as nums -1 reads it
 print nums                       # => [10,30,40]
-print (["x",1] : [String,Int])    # => ["x",1]
+print (["x", 1] : [String,Int])    # => ["x", 1]
 print [(+ 1), (* 2)].[10,20]    # => [11,40]
 listTemplate = [Int,Float]
 listInput = [1,2]
@@ -269,7 +269,7 @@ print (vector3 [z = 3, x = 1])   # => [x: 1, y: 0, z: 3]  reorder — y keeps de
 print (vector3 [x = 1, y = 2, z = 3, a = 0]) # => [x = 1, y = 2, z = 3, a = 0]  new field
 print vector3                       # => [x = 0, y = 0, z = 0]   prototype untouched
 print (vector3 [z = 3]).z     # => 3     (.z chains over the clone)
-print (vector3 1)                   # => ["y",0]   int index -> [field,value]
+print (vector3 1)                   # => ["y", 0]   int index -> [field,value]
 
 # .[...] still exists, but as the QUOTED PLUCK:  a.[x,y]  gathers values
 # into a LIST;  a.[v1 = x, v2 = y]  keeps the fields under NEW keys.
@@ -365,7 +365,7 @@ print greeting             # => Hello, record!
 
 # A cons pattern takes a list apart, bare or parenthesized.
 first::rest = [1,2,3,4]
-print [first,rest]        # => [1,[2,3,4]]
+print [first,rest]        # => [1, [2,3,4]]
 one::two::others = [1,2,3,4]
 # A literal is a pattern too: 1 = 1 matches; 1 = 2 is a static error.
 4 = length [first,two,3,4]
@@ -530,7 +530,7 @@ byteField (r : [x : UInt8]) = r.x   # record fields are checked by value too
 scaled v = byteField [x = v * 100]  # scaled 3 is a static range error
 print (scaled 1)                    # => 100, a UInt8
 print (byteField [x = 300, use [x = 3]]) # => 3, a UInt8 (a later spread wins, as at runtime)
-print ([1,2] :: [3,4])            # => [[1,2],3,4]  ('::' adds one element; joining is ++)
+print ([1,2] :: [3,4])            # => [[1,2], 3, 4]  ('::' adds one element; joining is ++)
 tailOf (_ :: rest) = rest           # '::' in a pattern is cons too
 print [0 :: []]                     # => [[0]]  (no parentheses needed in a list)
 print (tailOf [1,2,3])          # => [2,3]
@@ -590,7 +590,7 @@ print $ format "vec = % (100%%)" [[x = 1, y = 2]]
 # format "% %" [1]                  # error: missing argument
 # format "%" [1,2]                 # error: extra argument
 # format "%" [x = 1]                # error: arguments must be a list
-print $ pairs [a = 1, b = 2]                 # => [["a",1],["b",2]]
+print $ pairs [a = 1, b = 2]                 # => [["a", 1], ["b", 2]]
 
 print (format "% / %" [1,2])               # => 1 / 2
 print (format "last: %" [9])                 # => last: 9
@@ -645,16 +645,16 @@ print (take 1 edited ++ [x * 3])          # => [30]
 
 # toAST — code as lists, unevaluated: an application is a list, function
 # first; a name is a string, a string literal its quoted source.
-print (toAST [1 + 2])         # => ["[]",["+",1,2]]
-print (toAST [f x "y"])       # => ["[]",["f","x","\"y\""]]
-print (toAST [x -> x, 2])     # => ["[]",["->",["x"],"x"],2]
+print (toAST [1 + 2])         # => ["[]", ["+", 1, 2]]
+print (toAST [f x "y"])       # => ["[]", ["f","x","\"y\""]]
+print (toAST [x -> x, 2])     # => ["[]", ["->", ["x"], "x"], 2]
 # import "std/syntax": fromAST writes such data back; eval runs it at the top level.
 std <- import "std"
 use std.syntax
 print (fromAST (toAST [n -> n * 2 + 1]))  # => [n -> n * 2 + 1]
-doubled e = ["*",e,2]         # building code is building a list
+doubled e = ["*", e, 2]         # building code is building a list
 print (fromAST (doubled (toAST [x + 1] 1)))  # => (x + 1) * 2
-print (eval (doubled ["sqrt",16]))        # => 8
+print (eval (doubled ["sqrt", 16]))        # => 8
 # toLambda: code desugared to lambdas and application, as code: probe shows
 # the lambdas; a binding becomes a lambda's parameter, so it is no item.
 probe (toLambda [x = 1, x + 1])          # => [(x -> x + 1) 1]
@@ -1256,7 +1256,7 @@ print [namedValues = 42].namedValues # => 42 (literal record field)
 print ([x = 0] [x = 123])                # => [x = 123] (record default override)
 # Numbers, strings and characters are not callable: 0 123 and "old" "new" error.
 # A Bool applied to two values is one of them: True "yes" "no" is "yes".
-print (["new",True,'b'] : [String,Bool,Char]) # => ["new",True,'b']
+print (["new", True, 'b'] : [String,Bool,Char]) # => ["new", True, 'b']
 # ["old"].["new"] and [0].[1] error: scalar slots cannot be applied.
 print ([name = "old", enabled = False] [name = "new", enabled = True])
 print ([floor .2] : [Int])               # => [0]
@@ -1265,7 +1265,7 @@ print (to [Char,Char] "a😀" : String) # => "a😀"
 print ("hello" : [Char,Char,Char,Char,Char])        # => ['h','e','l','l','o']
 print ("a😀" : [Char,Char])              # => ['a','😀']
 print (to Int * [1,2,3,4])    # => [1,2,3,4]
-print ([123,"hello"] : [Int,String]) # => [123,"hello"]
+print ([123, "hello"] : [Int,String]) # => [123, "hello"]
 print (take 3 (map (to Int) [0..]))    # => [0,1,2]
 print ([x = 1, y = 2] : [x : Int, y = 0]) # => [x = 1, y = 2]
 print ([x = 123] : [x : Int, y : Int]) # => [x = 123, y = 0]
@@ -1302,18 +1302,18 @@ print (MkUserId 123)                # => MkUserId 123
 
 
 # Persistent HashMap, accepting records or association lists.
-typedMap = insert [["x",123]] $ ([] : HashMap _ _)
-print typedMap                      # => ([["x",123]] : HashMap _ _)
+typedMap = insert [["x", 123]] $ ([] : HashMap _ _)
+print typedMap                      # => ([["x", 123]] : HashMap _ _)
 print (typedMap "x")                 # => 123
-typedMapNext = insert [["y",456]] $ typedMap
+typedMapNext = insert [["y", 456]] $ typedMap
 print (has "y" typedMap)             # => False
 print (has "y" typedMapNext)         # => True
 print (keys typedMapNext)            # => ["x","y"]
 print (values typedMapNext)          # => [123,456]
-print (pairs typedMapNext)           # => [["x",123],["y",456]]
+print (pairs typedMapNext)           # => [["x", 123], ["y", 456]]
 print (length typedMapNext)          # => 2
-print (remove "x" $ typedMapNext)    # => ([["y",456]] : HashMap _ _)
-print ([["a",1],["b",2]] : HashMap _ _) # => ([["a",1],["b",2]] : HashMap _ _)
+print (remove "x" $ typedMapNext)    # => ([["y", 456]] : HashMap _ _)
+print ([["a", 1], ["b", 2]] : HashMap _ _) # => ([["a", 1], ["b", 2]] : HashMap _ _)
 
 print (typeOf $ True) # => Bool
 
@@ -1336,20 +1336,20 @@ myTypeOf (5 : Int32) # => Int32
 # Ctrl+C in the REPL interrupts a slow request; a timeout option bounds one.
 # A data: URL needs no network; ./apn grants network access for real requests:
 #   fetch "https://www.youtube-transcript.io/api/channels" [
-#       method: "POST"
-#       headers: [Authorization = "Basic <token>", `Content-Type` = "application/json"]
-#       body: to JSON [ids = ["jawed"]]
+#       method = "POST"
+#       headers = [["Authorization","Basic <token>"],["Content-Type","application/json"]]
+#       body = to JSON [["ids", ["jawed"]]]
 #   ]
 std <- import "std"
 use std.[http,json]
 reply <- fetch "data:application/json,{\"ids\":[\"jawed\"]}" [method = "GET"]
-print [reply.status,reply.ok]               # => [200,True]
-print (from JSON reply.body).ids             # => ["jawed"]
+print [reply.status,reply.ok]               # => [200, True]
+print (from JSON reply.body "ids")           # => ["jawed"]  (an object is its pairs)
 print (to JSON [ids = ["jawed"], count = 1]) # => {"ids":["jawed"], "count":1}
 header = [`Content-Type` = "json", `my value` = 1] # a key that is not a name is in backticks
 print (header "Content-Type")                # => json  (a string names a field)
 decoded <- fetchJson "data:application/json,[1,2.5,null]" []
-print decoded                                 # => [1,2.5,[]]
+print decoded                                 # => [1, 2.5, []]
 
 # The standard library is the folder lib/std/: std <- import "std" names its
 # record, whose fields are its modules, each imported when it is used, and use
@@ -1404,7 +1404,7 @@ print (metaEval "id x = x; id 42")                 # 42
 print (metaEval "x = 1 :: x; take 4 x")           # [1,1,1,1]
 print (metaEval "True ? 7 : missing")              # 7
 # It reads and runs toAST's lists, so toAST's output runs on it too:
-print (metaParse "f x = x * 2; f 21")   # => ["{}",["=",["f","x"],["*","x",2]],["f",21]]
+print (metaParse "f x = x * 2; f 21")   # => ["{}", ["=", ["f","x"], ["*", "x", 2]], ["f", 21]]
 print (metaEvalSyntax (toAST [(x -> x * 2) 21] 1))  # 42
 print (length "\r\v\f")                         # 3: whitespace escapes
 
@@ -1723,7 +1723,7 @@ print lastOne                       # => 42
 print [do [], {}]                   # => [[],[]]: no statements
 print [x = 1, x + 1]                # => [2]: a binding item yields no value
 print [do [x = 1, x + 1], { x = 1; x + 1 }]  # => [2,2]
-print (toAST [x = 1, x + 1])        # => ["[]",["=","x",1],["+","x",1]]
+print (toAST [x = 1, x + 1])        # => ["[]", ["=", "x", 1], ["+", "x", 1]]
 # Such a list's bindings name its items: replacing one recomputes the items reading it.
 code = [x = 1, y = 2, x + y]
 before = code
@@ -1914,13 +1914,13 @@ print (typeOf [1..])                     # => List Int (no infinite traversal)
 describeIdentity (x : Int) = x
 print (typeOf describeIdentity)          # => Int -> Int
 print (typeOf (x -> print x))            # => a -> []
-print (typeOf [1,"hello"])             # => List (Int | String)
+print (typeOf [1, "hello"])             # => List (Int | String)
 # (a '::' list is described the same)
 print (typeOf (1 :: ["hello"]))         # => List (Int | String)
 
 # Empty results are lists; conditions use truthiness.
 print ({} == [])                        # => True
-print (map truthy [0,1,"","hello",[],[0]]) # => [False,True,False,True,False,True]
+print (map truthy [0, 1, "", "hello", [], [0]]) # => [False,True,False,True,False,True]
 print (0 && (missingTruthinessName : Dynamic))      # => False; right side is skipped
 print (1 || (missingTruthinessName : Dynamic))      # => True
 print (filter (x -> x) [0,1,2])      # => [1,2]
@@ -2042,10 +2042,10 @@ nestedUpdate.child.[x,y] = [20,30]
 print nestedUpdate.child            # => [x = 20.0, y = 30]
 
 # String arguments look up association lists; integer arguments index them.
-associations = [["x",1],["y",2]]
+associations = [["x", 1], ["y", 2]]
 print (associations "x")             # => 1
-print (associations 0)               # => ["x",1]
-print ([["x",1],["x",2]] "x")   # => 1 (first matching key)
+print (associations 0)               # => ["x", 1]
+print ([["x", 1], ["x", 2]] "x")   # => 1 (first matching key)
 
 # Evaluate expressions with record fields in a local scope.
 scopedPoint = [x = 3, y = 4]
@@ -2162,7 +2162,7 @@ showField [123]                          # => 123
 showField ["hello"]                      # => hello
 showField [x = True]                     # => True
 mixedFields (v : [x : _, y : Float]) = [v.x,v.y]
-print (mixedFields ["hello",2])         # => ["hello",2.0]
+print (mixedFields ["hello", 2])         # => ["hello", 2.0]
 
 # Dotted patterns retain the same argument while destructuring it.
 retainRecord whole.[x,y] = [whole,x,y]
@@ -2170,7 +2170,7 @@ print (retainRecord [x = 1, y = 2, z = 3])   # => [[x = 1, y = 2, z = 3], 1, 2]
 sharedValue.aliasValue = 123
 print [sharedValue,aliasValue]          # => [123,123]
 wholePair.[firstItem,secondItem] = [1,2]
-print [wholePair,firstItem,secondItem]  # => [[1,2],1,2]
+print [wholePair,firstItem,secondItem]  # => [[1,2], 1, 2]
 # Existing roots still update fields, without creating local field-name bindings.
 updateRecord = [x = 0]
 updateRecord.x = 1
@@ -2206,9 +2206,9 @@ print symmetryArray                  # [100,20,300]
 symmetryRecord = [x = 1, y = 2]
 symmetryRecord.[x = a, y = b] = [b = 20, a = 10]
 print symmetryRecord                 # [x:10,y:20]
-symmetryPairs = [["x",1],["y",2]]
+symmetryPairs = [["x", 1], ["y", 2]]
 symmetryPairs "x" = 10
-print symmetryPairs                  # [["x",10],["y",2]]
+print symmetryPairs                  # [["x", 10], ["y", 2]]
 [x = symmetryFirst, _ = symmetryRest] = [x = 1, y = 2, z = 3]
-print [symmetryFirst,symmetryRest]   # [1,[y:2,z:3]]
+print [symmetryFirst,symmetryRest]   # [1, [y:2,z:3]]
 

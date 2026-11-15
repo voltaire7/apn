@@ -123,7 +123,7 @@ for (const checked of [true, false]) Deno.test(`a fixity travels with its value 
     const shown = (source: string) => i.renderString(i.run(parse(source)));
     if (shown("10 <-> 3 <-> 2") !== "9") throw new Error("a module's fixity");
     if (shown("f x = x <-> 1 <-> 1\nf 5") !== "5") throw new Error("in a function");
-    if (shown('intrinsics.fixity "<->"') !== '[5,"right"]') throw new Error("fixity");
+    if (shown('intrinsics.fixity "<->"') !== '[5, "right"]') throw new Error("fixity");
     i.run(parse('[a,b] <-> c = a <-> b <-> c'));
     if (shown("10 <-> 3 <-> 2") !== "9") throw new Error("added clauses");
     const repl = new Interpreter();

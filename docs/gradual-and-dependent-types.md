@@ -27,7 +27,7 @@ and dependent list lengths. Inner scopes may shadow names with another type.
 Distinct typed input domains remain overloads. No `::` declaration is
 required.
 
-A choice between values has either type, as a list's items do (`[1,"a"]` is
+A choice between values has either type, as a list's items do (`[1, "a"]` is
 `List (Int | String)`): a conditional's branches (`x ? "yes" : False` is
 `String | Bool`), a `match`'s alternatives and a function's clauses. Such a
 value is used where every choice fits (`(c ? 1 : 2.5) + 1`, `func x == "yes"`,

@@ -103,14 +103,17 @@ Deno.test('spacing at =, commas and record colons', () => {
             'V = [x : Int, y : Int]; v = V[1,2]', 'f xs = xs; (f [1])[0]', 'print "a"[1]', 'f x = x; f 1[2]',
             // Both sides of = space their commas alike.
             'f x = x; [f x, g y] = [x,y]', 'f x = x; [a,b] = [f 1, 2]', 'f x = x; v = [x = 1, y = 2]; v.[x,y] = [f 1, 2]',
-            '{ [a,b] = [1 + 1, 2] }', '[a, b] = [1,2]']) {
+            '{ [a,b] = [1 + 1, 2] }', '[a, b] = [1,2]',
+            // Literals of different kinds take ', '.
+            '["a",1]', '[[1],2]', "['c',\"c\"]", '[True,1]', '["a", "b"]', '[[1], [2]]', '[a,b] = [1,"x"]']) {
         try { parseDocument(source); } catch (error) {
             if ((error as { kind?: string }).kind === 'parse') continue;
             throw error;
         }
         throw new Error(`accepted: ${source}`);
     }
-    for (const source of ['x = 1', 'f x = x + 1', 'z =\n    5', '[1,2,3,4]', '[[1,2],[3]]', '[x = 1, y = 2]', '[x = [1,2], y = 3]',
+    for (const source of ['["a", 1]', '[[1], 2]', '[1,2.5,1/2,-3]', '["a","b"]', '[x,1]', '[a, b] = [1, "x"]',
+            'x = 1', 'f x = x + 1', 'z =\n    5', '[1,2,3,4]', '[[1,2],[3]]', '[x = 1, y = 2]', '[x = [1,2], y = 3]',
             'f [x = a, y = b] = a', 'f (x::xs) = x', 'xs = [\n    1\n    2\n]', 'r = [\n    a = 1\n    b = 2\n]', 'xs = [\n    1,2\n    3\n]',
             'func x = x; func 123', 'f x = x; f { 1 }', 'obj = [x = 1]; obj.{ x + 1 }', 'v = [x = 1, y = 2]; v.[x,y]', 'v = [x = 1, y = 2]; v.[a = x, b = y]',
             'V = [x : Int, y : Int]; v = V [1,2]', 'x = 1::[2]', '[[1],[2]]', '[1 + 1, 2]', '[[1 + 1, 2], [3]]', '["a b","c"]', '[0,-1,1/2,v.x]',

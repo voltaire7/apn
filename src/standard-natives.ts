@@ -52,9 +52,10 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
     return mkStr(textNatives[name as "upper" | "lower"](str(args[0])));
 }
 
-// fetch url options: options is a record of method, headers, body and timeout
-// (milliseconds), each optional, or [] for none. The response is a record of
-// status, ok, statusText, url, headers (a HashMap by lowercase name) and body.
+// fetch url options: options is a record of method, headers (an association
+// list of strings), body and timeout (milliseconds), each optional, or [] for
+// none. The response is a record of status, ok, statusText, url, headers (an
+// association list by lowercase name) and body.
 function fetchNative(i: Interpreter, url: string, optionsValue: Value): Value {
     const fail = (message: string, hint?: string): never => { throw new APNError("runtime", `fetch: ${message}`, hint ? { hint } : {}); };
     const text = (value: Value, what: string): string => {
@@ -74,10 +75,13 @@ function fetchNative(i: Interpreter, url: string, optionsValue: Value): Value {
             if (v.kind !== "int" || v.v <= 0n) fail("timeout must be a positive Int (milliseconds)");
             timeout = Number((v as { v: bigint }).v);
         } else if (option === "headers") {
-            const h = i.dataValue(value);
-            const entries: Array<[Value | string, Value]> = h.kind === "record" ? h.v.map(([k, v]) => [k, v])
-                : h.kind === "hashmap" ? [...h.entries.values()] : fail("headers must be a record or a HashMap of strings");
-            for (const [k, v] of entries) headers.push([typeof k === "string" ? k : text(k, "a header name"), text(v, "a header value")]);
+            const pairs = i.dataValue(value), hint = 'headers = [["Content-Type", "text/plain"]]';
+            if (!i.isList(pairs)) fail("headers must be an association list of strings", hint);
+            for (const entry of i.items(pairs)) {
+                const pair = i.dataValue(entry), parts = i.isList(pair) ? i.items(pair) : [];
+                if (parts.length !== 2) fail("headers must be [name,value] pairs", hint);
+                headers.push([text(parts[0], "a header name"), text(parts[1], "a header value")]);
+            }
         } else fail(`unknown option '${option}'`, "fetch options are method, headers, body and timeout");
     }
     let response;
@@ -86,11 +90,10 @@ function fetchNative(i: Interpreter, url: string, optionsValue: Value): Value {
         if (!(error instanceof HttpFailure)) throw error;
         return fail(`${url}: ${error.message}`, error.permission ? "allow network access: run with ./apn, or deno run --allow-net" : undefined);
     }
-    const map = new Map<string, [Value, Value]>(response.headers.map(([k, v]) => [i.hashKey(mkStr(k)), [mkStr(k), mkStr(v)]]));
     return {
         kind: "record", v: [
             ["status", mkInt(response.status)], ["ok", mkBool(response.ok)], ["statusText", mkStr(response.statusText)],
-            ["url", mkStr(response.url)], ["headers", { kind: "hashmap", entries: map }], ["body", mkStr(response.body)],
+            ["url", mkStr(response.url)], ["headers", mkList(response.headers.map(([k, v]) => mkList([mkStr(k), mkStr(v)])))], ["body", mkStr(response.body)],
         ],
     };
 }

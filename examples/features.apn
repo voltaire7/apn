@@ -31,7 +31,7 @@ print [answer,count]                     # => [42,2]
 # The left side may be a pattern, which takes the value apart.
 [low,high] = [1,9]
 top :: others = [1,2,3]
-print [low,high,top,others]              # => [1,9,1,[2,3]]
+print [low,high,top,others]              # => [1, 9, 1, [2,3]]
 
 # A block groups statements. Its bindings stay inside it, and its value is
 # its last statement's.
@@ -67,7 +67,7 @@ print (sqrt -1)                          # => 0+1i
 
 # Strings use double quotes, characters single ones. A string is text, and
 # its characters are a list.
-print ["text",'c',True,False]            # => ["text",'c',True,False]
+print ["text", 'c', True, False]            # => ["text", 'c', True, False]
 print ("con" ++ "cat")                   # => concat
 print (to (List Char) "hi")              # => ['h','i']
 
@@ -184,7 +184,7 @@ print [Mod7 12, Mod7 5 + 4, Mod7 -3]     # => [Mod7 5, Mod7 2, Mod7 4]
 # A list holds any values. Applying it to an index gives an element
 # (negative counts from the end); a list of indexes selects several.
 xs = [10,20,30]
-print [xs 0, xs -1, xs [0,2]]            # => [10,30,[10,30]]
+print [xs 0, xs -1, xs [0,2]]            # => [10, 30, [10,30]]
 print [1 :: xs, xs ++ [40], [1..5], [0,5..20]]
 # => [[1,10,20,30],[10,20,30,40],[1,2,3,4,5],[0,5,10,15,20]]
 
@@ -267,7 +267,7 @@ print ((dynamicNumber : Int) + 1)        # => 42
 # ---------------------------------------------------------
 # Every value is a set: a type its values, a number those below it, a list
 # its (position, item) pairs. <= is inclusion, & intersection, | union.
-print [Int <= Number, [1] <= [1,2], [1,2] & [1,3], 3 | 5]  # => [True,True,[1],5]
+print [Int <= Number, [1] <= [1,2], [1,2] & [1,3], 3 | 5]  # => [True, True, [1], 5]
 
 # Every definition is left : T = body, T the type of the left side. A type is
 # a constructor declared into Type, and constructors declare into it.
@@ -345,7 +345,7 @@ print code                               # => [2]
 code 0 = (x = 10)
 probe code                               # => [x = 10, x + 1]
 print code                               # => [11]
-print (toAST [f x + 1])                  # => ["[]",["+",["f","x"],1]]
+print (toAST [f x + 1])                  # => ["[]", ["+", ["f","x"], 1]]
 probe (toLambda [x = 1, x + 1])          # => [(x -> x + 1) 1]
 
 # ---------------------------------------------------------

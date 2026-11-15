@@ -57,7 +57,7 @@ Deno.test('a key from an action is computed before the RHS', () => {
     const i = new Interpreter();
     const source = 'count = Mutable 0\narr = [0]\nkey x = { set count $ count + 1; return x }\nk <- key (0 + 0)\narr (k) = count + 1\n[arr,count]';
     const actual = i.renderString(i.run(parseDocument(source)));
-    if (actual !== '[[2],1]') throw new Error(actual);
+    if (actual !== '[[2], 1]') throw new Error(actual);
 });
 
 Deno.test('failed computed slot conversion preserves initialized type', () => {

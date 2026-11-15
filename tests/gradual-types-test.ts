@@ -102,8 +102,8 @@ for (
 }
 for (
     const source of [
-        '([1,"bad"] : Vect 2 Int)',
-        'f n (xs : Vect n Int) = xs; f 2 [1,"bad"]',
+        '([1, "bad"] : Vect 2 Int)',
+        'f n (xs : Vect n Int) = xs; f 2 [1, "bad"]',
         'Choice flag = flag ? Int : String; ("bad" : Choice True)',
     ]
 ) {
@@ -123,7 +123,7 @@ Deno.test("captured variables are not spuriously generalized", () => {
 Deno.test("runtime value-dependent type selection", () => {
     const i = new Interpreter();
     const source = 'Choice flag = flag ? Int : String; [(1 : Choice True), ("hello" : Choice False)]';
-    if (i.renderString(i.run(parseDocument(source))) !== '[1,"hello"]') throw new Error("wrong selected type");
+    if (i.renderString(i.run(parseDocument(source))) !== '[1, "hello"]') throw new Error("wrong selected type");
 });
 for (
     const source of [

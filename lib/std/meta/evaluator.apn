@@ -71,7 +71,7 @@ meScope statements parent = {
     scope = [insert (meBindings statements (head scope)) parent]
     head scope
 }
-meClosure parameters body scope = ([["__closure",True],["parameters",parameters]]
+meClosure parameters body scope = ([["__closure", True], ["parameters",parameters]]
     ++ [["body",body],["scope",scope]] : HashMap _ _)
 meZipTemplate functions values = null functions
     ? (null values ? [] : fail "list template and input must have the same length")

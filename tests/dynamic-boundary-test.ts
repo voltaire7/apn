@@ -43,7 +43,7 @@ for (const [source, message] of [
     ['(f : Int -> Int) <- return (x -> x); f ("bad" : Dynamic)', 'Int expects a number'],
     ['(f : Int -> Int) <- return (x -> "bad" : Dynamic); f 1', 'Int expects a number'],
     ['(([1] : Dynamic) : Vect 2 Int)', 'length mismatch'],
-    ['(([1,"bad"] : Dynamic) : Vect 2 Int)', 'Int expects a number'],
+    ['(([1, "bad"] : Dynamic) : Vect 2 Int)', 'Int expects a number'],
     ['x = "old"; (use [x = 123] : Dynamic); x', 'cannot replace string with int'],
 ]) Deno.test(`Dynamic runtime boundary rejects: ${source}`, () => {
     requireChecked(source);

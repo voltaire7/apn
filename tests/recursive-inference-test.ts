@@ -66,7 +66,7 @@ Deno.test("a copied recursive function keeps its result relationship", () => {
     const actual = interpreter.renderString(
         interpreter.run(parseDocument(source)),
     );
-    if (actual !== '[123,"hello"]') throw new Error(actual);
+    if (actual !== '[123, "hello"]') throw new Error(actual);
 });
 
 Deno.test("checking depth exhaustion is an error, not Dynamic success", () => {

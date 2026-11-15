@@ -22,7 +22,7 @@ for (const [source, expected] of [
     ['assert True "kept"', '"kept"'],
     ['std <- import "std"; use std.function\ncount = Mutable 0\nbracket 42 (_ -> set count 1) (x -> x + 1)\ncount', '1'],
     ['std <- import "std"; use std.function\nbracket 42 (_ -> []) (x -> [x,x+1])', '[42,43]'],
-    ['std <- import "std"; use std.function\ncount = Mutable 0\nv <- bracket 1 (_ -> set count 9) (_ -> [count + 1])\n[v,count]', '[[1],9]'],
+    ['std <- import "std"; use std.function\ncount = Mutable 0\nv <- bracket 1 (_ -> set count 9) (_ -> [count + 1])\n[v,count]', '[[1], 9]'],
 ]) Deno.test(`Odin-inspired rule: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

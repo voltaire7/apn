@@ -26,7 +26,7 @@ for (const [source, expected] of [
     ['[x = "old"] [x = "new"]', '[x = "new"]'], ['[x = False] [x = True]', '[x = True]'], ["[x = 'a'] [x = 'b']", "[x = 'b']"],
     ['(* 2) * [1,2,3,4]', '[2,4,6,8]'],
     ['to Int * [1,2,3,4]', '[1,2,3,4]'],
-    ['([1,"hi"] : [Int,String])', '[1,"hi"]'],
+    ['([1, "hi"] : [Int,String])', '[1, "hi"]'],
     ['[[(* 2), (* 2)], [(* 2), (* 2)]].[[1,2],[3,4]]', '[[2,4],[6,8]]'],
     ['[x = 0, y = 0] [x = 1, y = 2]', '[x = 1, y = 2]'],
     ['([x = 123] : [x = 0, y : Int])', '[x = 123, y = 0]'],
@@ -59,7 +59,7 @@ for (const [source, expected] of [
     ['Count (x : Int) = _\nf (Count x) = x\nf (Count 123)', '123'],
     ['Option a = Some a | None\n[(Option Int : Type) == (Option Int : Type), (Option Int : Type) == (Option Float : Type)]', '[True,False]'],
     ['Option a = Some a | None\n[isType (Option Int) (Some 1), isType (Option Int) (Some "hi")]', '[True,False]'],
-    ['[isType [Int,Int] [1,2], isType [Int] [1,"hi"], isType [x : Int] [x = 1]]', '[True,False,True]'],
+    ['[isType [Int,Int] [1,2], isType [Int] [1, "hi"], isType [x : Int] [x = 1]]', '[True,False,True]'],
     ['Option a = Some a | None\nf (x : Option Int) = 1\nf _ = 0\nf 123', '0'],
     ['Many a = Packed [a,a] | Empty\n(Packed [1,2] : Many Int)', 'Packed [1,2]'],
     ['Many a = Packed [a,a] | Empty\nPacked [1,2]', 'Packed [1,2]'],
@@ -74,7 +74,7 @@ for (const [source, expected] of [
     ['f (xs : [Int]) = head xs\nf [123]', '123'],
     ['f (p : [x : Int]) = p.x\nf [x = 123]', '123'],
     ['to [Int,Int] [1,2]', '[1,2]'],
-    ['[isType Type [Int], isType Type [(*2)], ([Int] : Type)]', '[True,False,[Int]]'],
+    ['[isType Type [Int], isType Type [(*2)], ([Int] : Type)]', '[True, False, [Int]]'],
     ['Option a = Some a | None\nOptional a = Option a\n(Optional Int : Type)', 'Option Int'],
     ['Option a = Some a | None\nOptional a = Option a\n(Some (floor .2) : Optional Int)', 'Some 0'],
     ['Option a = Some a | None\n(None : Option Int)', 'None'],
@@ -160,15 +160,15 @@ for (const [application, block, expected] of [
 // [Int,Int,Int..], the type of endless lists of Ints, as typeOf [1..] says.
 // Checked and unchecked runs agree.
 for (const checked of [true, false]) for (const [source, expected] of [
-    ['[[Int..], [Int..] == List Int, typeOf [1..], typeOf [1..] == [Int..]]', '[[Int..],False,[Int..],True]'],
-    ['[take 2 [Int..], head [Int..], isType [Int..] [1,2], isType [Int..] [1..], isType [Int..] 5]', '[[Int,Int],Int,False,True,False]'],
+    ['[[Int..], [Int..] == List Int, typeOf [1..], typeOf [1..] == [Int..]]', '[[Int..], False, [Int..], True]'],
+    ['[take 2 [Int..], head [Int..], isType [Int..] [1,2], isType [Int..] [1..], isType [Int..] 5]', '[[Int,Int], Int, False, True, False]'],
     ['f (xs : [Int..]) = "endless"\nf _ = "other"\n[f [1,2], f ["a"], f [1..], f 5]', '["other","other","endless","other"]'],
     ['Point = [x : Float, y : Float]\nps = [x = 1, y = 2] :: ps\ntake 1 (to [Point..] ps)', '[[x = 1.0, y = 2.0]]'],
     ['ones = 1 :: ones\n[typeOf ones, take 2 (to [Float..] ones)]', '[[Int..],[1.0,1.0]]'],
     ['[take 3 [1..], [1,3..9]]', '[[1,2,3],[1,3,5,7,9]]'],
     // A list's type is the list of its items' types, made as it is read.
-    ['t = typeOf [1,"a"]\n[t, head t, length t, typeOf (filter (> 0) [1,2])]', '[[Int,String],Int,2,[Int,Int]]'],
-    ['[typeOf [], typeOf [[1],[2,3]], typeOf [1,2] <= List Int]', '[[],[[Int],[Int,Int]],True]'],
+    ['t = typeOf [1, "a"]\n[t, head t, length t, typeOf (filter (> 0) [1,2])]', '[[Int,String], Int, 2, [Int,Int]]'],
+    ['[typeOf [], typeOf [[1],[2,3]], typeOf [1,2] <= List Int]', '[[], [[Int],[Int,Int]], True]'],
     // A name in a parameter's type that names a type is that type; a
     // function's argument there is a value.
     ['xs = [1,2]\nf (ys : typeOf xs) = 1\nf _ = 0\n[f [5,6], f 7]', '[1,0]'],
@@ -177,12 +177,12 @@ for (const checked of [true, false]) for (const [source, expected] of [
     ['h = a -> a\nf (g : h) = 1\nf _ = 0\n[f (x -> x), f 2]', '[1,0]'],
     // A typed pattern takes what e : T makes of the value, and fails where it
     // fails: [Int,Int] is Vect 2 Int, a record type converts each field.
-    ['f (ys : [Int,Int]) = ys\nf _ = 0\n[f [1], f ["a","b"], f [1,2], f [1.0,2], f [1,2.5]]', '[0,0,[1,2],[1,2],0]'],
-    ['f (ys : Vect 2 Int) = ys\nf _ = 0\n[f [1], f ["a","b"], f [1,2], f [1.0,2], f [1,2.5]]', '[0,0,[1,2],[1,2],0]'],
+    ['f (ys : [Int,Int]) = ys\nf _ = 0\n[f [1], f ["a","b"], f [1,2], f [1.0,2], f [1,2.5]]', '[0, 0, [1,2], [1,2], 0]'],
+    ['f (ys : Vect 2 Int) = ys\nf _ = 0\n[f [1], f ["a","b"], f [1,2], f [1.0,2], f [1,2.5]]', '[0, 0, [1,2], [1,2], 0]'],
     ['g (ys : [Float,Float]) = ys\nh (ys : Vect 2 Float) = ys\n[g [1,2], h [1,2]]', '[[1.0,2.0],[1.0,2.0]]'],
     ['p = [x : Int]\nf (v : p) = v.x\nf _ = 0\n[f [x = 3], f [x = "a"], f 5, f [x = 2.0]]', '[3,0,0,2]'],
     // A builtin's typing rule is its value's, whatever name it is bound to.
-    ['g = typeOf\nhead (g [1,"a"])', 'Int'],
+    ['g = typeOf\nhead (g [1, "a"])', 'Int'],
     ['len = length\nf (xs : Vect (len [1,2]) Int) = 1\nf _ = 0\n[f [1,2], f [1]]', '[1,0]'],
     ['w = while\nn = Mutable 0\nw [n < 3] (set n (n + 1))\nn + 0', '3'],
     ['i = isType\n[i (a -> a) (x -> x), i Int 1]', '[True,True]'],
@@ -200,9 +200,9 @@ for (const checked of [true, false]) for (const [source, expected] of [
     ['d Number = "number"\nd Int = "int"\n[d Int, d Float]', '["int","number"]'],
     // A program's own types too, the checker choosing as the run does: a named
     // type's pattern within its base's, a constructor's within its type's.
-    ['Money = Float\nf (x : Float) = 1\nf (x : Money) = "m"\ng (s : String) = s\nh (n : Int) = n\n[g (f (1.5 : Money)), h (f 1.5)]', '["m",1]'],
-    ['Shape = Circle Float | Square Float\nf (s : Shape) = 1\nf (Circle r) = "c"\ng (s : String) = s\nh (n : Int) = n\n[g (f (Circle 1.0)), h (f (Square 1.0))]', '["c",1]'],
-    ['Pos = (n : Int) | n > 0\nf (x : Int) = 1\nf (x : Pos) = "p"\ng (s : String) = s\nh (n : Int) = n\n[g (f (3 : Pos)), h (f 3)]', '["p",1]'],
+    ['Money = Float\nf (x : Float) = 1\nf (x : Money) = "m"\ng (s : String) = s\nh (n : Int) = n\n[g (f (1.5 : Money)), h (f 1.5)]', '["m", 1]'],
+    ['Shape = Circle Float | Square Float\nf (s : Shape) = 1\nf (Circle r) = "c"\ng (s : String) = s\nh (n : Int) = n\n[g (f (Circle 1.0)), h (f (Square 1.0))]', '["c", 1]'],
+    ['Pos = (n : Int) | n > 0\nf (x : Int) = 1\nf (x : Pos) = "p"\ng (s : String) = s\nh (n : Int) = n\n[g (f (3 : Pos)), h (f 3)]', '["p", 1]'],
     // A type a block declares, read where the clauses are written.
     ['b = {\n    Money = Float\n    f (x : Float) = 1\n    f (x : Money) = "m"\n    g (s : String) = s\n    g (f (1.5 : Money))\n}\nb', '"m"'],
     ['Pos = (n : Int) | n > 0\nSmall = (n : Pos) | n < 10\nf (x : Int) = "i"\nf (x : Pos) = "p"\nf (x : Small) = "s"\n[f 3, f (3 : Pos), f (3 : Small)]', '["i","p","s"]'],

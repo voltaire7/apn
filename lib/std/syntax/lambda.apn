@@ -71,7 +71,7 @@ _value bound clauses = {
     name = _name (head clauses 1)
     value = _definition (name :: bound) clauses
     _isName name && !contains name bound && _mentions name value
-        ? [_y,["->",[name],value]]
+        ? [_y, ["->", [name], value]]
         : value
 }
 _definition bound [["=",left,right]] = _isDefinition left
@@ -92,7 +92,7 @@ _matching bound clauses = {
     cases = map ([params,body] -> ["->", [one ? head params : "[]" :: params], body]) clauses
     _curry bound names ["~", subject, "[]" :: cases]
 }
-_y = ["->",["f"],[["->",["x"],["f",["x","x"]]],["->",["x"],["f",["x","x"]]]]]
+_y = ["->", ["f"], [["->", ["x"], ["f", ["x","x"]]], ["->", ["x"], ["f", ["x","x"]]]]]
 
 # What a binding binds: its name, or the pattern it takes apart.
 _bindingPattern left = _isDefinition left ? head left : left

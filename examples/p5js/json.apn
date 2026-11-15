@@ -3,6 +3,7 @@
 std <- import "std"
 use std.[html,io,option,p5]
 browser <- import "std/browser"
+decode <- import "std/decode"
 file <- import "std/file"
 http <- import "std/http"
 task <- import "std/task"
@@ -23,8 +24,16 @@ init = [
     task.perform Loaded (readFile "assets/bubbles.json")
 ]
 
-# The bubbles a JSON file lists.
-load text model = { model.bubbles = from JSON text : List Bubble; model }
+# The bubbles a JSON file lists: its objects are [key,value] pairs, which a
+# decoder reads by name (a file that does not list bubbles leaves them).
+load text model = {
+    bubbles = decode.list Bubble
+    decoded = decode.decodeValue bubbles (from JSON text) : Result (List Bubble) String
+    decoded ~ [
+        Ok bubbles -> { model.bubbles = bubbles; model }
+        Err _ -> model
+    ]
+}
 
 update msg model = msg ~ [
     Loaded text -> [load text model, browser.none]

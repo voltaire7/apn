@@ -18,10 +18,10 @@ for (const checked of [false, true]) {
                 "[child = [x = 3, y = 2]]",
             ],
             ["v = [x = (1 : Float)]; v.[x = a] = [a = 3]; v", "[x = 3.0]"],
-            ['a = [["x",1],["y",2]]; a "x" = 10; a', '[["x",10],["y",2]]'],
-            ['a = [["x",1],["y","hi"]]; a "x" = 10; a', '[["x",10],["y","hi"]]'],
-            ['a = [["x",1],["x",2]]; a "x" = 10; a', '[["x",10],["x",2]]'],
-            ['a = [["x", (1 : Float)]]; k = "x"; a k = 2; a', '[["x",2.0]]'],
+            ['a = [["x", 1], ["y", 2]]; a "x" = 10; a', '[["x", 10], ["y", 2]]'],
+            ['a = [["x", 1], ["y","hi"]]; a "x" = 10; a', '[["x", 10], ["y","hi"]]'],
+            ['a = [["x", 1], ["x", 2]]; a "x" = 10; a', '[["x", 10], ["x", 2]]'],
+            ['a = [["x", (1 : Float)]]; k = "x"; a k = 2; a', '[["x", 2.0]]'],
             [
                 "[x = first, _ = rest] = [x = 1, y = 2, z = 3]; [first,rest]",
                 "[1, [y = 2, z = 3]]",
@@ -64,8 +64,8 @@ for (const checked of [false, true]) {
             "v = [x = 1]; v.[x = a] = [b = 2]",
             "v = [x = 1]; v.[y = a] = [a = 2]",
             "v = [x = 1]; v.[x = a] = [a = .2]",
-            'a = [["x",1]]; a "missing" = 2',
-            'a = [["x",1]]; a "x" = .2',
+            'a = [["x", 1]]; a "missing" = 2',
+            'a = [["x", 1]]; a "x" = .2',
             "[x = first, _ = rest] = [y = 1]",
             "f [x = first, _ = rest] = rest.x; f [x = 1]",
             "[x:first,_:a,_:b]=[x:1]",
@@ -89,7 +89,7 @@ for (const checked of [false, true]) {
         const [initial, update, name, expected] of [
             ["a = [1,2]", "a [x = 0, y = 1] = [x = 10, y = .2]", "a", "[1,2]"],
             ["v = [x = 1, y = 2]", "v.[x = a, y = b] = [a = 10, b = .2]", "v", "[x = 1, y = 2]"],
-            ['a = [["x",1],["y",2]]', 'a "y" = .2', "a", '[["x",1],["y",2]]'],
+            ['a = [["x", 1], ["y", 2]]', 'a "y" = .2', "a", '[["x", 1], ["y", 2]]'],
         ]
     ) {
         Deno.test(`failed selection update is atomic checked=${checked}: ${update}`, () => {

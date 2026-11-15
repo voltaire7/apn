@@ -30,11 +30,11 @@ for (const [source, expected] of [
     ['use [[one = 1], [two = 2]]; one + two', '3'],
     ['x = Mutable 1; set x 2; x + 1', '3'],
     ['Direction = North | South; [10,20] South', '20'],
-    ['templates = [String,Int]; values = ["x",1]; (values : templates)', '["x",1]'],
+    ['templates = [String,Int]; values = ["x", 1]; (values : templates)', '["x", 1]'],
     ['xs = [1]; xs = [2,3]; xs', '[2,3]'],
     // A union of this shape is the list type, as the prelude's List is.
     ['Seq a = [] | a :: Seq a; f (xs : Seq Int) = length xs; f [1,2]', '2'],
-    ['[isType (List Int) [1,"a"], isType (List Int) [1..]]', '[False,True]'],
+    ['[isType (List Int) [1, "a"], isType (List Int) [1..]]', '[False,True]'],
     // Types compare as the sets of their values.
     ['U = (Int | String); V = (String | Int); [U == V, typeOf [1,2] <= List Int, Int < Number]', '[True,True,True]'],
     // A type pattern matches each type within the one it names, the type itself first.
@@ -55,11 +55,11 @@ for (const [source, expected] of [
     // Its lengths are the run's: a fold that keeps its accumulator keeps [1,2].
     [`${FL}g (fl (acc, x -> acc) [1,2] [3])`, '3'],
     // (m : HashMap _ _) binds a map, of any keys and values.
-    ['ks (m : HashMap _ _) = keys m; ks ([["a",1]] : HashMap _ _)', '["a"]'],
+    ['ks (m : HashMap _ _) = keys m; ks ([["a", 1]] : HashMap _ _)', '["a"]'],
     // Clauses typed by different types recurse through the finished function:
     // ln (keys m) is a List String, ln (to (List Char) s) a List Char.
     ['ln (s : String) = ln (to (List Char) s); ln (m : HashMap _ _) = ln (keys m); ln (xs : List _) = 7\n' +
-        '[ln ([["a",1]] : HashMap _ _), ln "ab", ln [1]]', '[7,7,7]'],
+        '[ln ([["a", 1]] : HashMap _ _), ln "ab", ln [1]]', '[7,7,7]'],
     // Typed clauses recursing at different types (ln [1] beside ln ["a"]):
     // each call takes the clause the run takes, not the first call's type.
     ['ln (n : Int) = ln [1]; ln (s : String) = ln ["a"]; ln (xs : List _) = 7; [ln 5, ln "ab", ln [2]]', '[7,7,7]'],
@@ -113,7 +113,7 @@ for (const [source, expected] of [
     // A rebinding is a new version, of any type: what was written before keeps the old.
     ['xs <- return ([1,2] : Vect 2 Int); xs = [3]; xs', '[3]'],
     ['x : Int = 1; x = "a"; x', '"a"'],
-    ['x = 1; y = x + 1; x = "a"; [x,y]', '["a",2]'],
+    ['x = 1; y = x + 1; x = "a"; [x,y]', '["a", 2]'],
     // Its value reads the version before it, whatever its value is.
     ['xs = [1,2]; xs = map (+ 1) xs; xs', '[2,3]'],
     ['v = { xs = [1,2]; xs = get xs 1; xs }; v', '2'],
@@ -173,8 +173,8 @@ for (const source of [
     'std <- import "std"\nstd.number\nsq 3',
     // A record's entry is written as a [key,value] pair, within the record.
     'v = [x = 1]\nv 0 = [x1 = 22]',
-    'v = [x = 1]\nv 1 = ["a",1]',
-    'P = [x : Float, y : Float]\np = [1,2] : P\np 1 = ["w",1]',
+    'v = [x = 1]\nv 1 = ["a", 1]',
+    'P = [x : Float, y : Float]\np = [1,2] : P\np 1 = ["w", 1]',
     // An item after an x <- m item yields the block ending in it: { x <- m; x } is an error.
     'print [x <- return 1, x]',
     'print [x <- [1,2], 7]',
@@ -186,19 +186,19 @@ for (const source of [
 const choices = 'std <- import "std"; use std.time\nt <- currentTime\nfunc x = x ? "yes" : False\n' +
     'h x = x ~ [\n    0 -> "zero"\n    _ -> False\n]\ng 0 = "zero"\ng _ = False\n';
 for (const [source, expected] of [
-    ['[func True, func False, h 0, h 1, g 0, g 1]', '["yes",False,"zero",False,"zero",False]'],
+    ['[func True, func False, h 0, h 1, g 0, g 1]', '["yes", False, "zero", False, "zero", False]'],
     ['[func (t > 0) == "yes", (t > 0 ? 1 : 2.5) + 1 > 0]', '[True,True]'],
     ['func True ++ "!"', '"yes!"'],
     ['d (s : String) = s ++ "!"; d (b : Bool) = b ? "T" : "F"; [d (func (t > 0)), d (h t), d (g t)]', '["yes!","F","F"]'],
     ['func (t > 0) ~ [\n    (s : String) -> s ++ "!"\n    _ -> "no"\n]', '"yes!"'],
     ['[h 0 ++ "!", g 0 ++ "!"]', '["zero!","zero!"]'],
-    ['xs = [1,"a"]; d (n : Int) = n + 1; d (s : String) = s ++ "!"; map d xs', '[2,"a!"]'],
+    ['xs = [1, "a"]; d (n : Int) = n + 1; d (s : String) = s ++ "!"; map d xs', '[2, "a!"]'],
     // A held value may be either: Pair 1 "a" or Pair true 'c' is Pair (Int | Bool) (String | Char).
     ["Pair a b = | Pair a b; first (Pair x _) = x; to String (first (t > 0 ? Pair 1 \"a\" : Pair True 'c'))", '"1"'],
     ['inc (n : Int) = n + 1; dbl (n : Int) = n * 2; (t > 0 ? inc : dbl) 5', '6'],
     ['Handler a = | Handler (a -> String)\napply (Handler f) x = f x\napply (Handler (s -> s ++ "!")) "x"', '"x!"'],
     // The branches do not decide x where its other uses do: x > 0 keeps it a number.
-    ['k x = x > 0 ? x : "neg"; [k 1 + 1, k -1]', '[2,"neg"]'],
+    ['k x = x > 0 ? x : "neg"; [k 1 + 1, k -1]', '[2, "neg"]'],
     // A ternary is a match: a value known to take one alternative checks only it.
     ['True ~ [True -> 1, False -> "a" + 1]', '1'],
     ['x = 2\n(x ~ [1 -> "one", n -> n + 1]) + 1', '4'],
@@ -212,7 +212,7 @@ for (const source of [
     'func (t > 0) ++ "!"', 'h t ++ "!"', 'g t ++ "!"',
     // Every choice must be accepted where it is used.
     'd (s : String) = s ++ "!"; d (b : Bool) = "b"; d [func (t > 0), 1] 1',
-    'xs = [1,"a",True]; d (n : Int) = n + 1; d (s : String) = s ++ "!"; map d xs',
+    'xs = [1, "a", True]; d (n : Int) = n + 1; d (s : String) = s ++ "!"; map d xs',
     // A function a field holds takes one type, not either: Handler Int and
     // Handler String stay apart, and a choice of functions takes what all do.
     'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\ninc (n : Int) = to String n\n' +
@@ -262,7 +262,7 @@ Deno.test("REPL clauses and polymorphism survive separate submissions", () => {
     if (run(i, '[func 0, func 1]') !== '[2,0]') throw new Error('replacement lost clause');
     // A clause with another result type: either, where the call cannot tell.
     run(i, 'func 2 = "two"');
-    if (run(i, '[func 0, func 2]') !== '[2,"two"]') throw new Error('lost the new clause');
+    if (run(i, '[func 0, func 2]') !== '[2, "two"]') throw new Error('lost the new clause');
     rejected(i, 'std <- import "std"; use std.time; t <- currentTime; func t ++ "!"');
     run(i, 'id x = x');
     if (run(i, 'id 1') !== '1' || run(i, 'id True') !== 'True') throw new Error('lost polymorphism');
@@ -330,12 +330,12 @@ for (const [source, expected] of [
     ['xs = map (x -> x + 1) [1,2]\nys = map (x -> x * 2) [1,2,3]\ng [a,b] = a + b\n[g xs, length ys]', '[5,3]'],
     ['x (x::xs) = 42; x [x]', '42'],
     // A [] inside a pattern tests that part without making the argument empty.
-    ['g [[],y] = y; g [x::_,_] = x; g [[1,2],3]', '1'],
+    ['g [[],y] = y; g [x::_,_] = x; g [[1,2], 3]', '1'],
     ['j xs ys = [xs,ys] ~ [[[],r] -> r, [x::m,r] -> x :: j m r]; j [1,2] [3]', '[1,2,3]'],
     ['f xs = xs ~ [[] -> 0, [_] -> 1, _ -> 2]; [f [], f [1], f [1,2]]', '[0,1,2]'],
     // A free name in a typed pattern binds what the value has there.
     ['f (xs : List _) = xs; f [1,2]', '[1,2]'],
-    ['k (xs : List a) = a; k [1,"x"]', 'Int | String'],
+    ['k (xs : List a) = a; k [1, "x"]', 'Int | String'],
     ['first (x::_ : List _) = x; first [1..]', '1'],
     ['len (_ : Vect n _) = n; len [1,2]', '2'],
     ['g (xs : Vect n a) = [n,a]; g [1,2]', '[2,Int]'],
@@ -378,7 +378,7 @@ for (const [source, expected] of [
     ['g [p,q] = p + q; g ([1,2] * 3)','9'],
     ['g [[k,v],[k2,w]] = w ++ "!"; g (pairs [x = 1, y = "s"])','"s!"'],
     ['twice xs = xs * x -> x * 2; g [p,q] = p + q; g (twice [1,2])','6'],
-    ['number xs = enumerate xs; g [p,q] = p; [g (number [1,2]), length (number [1,2,3])]','[[0,1],3]'],
+    ['number xs = enumerate xs; g [p,q] = p; [g (number [1,2]), length (number [1,2,3])]','[[0,1], 3]'],
     ['h a b = [map (x -> x) a, map (x -> x) b]; h [1] [1,2]','[[1],[1,2]]'],
     ['f (xs : List _) = xs; h a b = [f a, f b]; h [1] [1,2]','[[1],[1,2]]'],
 ] as const) Deno.test(`checker keeps builtin list lengths: ${source}`, () => {
@@ -1048,7 +1048,7 @@ for (const [source, expected] of [
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nprint (length box)\ng (f (r (counter + 0 == 0)))', '0'],
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nhead box\ng (f (r (counter + 0 == 3)))', '0'],
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nhead box\nset counter 8\nhead box\ng (f (r (counter + 0 == 3)))', '0'],
-    ['counter = Mutable 0\nother = Mutable 7\nm = ([["a",1]] : HashMap _ _)\nhas "a" m ? set counter 5 : return []\ng (f (r (other + 0 == 7)))', '0'],
+    ['counter = Mutable 0\nother = Mutable 7\nm = ([["a", 1]] : HashMap _ _)\nhas "a" m ? set counter 5 : return []\ng (f (r (other + 0 == 7)))', '0'],
     // Lazily computed elements run where the program forces them: map's
     // elements when used, filter's predicate as its cells are reached.
     ['counter = Mutable 0; print (length (map (x -> set counter x) [1,2])); g (f (r (counter + 0 == 0)))', '0'],
@@ -1060,11 +1060,11 @@ for (const [source, expected] of [
     ['counter = Mutable 0\nbump x = set counter (counter + 1)\nxs = map (x -> bump x) [1,2]\ndo xs\ndo xs\ng (f (r (counter + 0 == 4)))', '0'],
     ['counter = Mutable 0\nbump x = set counter (counter + 1)\nys = [bump 0, bump 0]\ndo ys\ng (f (r (counter + 0 == 2)))', '0'],
     // An uncertain statement reaching a lazily computed list follows what it is computed from.
-    ['counter = Mutable 0\nother = Mutable 7\nys = map (x -> x * 2) [1,2]\nm = ([["a",1]] : HashMap _ _)\nhas "a" m ? set counter (head ys) : return []\ng (f (r (other + 0 == 7)))', '0'],
+    ['counter = Mutable 0\nother = Mutable 7\nys = map (x -> x * 2) [1,2]\nm = ([["a", 1]] : HashMap _ _)\nhas "a" m ? set counter (head ys) : return []\ng (f (r (other + 0 == 7)))', '0'],
     // A load reaches only what the loaded file's source names.
     ['counter = Mutable 0\nother = Mutable 7\nset other 8\nload "examples/advent-of-code/lanternfish"\ng (f (r (other + 0 == 8)))','0'],
     // A name use opened reaches the field it was opened from.
-    ['counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set counter 3]\nuse ns\nm = ([["a",1]] : HashMap _ _)\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set counter 3]\nuse ns\nm = ([["a", 1]] : HashMap _ _)\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))','0'],
     // A function held by a pattern binding runs its body where it is called.
     ['counter = Mutable 0\nother = Mutable 7\nhb <- return (x -> 0)\ny <- return (hb 0)\ng (f (r (other + 0 == 7)))','0'],
     // Keys bound locally, and views stored in records, lists and cells or
@@ -1100,15 +1100,15 @@ for (const source of [
     'counter = Mutable 0\nk y = { set counter 4; return (counter + 0) }\nw <- k 0\ng (f (r (w == 0)))',
     'counter = Mutable 0; xs <- return [set counter 9, 1]; g (f (r (counter + 0 == 9)))',
     // A statement whose run is uncertain leaves what it can reach unknown.
-    'counter = Mutable 0\nm = ([["a",1]] : HashMap _ _)\nhas "a" m ? set counter 5 : return []\ng (f (r (counter + 0 == 5)))',
+    'counter = Mutable 0\nm = ([["a", 1]] : HashMap _ _)\nhas "a" m ? set counter 5 : return []\ng (f (r (counter + 0 == 5)))',
     // A function held by a pattern binding runs its body where it is called.
     'counter = Mutable 0\nother = Mutable 7\nhb <- return (x -> { set other 1; return 0 })\nhb 0\ng (f (r (other + 0 == 7)))',
     'counter = Mutable 0\nother = Mutable 7\nhs <- return [x -> { set other 1; return 0 }]\nhead hs 0\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\npick n = n > 0 ? x -> { set other 1; 0 } : x -> 0\nhb <- return (pick 1)\nm = ([["a",1]] : HashMap _ _)\nhas "a" m ? hb 0 : 0\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\npick n = n > 0 ? x -> { set other 1; 0 } : x -> 0\nhb <- return (pick 1)\nm = ([["a", 1]] : HashMap _ _)\nhas "a" m ? hb 0 : 0\ng (f (r (other + 0 == 7)))',
     'counter = Mutable 0\nother = Mutable 7\n[ha,hb] <- return [x -> return 0, x -> { set other 1; return 0 }]\nhb 0\ng (f (r (other + 0 == 7)))',
     // A name use opened reaches the field it was opened from.
-    'counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set other 3]\nuse ns\nm = ([["a",1]] : HashMap _ _)\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set counter 3]\nuse ns\nm = ([["a",1]] : HashMap _ _)\nhas "a" m ? bump 0 : return []\ng (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set other 3]\nuse ns\nm = ([["a", 1]] : HashMap _ _)\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set counter 3]\nuse ns\nm = ([["a", 1]] : HashMap _ _)\nhas "a" m ? bump 0 : return []\ng (f (r (counter + 0 == 0)))',
     'counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 0)))',
     'counter = Mutable 0\nsnap = counter + 0\nset counter 4\nprint snap\nset counter 9\ng (f (r (snap + 0 == 9)))',
     'counter = Mutable 0\ninit = set counter 5\ninit\nset counter 1\ninit\ng (f (r (counter + 0 == 1)))',
@@ -1130,7 +1130,7 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
         }
         throw new Error(`accepted: ${source}`);
     }
-    if (run(session(), 'std <- import "std"\nuse std.option\nfunc (Some x::xs) = [x,xs]; func [Some 1, None]') !== "[1,[None]]") throw new Error("with the import");
+    if (run(session(), 'std <- import "std"\nuse std.option\nfunc (Some x::xs) = [x,xs]; func [Some 1, None]') !== "[1, [None]]") throw new Error("with the import");
 });
 // An unbound name is reported where it is written, with the standard module
 // exporting it, before any check of what it would have been.
@@ -1209,7 +1209,7 @@ for (const [source, expected] of [
     ['c n = n * 2; f x = c x; c s = s ++ "?"; f 1', '2'],
     ['c s = s ++ "?"; f x = c x; c n = n * 2; f "a"', '"a?"'],
     ['c n = n * 2; f x = c x; c s = s ++ "?"; c n = n + 1; [f 1, c 1]', '[2,2]'],
-    ['c n = n * 2; g = x -> c x; c s = s ++ "?"; [g 1, c "a"]', '[2,"a?"]'],
+    ['c n = n * 2; g = x -> c x; c s = s ++ "?"; [g 1, c "a"]', '[2, "a?"]'],
     ['c n = n * 2; f x = c x; g y = f y + 1; c s = s ++ "?"; g 1', '3'],
     ['c n = n * 2; y = c 1; c s = s ++ "?"; y', '2'],
     ['c n = n * 2; y <- return (c 1); c s = s ++ "?"; y', '2'],
@@ -1241,7 +1241,7 @@ for (const [source, line, column] of [
 // ':' adds one element (the mirror of the x:xs pattern), making a mixed list
 // as a literal would when it differs from the tail's elements; joining is ++.
 Deno.test("':' adds one element, mixed or not", () => {
-    for (const [source, expected] of [['[1,2]::[3,4]', '[[1,2],3,4]'], ['[1,2]::3::[4,5]', '[[1,2],3,4,5]'], ['1::["a"]', '[1,"a"]'],
+    for (const [source, expected] of [['[1,2]::[3,4]', '[[1,2], 3, 4]'], ['[1,2]::3::[4,5]', '[[1,2], 3, 4, 5]'], ['1::["a"]', '[1, "a"]'],
             ['x::xs = [1,2]::[3,4]; [x,xs]', '[[1,2],[3,4]]'], ['length ([1,2]::[3,4])', '3'],
             ['[1]::[[3,4]]', '[[1],[3,4]]'], ['xs = [[3,4]]; [1,2,3]::xs', '[[1,2,3],[3,4]]'], ['[1,2]::[[3,4]]', '[[1,2],[3,4]]'],
             ['x::xs = [1]::[[3,4]]; x', '[1]'], ['[1,2] ++ [3,4]', '[1,2,3,4]']]) {
@@ -1296,7 +1296,7 @@ for (const [source, expected] of [
     ['Pt = [x : Float, y : Float]; g (p : Pt) = p.y; h x = g [x,x]; h 2', '2.0'],
     ['g (f : Int -> Int) = f 1; h x = g x; h (+ 1)', '2'],
     ['g [(a : UInt8), (b : UInt8)] = a + b; g [3,3]', '6'],
-    ['g [(a : Float), b] = a; g [1,"x"]', '1.0'],
+    ['g [(a : Float), b] = a; g [1, "x"]', '1.0'],
     ['g ((x : Float)::rest) = x; g [1,2]', '1.0'],
     ['[(a : UInt8), (b : UInt8)] = [3, 3]; a + b', '6'],
     ['(x : Float)::rest = [1,2]; x', '1.0'],
@@ -1463,7 +1463,7 @@ for (const [source, output] of [
     // A refinement of a scalar named by a capitalized name keeps its name, as
     // Int32 does: through arithmetic, its condition checked on each result,
     // while a typed pattern takes a plain value it holds, binding that value.
-    [I32 + 'a = 100 : I32\n[typeOf a, typeOf (a + 1), (a : Int) + 1, a == 100]', '[I32,I32,101,True]'],
+    [I32 + 'a = 100 : I32\n[typeOf a, typeOf (a + 1), (a : Int) + 1, a == 100]', '[I32, I32, 101, True]'],
     [I32 + 'h (x : I32) = typeOf x\nh x = "other"\n[h 5, h (5 : I32), h 1.5, h 3000000000]', '[Int,Int,"other","other"]'],
     [POSITIVE + 'Box (x : Positive) = _\nBox 2', 'Box 2'],
     ['Scalar = (n : UInt) | n <= 1114111 && (n < 55296 || n > 57343)\nc (x : Scalar) = x\nc 65', '65'],

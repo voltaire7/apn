@@ -172,8 +172,10 @@ Behavior: `docs/standard-library.md` (`http`, `json`).
   modules, and `to JSON`/`from JSON` reach `toJson`/`fromJson` only through
   `convertTo`; none is in `EVALUATED_NATIVES`, so static checking never sends
   a request. The retired names (`RETIRED_NATIVES`) are bound nowhere.
-- `src/json.ts` parses JSON itself so integers stay exact `bigint`s; record
-  keys and JSON keys are the same strings both ways, so nothing is renamed.
+- `src/json.ts` parses JSON itself so integers stay exact `bigint`s; an
+  object decodes to its `[key,value]` pairs as `string` and value cells, so
+  keys are never renamed. Encoding reads a list as an object only once every
+  item has been demanded and is a pair with a string key.
   Tests: `tests/http-test.ts` (its server test needs `--allow-net`),
   `tests/repl-interrupt-pty.py` (Ctrl+C during a slow request).
 

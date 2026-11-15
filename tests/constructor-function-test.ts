@@ -21,7 +21,7 @@ for (const checked of [true, false]) {
         // = names a scalar type transparently: a Count is an Int wherever one
         // is accepted, and keeps its name when a result fits.
         ["Count = Int\n[(5 : Count), typeOf (5 : Count)]", "[5,Count]"],
-        ["Count = Int\n[(5 : Count) + 1, (5 : Count) * 2 == 10, ((5 : Count) : Int), sqrt (4 : Count)]", "[6,True,5,2]"],
+        ["Count = Int\n[(5 : Count) + 1, (5 : Count) * 2 == 10, ((5 : Count) : Int), sqrt (4 : Count)]", "[6, True, 5, 2]"],
         ['Count = Int\nf (c : Count) = "count"\nf (n : Int) = "int"\n[f (1 : Count), f 1]', '["count","int"]'],
         ["Count = Int\ng (n : Int) = n + 1\ng (5 : Count)", "6"],
         // (e : T), to T e and a typed pattern (x : T) are one operation:
@@ -29,10 +29,10 @@ for (const checked of [true, false]) {
         ["Compass = North | East\nto Int East = 1\nx = East : Int\ni (n : Int) = n\n[x, i East, to Int East]", "[1,1,1]"],
         ["Box (v : Int) = _\nto (Box Int) (n : Int) = Box n\ng (b : Box Int) = b\ny = 3 : Box Int\n[y, g 3, to (Box Int) 3]", "[Box 3, Box 3, Box 3]"],
         // Truth is truthy's: (x : Bool) takes only a Bool.
-        ['[truthy 5, 5 ? "y" : "n", !0, (True : Bool)]', '[True,"y",True,True]'],
+        ['[truthy 5, 5 ? "y" : "n", !0, (True : Bool)]', '[True, "y", True, True]'],
         // A type of its own is a constructor; a to instance lets it stand
         // where an Int is needed.
-        ['Count (n : Int) = _\nto Int (Count n) = n\nf (c : Count Int) = "count"\nf (n : Int) = "int"\ng (n : Int) = n * 2\n[f (Count 1), f 1, g (Count 3), Count 1 + 2]', '["count","int",6,3]'],
+        ['Count (n : Int) = _\nto Int (Count n) = n\nf (c : Count Int) = "count"\nf (n : Int) = "int"\ng (n : Int) = n * 2\n[f (Count 1), f 1, g (Count 3), Count 1 + 2]', '["count", "int", 6, 3]'],
         ["Box a = a\n[Box 1, Box Int]", "[1,Int]"],
         ["Twice w h = [w,h]\nTwice 1 2", "[1,2]"],
         ["V n = Vect (n + 0) Int\n([1,2,3] : V 3)", "[1,2,3]"],
@@ -41,7 +41,7 @@ for (const checked of [true, false]) {
         // and so do the values it makes; patterns read that back.
         [PAIRS + "xs = [1,2,3,4] : Pairs 2 Int\n[typeOf xs, length xs, map (* 2) xs]", "[Pairs 2 Int, 4, [2,4,6,8]]"],
         [PAIRS + "ys = [1,2,3,4]\nzs = ys : Pairs 2 Int\n[typeOf ys, typeOf zs, ys == zs]", "[[Int,Int,Int,Int], Pairs 2 Int, True]"],
-        [PAIRS + "f (xs : Pairs n a) = [n + 1, a, xs]\nf ([1,2,3,4] : Pairs 2 Int)", "[3,Int,[1,2,3,4]]"],
+        [PAIRS + "f (xs : Pairs n a) = [n + 1, a, xs]\nf ([1,2,3,4] : Pairs 2 Int)", "[3, Int, [1,2,3,4]]"],
         [PAIRS + "f (xs : Pairs n a) = n\nf _ = 0\n[f [1,2,3,4], f ([5,6] : Pairs 1 Int)]", "[0,1]"],
         [PAIRS + "g (Pairs n a) = n\ng (Pairs 3 Int)", "3"],
         [PAIRS + "map typeOf ([[1,2]] : List (Pairs 1 Int))", "[Pairs 1 Int]"],

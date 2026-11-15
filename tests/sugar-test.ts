@@ -16,7 +16,7 @@ for (const [sugar, expansion] of [
     ["head (1 :: missing)", "head ((::) 1 missing)"],
     // A list is its items consed onto [], with what :: means there, in
     // values and patterns alike.
-    ['[1,"a"]', '1 :: "a" :: []'],
+    ['[1, "a"]', '1 :: "a" :: []'],
     // A declaration or an ascription is the typed pattern or application it
     // states: e : T is T e, (p : T) is ((T) p), and a declared type types the
     // clauses after it, their parameters and the claim of their results.
@@ -31,7 +31,7 @@ for (const [sugar, expansion] of [
         "typeOf (append [1] [2,3])",
         "append ([] : Vect n a) (ys : Vect m a) = ys : Vect (n + m) a\n" +
         "append (x :: xs : Vect n a) (ys : Vect m a) = x :: append xs ys : Vect (n + m) a\ntypeOf (append [1] [2,3])"],
-    ['f (xs : List a) = a\nf [1,"a"]', 'f (xs : List a) = a\nf (1 :: ["a"])'],
+    ['f (xs : List a) = a\nf [1, "a"]', 'f (xs : List a) = a\nf (1 :: ["a"])'],
     // A range is enumFrom and its siblings: numbers count, a type repeats.
     ["[take 3 [1..], [1,3..7], [1..3], [0,0.5..1]]", "[take 3 (enumFrom 1), enumFromThenTo 1 3 7, enumFromTo 1 3, enumFromThenTo 0 0.5 1]"],
     ["take 2 [Int..]", "take 2 (enumFrom Int)"],

@@ -16,7 +16,7 @@ for (const [source, expected] of [
     ['arr = [0..]; arr [1,3] = [11,33]; take 5 arr', '[0,11,2,33,4]'],
     ['Direction = North | East; [10,20] [East,North]', '[20,10]'],
     ['Direction = North | East; arr = [10,20]; arr [East,North] = [3,4]; arr', '[4,3]'],
-    ['(["x",1] : [String,Int])', '["x",1]'],
+    ['(["x", 1] : [String,Int])', '["x", 1]'],
     ['[(+ 1), (* 2)].[10,20]', '[11,40]'],
     ['x = 10; ([x,x+1] : [Int,Int])', '[10,11]'],
     ['templates = [Int,Float]; values = [1,2]; (values : templates)', '[1,2.0]'],
@@ -33,7 +33,7 @@ for (const [source, expected] of [
 });
 for (const assignment of [
     'arr [0,2] = [3,4]', 'arr [0,1] = [3]', 'arr [0,1] = [3,4,5]',
-    'arr [0,1] = [3,1.5]', 'arr [0,"x"] = [3,4]', 'arr [0,1] = 3',
+    'arr [0,1] = [3,1.5]', 'arr [0, "x"] = [3,4]', 'arr [0,1] = 3',
     'arr [] = [1]', 'arr [0,1] = [3,missing]',
 ]) Deno.test(`multi-index failure preserves binding: ${assignment}`, () => {
     const i = new Interpreter();
@@ -57,7 +57,7 @@ v <- values
 arr k = v
 [arr,keyCalls,valueCalls]
 `)));
-    if (actual !== '[[3,4],1,1]') throw new Error(actual);
+    if (actual !== '[[3,4], 1, 1]') throw new Error(actual);
 });
 Deno.test('vector updates preserve their schema', () => {
     const i = new Interpreter();

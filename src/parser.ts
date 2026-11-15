@@ -8,7 +8,7 @@ import { APNError, tokLen } from "./errors.ts";
 import type { Expr, Pattern, TopLevel, BinOp } from "./ast.ts";
 import type { DefClause, Type, Value, Env } from "./types.ts";
 import type { Token } from "./lexer.ts";
-import { charLiteral, itemsText, stringLiteral } from "./separators.ts";
+import { charLiteral, itemsText, literalKind, stringLiteral } from "./separators.ts";
 
 // ---------------- Fixity ----------------
 
@@ -302,7 +302,8 @@ class Parser {
 
     // A ',' follows its item directly, and takes nothing after it when no
     // item it separates has a space ([1,2,3]), one space otherwise ([x = 1, y = 2],
-    // [1 + 1, 2], and always between lambda parameters: x, y -> x). A newline already separates items, so a
+    // [1 + 1, 2], literals of different kinds: ["a", 1], and always between
+    // lambda parameters: x, y -> x). A newline already separates items, so a
     // ',' ending its line is redundant.
     checkCommaSpacing(t: Token, holds: "record" | "list" | "params", tight: boolean, paired = false): void {
         const after = this.source.slice(t.pos + 1).split("\n", 1)[0];
@@ -314,7 +315,7 @@ class Parser {
         const what = holds === "record" ? "record fields" : "list items";
         throw new Error(tight
             ? `Parser: separate ${what} with no spaces in them by ',' alone (write [1,2,3])`
-            : `Parser: separate ${what} by ', ' when one has a space${paired ? ", on either side of =" : ""} (write ${holds === "record" ? "[x = 1, y = 2]" : paired ? "[f x, g y] = [x, y]" : "[1 + 1, 2]"})`);
+            : `Parser: separate ${what} by ', ' when one has a space or they are literals of different kinds${paired ? ", on either side of =" : ""} (write ${holds === "record" ? "[x = 1, y = 2]" : paired ? "[f x, g y] = [x, y]" : "[1 + 1, 2] or [\"a\", 1]"})`);
     }
 
     // The commas whose items have no space in them (outside strings and
@@ -341,7 +342,9 @@ class Parser {
         type Frame = { list: boolean; open: number; start: number; items: [number, number][]; commas: number[]; whole: Bracket };
         const decide = (frame: Frame, end: number) => {
             if (frame.start < end) frame.items.push([frame.start, end]);
-            const segmentSpaced = frame.items.some(([a, b]) => spaced(a, b));
+            // (Literals of different kinds are spaced too: ["a", 1], [[1], 2].)
+            const kinds = new Set(frame.items.map(([a, b]) => literalKind(this.source.slice(toks[a].pos, toks[b].pos).trim())).filter(Boolean));
+            const segmentSpaced = frame.items.some(([a, b]) => spaced(a, b)) || kinds.size > 1;
             if (frame.commas.length && !segmentSpaced) frame.commas.forEach(c => tight.add(c));
             if (frame.list) { frame.whole.commas.push(...frame.commas); frame.whole.spaced ||= segmentSpaced; }
             frame.items = []; frame.commas = [];

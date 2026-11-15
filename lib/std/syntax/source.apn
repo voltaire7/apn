@@ -10,7 +10,7 @@ _fromAST syntax = _shown _end syntax
 # in a list, where x, y -> e would be two items; a "guard" one, a lambda's
 # guard, holds no lambda. An "argument" takes one piece, a "head" a function
 # applied, and "selected" the left of a '.'.
-_end = ["operand",0,-1]
+_end = ["operand", 0, -1]
 _shown place syntax = _fits place syntax ? _bare place syntax : "(" ++ _bare _end syntax ++ ")"
 _fits ["argument",_,_] syntax = _kind syntax == "piece" || _kind syntax == "negative"
 _fits ["head",_,_] syntax = _kind syntax == "piece" || _kind syntax == "call"
@@ -68,24 +68,24 @@ _bare _ (b : Bool) = to String b
 _bare _ (n : Number) = to String n
 _bare place (function :: args) = _node place function args
 
-_node _ "[]" items = "[" ++ _items (map (_shown ["item",0,-1]) items) ++ "]"
+_node _ "[]" items = "[" ++ _items (map (_shown ["item", 0, -1]) items) ++ "]"
 _node _ "[:]" fields = "["
     ++ joinWith ", " (map ([key,value] -> key ++ " = " ++ _shown _end value) fields) ++ "]"
 _node _ "->" [params,body] = joinWith ", " (map _parameter params) ++ _arrow body
 _node [_,_,follows] "?:" [c,yes,no] =
-    _branch ["operand",0,1] c ++ " ? " ++ _branch ["operand",1,-1] yes ++ " : "
-        ++ _branch ["operand",1,follows] no
-_node _ "." [r, (key : String)] = _shown ["selected",0,0] r ++ "." ++ key
-_node _ "." [r,selected] = _shown ["selected",0,0] r ++ "." ++ _bare _end selected
+    _branch ["operand", 0, 1] c ++ " ? " ++ _branch ["operand", 1, -1] yes ++ " : "
+        ++ _branch ["operand", 1, follows] no
+_node _ "." [r, (key : String)] = _shown ["selected", 0, 0] r ++ "." ++ key
+_node _ "." [r,selected] = _shown ["selected", 0, 0] r ++ "." ++ _bare _end selected
 # An ascription, (x : T), in its own parentheses.
-_node _ ":" [value,type] = "(" ++ _shown ["guard",0,-1] value ++ " : " ++ _shown _end type ++ ")"
+_node _ ":" [value,type] = "(" ++ _shown ["guard", 0, -1] value ++ " : " ++ _shown _end type ++ ")"
 _node _ "{}" [] = "{}"
 _node _ "{}" statements = "{ " ++ joinWith "; " (map (_shown _end) statements) ++ " }"
 _node _ ".." [low,high] = "[" ++ _bound low ++ ".." ++ _bound high ++ "]"
 _node _ ".." [low,high,next] = "[" ++ _items [_bound low, _bound next ++ ".." ++ _bound high] ++ "]"
 _node _ "=" [left,right] = _bare _end left ++ " = " ++ _shown _end right
 _node _ "<-" [left,right] = _bare _end left ++ " <- " ++ _shown _end right
-_node _ "()" [op,x] = "(" ++ op ++ " " ++ _shown ["operand",8,-1] x ++ ")"
+_node _ "()" [op,x] = "(" ++ op ++ " " ++ _shown ["operand", 8, -1] x ++ ")"
 _node place function args = length args == 2 && _isOperator function && !_tag function
     ? _infix place function args
     : _application place function args
@@ -95,21 +95,21 @@ _branch place syntax = _kind syntax == "ternary" ? "(" ++ _bare _end syntax ++ "
 # A lambda's parameter, a pattern, stands alone unless it is compound.
 _parameter syntax = _kind syntax == "piece" ? _bare _end syntax : "(" ++ _bare _end syntax ++ ")"
 # A lambda's body, after its guard if it has one.
-_arrow ["|",guard,body] = " | " ++ _shown ["guard",0,-1] guard ++ " -> " ++ _shown _end body
+_arrow ["|",guard,body] = " | " ++ _shown ["guard", 0, -1] guard ++ " -> " ++ _shown _end body
 _arrow body = " -> " ++ _shown _end body
 _bound [] = ""
-_bound syntax = _shown ["operand",6,-1] syntax
+_bound syntax = _shown ["operand", 6, -1] syntax
 
 # An operator between its operands: the left one takes in nothing up to the
 # operator, the right one binds at least as tightly as the operator takes.
 _infix [_,_,follows] op [a,b] = {
     precedence = head (_fixity op)
-    _shown ["operand",0,precedence] a ++ " " ++ op ++ " " ++ _shown ["operand", _binding op, follows] b
+    _shown ["operand", 0, precedence] a ++ " " ++ op ++ " " ++ _shown ["operand", _binding op, follows] b
 }
 # A call: the function, then its arguments, each one piece (a lambda among
 # them parenthesized).
 _application _ function args =
-    joinWith " " (_shown ["head",0,-1] function :: map (_shown ["argument",0,-1]) args)
+    joinWith " " (_shown ["head", 0, -1] function :: map (_shown ["argument", 0, -1]) args)
 _isOperator (name : String) = _operator name
 _isOperator _ = False
 # The heads that are syntax, not functions.
@@ -117,8 +117,20 @@ _tag head = contains head ["[]","[:]","->","?:",".","{}","..","=","<-","()","|",
 _operator name = contains (head (to (List Char) name)) (to (List Char) "!$%&*+-/<=>\\^|~:")
 
 # A ',' takes a space only when an item it separates has one (outside string
-# and character literals), as the parser requires.
-_items xs = joinWith (any _spaced xs ? ", " : ",") xs
+# and character literals) or two are literals of different kinds (["a", 1],
+# [[1], 2]; numbers are one kind), as the parser requires.
+_items xs = joinWith (any _spaced xs || length (unique (filter (!= "") (map _literal xs))) > 1
+    ? ", " : ",") xs
+_literal text = _literalChars (to (List Char) text)
+_literalChars cs = cs ~ [
+    '"' :: rest -> _afterString rest == [] ? "string" : ""
+    '\'' :: _ -> "char"
+    '[' :: _ -> head (reverse cs) == ']' ? "list" : ""
+    '-' :: c :: _ -> _digit c ? "number" : ""
+    c :: _ -> _digit c ? "number" : (contains (from (List Char) cs) ["True","False"] ? "Bool" : "")
+    [] -> ""
+]
+_digit c = contains c (to (List Char) "0123456789.")
 _spaced text = _spacedChars (to (List Char) text)
 _spacedChars cs = cs ~ [
     [] -> False

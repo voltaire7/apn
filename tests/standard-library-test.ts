@@ -15,7 +15,7 @@ const cases: [string, string][] = [
     [decoded("[quote : String, year : Int]", '{"quote": "q"}'), 'Err "Expecting an OBJECT with a field named `year`"'],
     [decoded("[quote : String, year : Int]", '{"quote": "q", "year": "1843"}'), 'Err "Expecting an INT"'],
     [decoded("(fromType [at : [x : Float, y : Float], tags = list string])", '{"at": {"x": 1, "y": 2.5}, "tags": ["a"]}'), 'Ok [at = [x = 1.0, y = 2.5], tags = ["a"]]'],
-    [decoded("(fromType [tags = list string])", '{"tags": ["a",1]}'), 'Err "Expecting a STRING"'],
+    [decoded("(fromType [tags = list string])", '{"tags": ["a", 1]}'), 'Err "Expecting a STRING"'],
     [decoded("Bool", "true"), "Ok True"],
     // Parsers read their input in order, as do-blocks (Parsec's way).
     ['std <- import "std"; use std.parser\ndate = {\n    y <- number\n    char \'-\'\n    m <- number\n    return [y,m]\n}\nparse date "2026-10"', "Ok [2026,10]"],
@@ -75,7 +75,7 @@ const cases: [string, string][] = [
     ['intersperse 0 [1,2,3]', '[1,0,2,0,3]'],
     ['partition isEven [1..5]', '[[2,4],[1,3,5]]'],
     ['unique [3,1,3,2,1]', '[3,1,2]'],
-    ['sortOn fst [[2,"b"],[1,"a"],[2,"c"]]', '[[1,"a"],[2,"b"],[2,"c"]]'],
+    ['sortOn fst [[2, "b"], [1, "a"], [2, "c"]]', '[[1, "a"], [2, "b"], [2, "c"]]'],
     // Sorting is dictionary order (compare), not inclusion (<=).
     ['sort ["b","ab","a"]', '["a","ab","b"]'],
     ['sort [[2],[1,2],[1]]', '[[1],[1,2],[2]]'],
@@ -98,11 +98,11 @@ const cases: [string, string][] = [
     ['endsWith "😀" "a😀"', 'True'],
     ['getOr 9 "x" ([] : HashMap _ _)', '9'],
     ['getOption "x" ([] : HashMap _ _)', 'None'],
-    ['getOr missing "x" ([["x",2]] : HashMap _ _)', '2'],
+    ['getOr missing "x" ([["x", 2]] : HashMap _ _)', '2'],
     ['lookup "a" (frequencies ["a","b","a"])', '2'],
-    ['lookup "a" (mergeWith (+) ([["a",2]] : HashMap _ _) ([["a",3]] : HashMap _ _))', '5'],
+    ['lookup "a" (mergeWith (+) ([["a", 2]] : HashMap _ _) ([["a", 3]] : HashMap _ _))', '5'],
     ['lookup 1 (groupBy (x -> x % 2) [1..5])', '[1,3,5]'],
-    ['pairs (filterMap (key, value -> value > 2) ([["a",1],["b",3]] : HashMap _ _))', '[["b",3]]'],
+    ['pairs (filterMap (key, value -> value > 2) ([["a", 1], ["b", 3]] : HashMap _ _))', '[["b", 3]]'],
 ];
 for (const [source, expected] of cases) Deno.test(`std: ${source}`, () => {
     const i = new Interpreter();
@@ -239,6 +239,6 @@ Deno.test("html and text import together, in either order", () => {
         const i = new Interpreter();
         i.enableChecking();
         i.run(parse(source));
-        if (i.renderString(i.run(parse('[splitWhile (< 3) [1,2,3], upper "a"]'))) !== '[[[1,2],[3]],"A"]') throw new Error(source);
+        if (i.renderString(i.run(parse('[splitWhile (< 3) [1,2,3], upper "a"]'))) !== '[[[1,2],[3]], "A"]') throw new Error(source);
     }
 });
