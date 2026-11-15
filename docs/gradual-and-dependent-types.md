@@ -530,10 +530,11 @@ known takes its branch, and a `&&` or `||` whose left side is known its side,
 as the run does: the other, which never runs, is typed only where it can be,
 for what it tells (`x ? return [] : Err "no"` is a `Result`), and left out
 where it cannot (`False && head []`, `null xs ? 0 : head xs`, `length (head
-p) == 0 || head (head p) > 1` all pass); in a call typed for its arguments
-the other is left out, as a recursive call there may not end. A condition
-over a function's parameters is known only in such a call; its own
-definition types both branches. A function of several clauses is typed so as
+p) == 0 || head (head p) > 1` all pass). Such a trial evaluates nothing,
+and its calls take their functions' own types, so one that would not end
+there (`f (p ++ p) (n - 1)` past `n == 0`) does not run on. A condition over
+a function's parameters is known only in a call typed for its arguments; its
+own definition types both branches. A function of several clauses is typed so as
 the run dispatches it: each clause that may take the arguments, up to one
 that certainly does (`f [] = ""; f (x :: _) = "k" ++ x` takes `["a", 1]`),
 the call any of their results. A typed part takes its argument converted and

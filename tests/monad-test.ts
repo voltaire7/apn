@@ -232,6 +232,7 @@ Deno.test("monads: an undecided value used as a plain one is ambiguous at runtim
 for (const [name, source, expected] of [
     ["a do-block statement", 'std <- import "std"; use std.option\ncheck n = {\n    n > 0 ? return [] : Err "not positive"\n    Ok n\n}\nprint (check 5)\nprint (check -1)', ["Ok 5", 'Err "not positive"']],
     ["a known condition", 'std <- import "std"; use std.option\nx = 5 > 0 ? return [] : Err "no"\nprint x', ["Ok []"]],
+    ["a known condition in a typed call", 'std <- import "std"; use std.option\nf p n = n > 0 ? return (head p) : Err "no"\nprint (f ["a", 1] 1)', ['Ok "a"']],
     ["(lists : Option and)", 'std <- import "std"; use std.option\nhalf n = n % 2 == 0 ? return (n / 2) : None\nprint (half 4)\npick n = n > 0 ? return n : [0,1]\nprint (pick 5)', ["Some 2", "[5]"]],
     ["nested ternaries", 'std <- import "std"; use std.option\ngrade n = n > 90 ? return "A" : (n > 50 ? return "B" : Err "fail")\nprint (grade 60)', ['Ok "B"']],
     ["a bound result", 'std <- import "std"; use std.option\nsafe n = {\n    k <- n > 0 ? return n : Err "neg"\n    Ok (k * 2)\n}\nprint (safe 4)', ["Ok 8"]],

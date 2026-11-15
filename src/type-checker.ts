@@ -869,11 +869,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function union(types: Ty[]): Ty {
         const choices = types.flatMap(t => { const r = resolve(t); return r.k === "union" ? r.choices : [t]; });
         const unique: Ty[] = [];
+        // (The closed ones kept, by kind and text, and every one kept: a choice
+        // is looked up, not compared with each, as a long list's items are many.)
+        const closedTexts = new Set<string>(), kept = new Set<Ty>();
         for (const choice of choices) {
             const value = resolve(choice);
             // The same type twice: an atom, or a closed structure (no type variables) written alike.
             const closed = value.k === "atom" || value.k === "list" && !variables(value).size;
-            if (unique.some(old => old === choice || closed && resolve(old).k === value.k && !variables(old).size && text(old) === text(value))) continue;
+            const key = closed ? `${value.k}:${text(value)}` : undefined;
+            if (kept.has(choice) || key !== undefined && closedTexts.has(key)) continue;
             // The same constructor where one side does not know an argument
             // (None's beside Some x's), or holds another type (Some 1's beside
             // Some "a"'s): one type, Option X or Option (Int | String), as data
@@ -907,6 +911,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 continue;
             }
             unique.push(choice);
+            kept.add(choice);
+            if (key !== undefined) closedTexts.add(key);
         }
         // An undecided value (return x, empty) beside one monad's value is in
         // that monad: c ? return [] : Err e is a Result.
@@ -2960,6 +2966,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const t = field && resolve(field), value = t?.k === "type" ? resolve(t.value) : undefined;
         return value?.k === "atom" && value.name === "Type";
     }
+    // Whether code that never runs (a branch a known condition passes over)
+    // types, as a trial: what it tells stays, a failure is no error. Its calls
+    // take their functions' own types, not typed for their arguments, and its
+    // values are not evaluated (a recursive call there may not end: f (p ++ p)
+    // (n - 1) past n == 0); it takes at most CALL_BUDGET steps, given back.
+    let inTrial = 0;
+    function typesInTrial(e: Expr, scope: Scope): boolean {
+        const floor = callFloor, before = budget;
+        callFloor = Math.max(floor, budget - CALL_BUDGET);
+        inTrial++;
+        try { return succeeds(() => infer(e, new Map(scope))); }
+        finally { inTrial--; callFloor = floor; budget = before; }
+    }
     // A call of a function typed for its arguments: its body's type with the
     // parameters bound as the call binds them. A name takes its
     // argument as it is (what is known of it too); a part of any other pattern
@@ -3295,7 +3314,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // The clauses of one function given items of different types, its
             // arguments all given: the call typed for them (see typedClauses).
             const own = f.choices.map(resolve), summary = own[0]?.k === "fn" ? own[0].summary : undefined;
-            if (summary && !choosing && own.every(c => c.k === "fn" && c.summary === summary)) {
+            if (summary && !choosing && !inTrial && own.every(c => c.k === "fn" && c.summary === summary)) {
                 const before = own[0] as Extract<Ty, { k: "fn" }>, args = [...before.callArgs ?? before.applied ?? [], argument];
                 if (args.length === summary.clauses[0].params.length && args.some(x => holdsMixed(x.type))) {
                     const typed = boundedTypedCall(summary, args, e);
@@ -3612,10 +3631,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const at = parameterAt(f), given = resolve(argument.type);
             const params = at >= 0 ? f.summary!.clauses[0].params : [], param = params[at];
             // (A list known empty too: it has nothing to take apart.)
-            if (at === 0 && param.p === "cons" && given.k === "list" && given.items) {
+            // (In a trial only a list known empty, which ends at once: see
+            // typesInTrial.)
+            if (at === 0 && param.p === "cons" && given.k === "list" && given.items && (!inTrial || !given.items.length)) {
                 const typed = typedCall(f.summary!, [argument], e);
                 if (typed) return typed;
-            } else if (at >= 0 && !choosing) {
+            } else if (at >= 0 && !choosing && !inTrial) {
                 // A call given items of different types is typed for them once
                 // its arguments are all given, with what is known of each; till
                 // then it is the function of the rest, carrying them (applied).
@@ -4694,15 +4715,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "ternary": {
                 // A condition whose value is known takes its branch, as the run
                 // does: the other, which never runs, is typed only where it can
-                // be, for what it tells (x ? return [] : Err "no" is a Result),
-                // and left out where it cannot (False ? head [] : 0); in a call
-                // typed for its arguments, left out (a recursive call there may
-                // not end: f (n - 1) past n == 0). (A condition over a function's
-                // parameters is known only in such a call; its own definition
+                // be (see typesInTrial), for what it tells (x ? return [] : Err
+                // "no" is a Result), and left out where it cannot (False ? head
+                // [] : 0). (A condition over a function's parameters is known
+                // only in a call typed for its arguments; its own definition
                 // types both.)
                 {
                     const known = peek(() => resolveKnown(computed(e.cond, scope)), {} as Known);
-                    if (known.boolean !== undefined && (typingCall > 0 || !succeeds(() => infer(known.boolean ? e.els : e.then, new Map(scope))))) {
+                    if (known.boolean !== undefined && !typesInTrial(known.boolean ? e.els : e.then, scope)) {
                         // (Every call being typed now depends on these values.)
                         callFrames.forEach(frame => frame.decided = true);
                         infer(e.cond, scope);
@@ -4718,7 +4738,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // its branch.
                 if ((e.op === "&&" || e.op === "||") && builtinAt(e, scope)) {
                     const known = peek(() => resolveKnown(computed(e.l, scope)), {} as Known);
-                    if (known.boolean === (e.op === "||") && (typingCall > 0 || !succeeds(() => infer(e.r, new Map(scope))))) {
+                    if (known.boolean === (e.op === "||") && !typesInTrial(e.r, scope)) {
                         callFrames.forEach(frame => frame.decided = true);
                         infer(e.l, scope);
                         return atom("Bool");
@@ -5824,6 +5844,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Calls of a widened constructor no rule takes (see infer's app).
     const ownCalls = new WeakSet<Expr>();
     function computed(e: Expr, scope: Scope): Known {
+        // (A trial types code that never runs: it evaluates none of it.)
+        if (inTrial) return {};
         const names = new Set<string>();
         const collect = (x: Expr): void => {
             if (x.t === "var" && scope.get(x.name)?.ref) names.add(x.name);
@@ -6262,6 +6284,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // same bindings of the names it mentions: nested arguments (f (g (h x)))
     // are each checked as call arguments, in copies of one scope.
     function evaluateShared(e: Expr, scope: Scope, depth: number): Known | undefined {
+        if (inTrial) return undefined;
         // A part of a statement that writes top-level cells has the value the
         // statement's static run computed for it, in the run's order.
         if (!executing && statementWrote && executedParts.has(e)) { cellEvents++; return executedParts.get(e); }
