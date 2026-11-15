@@ -524,10 +524,11 @@ too (`g p q = p ++ head q` takes `"!" ["a", 1]`), also through a partial
 application kept as a value. A function of several clauses is typed so as
 the run dispatches it: each clause that may take the arguments, up to one
 that certainly does (`f [] = ""; f (x :: _) = "k" ++ x` takes `["a", 1]`),
-the call any of their results. Where that fails or costs more than a bounded
-number of steps, the call takes the function's own type; so does a pattern
-with a typed part, which checks the values it is given (a single clause's
-parameter that is any pattern but a name, for a list's mixed items). Your own
+the call any of their results. A typed part takes its argument converted and
+checks a known value as a call does (`g [(a : UInt8), (b : String)] = a`
+rejects `g [300, "x"]`). Where that fails, costs more than a bounded number
+of steps, or leaves something unknown (a length a family's pattern names),
+the call takes the function's own type. Your own
 functions carry lengths through too, including nested ones: a result that is an
 argument, a list literal of such results, or an argument passed through those
 operations (`twice xs = xs * x -> x * 2`, `h a b = [map f a, map f b]`). A

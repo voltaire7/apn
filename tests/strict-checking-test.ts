@@ -91,6 +91,12 @@ for (const [source, error] of [
     ['g 0 p = ""\ng n p = head p ++ "!"\ng 1 [1, "a"]', "cannot append Int and String"],
     ['g 0 p = ""\ng n p = head p ++ "!"\nh = g 1\nh ["a", 1]', ""],
     ['k [] = ""\nk ([a,b] :: _) = a ++ "!"\nk (pairs [x = 1, y = "s"])', ""],
+    // Typed parts too, each checking its known value as a call does.
+    ['g [] = 0.0\ng ((x : Float) :: rest) = x\n"k" ++ g [1, "a"]', "cannot append String and Float"],
+    ['g [] = ""\ng ((s : String) :: (n : Int) :: _) = s ++ to String n\ng ["a", 2]', ""],
+    ['g [(a : UInt8), (b : String)] = to String a ++ b\ng [3, "x"]', ""],
+    ['g [(a : UInt8), (b : String)] = a\ng [300, "x"]', "value out of range for UInt8"],
+    ['g [(a : UInt8), (b : String)] = a\ng _ = 0\ng [300, "x"]', ""],
 ] as const) Deno.test(`taking apart known items keeps their types: ${source}`, () => {
     const issues = checkSource(source, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
     if (error ? !issues.includes(error) : issues) throw new Error(issues || "accepted");

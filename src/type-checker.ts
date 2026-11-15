@@ -2978,12 +2978,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (const c of clauses) { const at = c.params.indexOf(f.pattern); if (at >= 0) return at; }
         return -1;
     };
-    // Whether a pattern only takes values apart and compares them (no typed
-    // part, which checks a known value as typing a call does not: 300 : UInt8).
-    const untypedPattern = (p: Pattern): boolean =>
-        p.p === "list" ? p.v.every(untypedPattern) : p.p === "cons" ? untypedPattern(p.head) && untypedPattern(p.tail)
-        : p.p === "constr" ? !p.typed && p.args.every(untypedPattern)
-        : ["var", "wildcard", "int", "bool", "string", "char", "float"].includes(p.p);
     function typedCall(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
         if (typingCall > 64) return undefined;
         if (summary.clauses.length > 1) return typedClauses(summary, args, e);
@@ -3003,20 +2997,25 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (param.p === "var") { scope.set(param.name, { ...argument }); return; }
         if (param.p === "wildcard") return;
         const a = resolve(argument.type);
-        // A list whose items are known: its first and the rest, each its own.
+        // A list whose items are known: its first and the rest, each its own,
+        // with what is known of its value.
+        const item = (n: number): Entry => ({ ...element(argument, n) ?? {}, type: (a as Extract<Ty, { k: "list" }>).items![n] });
         if (param.p === "cons" && a.k === "list" && a.items?.length) {
             const rest = a.items.slice(1);
-            bindArgument(param.head, { type: a.items[0] }, scope, e);
-            bindArgument(param.tail, { type: { k: "list", element: rest.length ? union(rest) : variable(), items: rest, length: constant(BigInt(rest.length)) } }, scope, e);
+            bindArgument(param.head, item(0), scope, e);
+            bindArgument(param.tail, { ...dropKnown(argument, 1), type: { k: "list", element: rest.length ? union(rest) : variable(), items: rest, length: constant(BigInt(rest.length)) } }, scope, e);
             return;
         }
         if (param.p === "list" && a.k === "list" && a.items?.length === param.v.length) {
-            param.v.forEach((q, n) => bindArgument(q, { type: a.items![n] }, scope, e));
+            param.v.forEach((q, n) => bindArgument(q, item(n), scope, e));
             return;
         }
-        const typed = true, t = variable();
+        // Any other pattern has its own type, the argument converting to it,
+        // and checks a known value as a call does (300 is no UInt8).
+        const t = variable();
         bind(param, t, scope, e);
-        convert(t, argument.type, e, false, new Map(), typed, typed);
+        convert(t, argument.type, e, false, new Map(), true, true);
+        castPattern(param, argument, e, scope);
     }
     // A call of a function of several clauses typed for its arguments, as the
     // run dispatches it: each clause that may take them typed with them
@@ -3024,7 +3023,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // certainly does; the call is any of their results.
     function typedClauses(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
         const params = summary.clauses[0].params.length;
-        if (args.length !== params || !summary.clauses.every(c => c.params.every(untypedPattern))) return undefined;
+        if (args.length !== params) return undefined;
         const results: Ty[] = [];
         typingCall++;
         try {
@@ -3041,15 +3040,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // A call typed for its arguments where that costs at most CALL_BUDGET
     // steps; failing that, undefined, the steps given back.
+    // (One that leaves something unknown, as a length typing alone cannot
+    // find, is no better than the function's own type: it is given up too.)
     function boundedTypedCall(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
-        const saved = requirements.length, before = budget, floor = callFloor;
+        const saved = requirements.length, before = budget, floor = callFloor, boundaries = dynamicBoundaries, unknown = firstUnknown, length = unknownLength;
         callFloor = Math.max(floor, budget - CALL_BUDGET);
-        try { return typedCall(summary, args, e); }
-        catch (error) {
-            if (!error || typeof error !== "object" || !("message" in error)) throw error;
+        const giveUp = () => {
             requirements.length = saved;
             budget = before;
+            dynamicBoundaries = boundaries; firstUnknown = unknown; unknownLength = length;
             return undefined;
+        };
+        try {
+            const typed = typedCall(summary, args, e);
+            return dynamicBoundaries > boundaries ? giveUp() : typed;
+        } catch (error) {
+            if (!error || typeof error !== "object" || !("message" in error)) throw error;
+            return giveUp();
         } finally { callFloor = floor; }
     }
     // Whether a type holds a list whose known items, or a record whose fields,
@@ -3061,7 +3068,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // (Only types known whole count: an unknown one is no different type.)
         const parts = (r.k === "list" ? r.items ?? [] : r.k === "record" && !(r.fields instanceof ModuleFields) ? [...r.fields.values()] : [])
             .filter(x => !variables(x).size && !waiting(x));
-        return new Set(parts.map(x => text(x))).size > 1 || children(r).some(child => holdsMixed(child, seen));
+        return new Set(parts.map(x => text(resolve(x)))).size > 1 || children(r).some(child => holdsMixed(child, seen));
     };
     function application(f: Ty, argument: Entry, e: Expr, builtin = false, ascribed = false): Ty {
         spend(e);
@@ -3505,11 +3512,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // partial one is the function of the rest that holds them), or (a
                 // body this cannot type, or only at a cost) takes the function's
                 // own type.
-                // (Names only: a pattern's parts check known values, 300 : UInt8,
-                // which typing does not.)
                 const args = [...f.applied ?? [], argument];
-                const names = f.summary!.clauses.length === 1 ? params.slice(0, at + 1).every(q => q.p === "var") : at === params.length - 1;
-                if (args.length === at + 1 && names && args.some(x => holdsMixed(x.type))) {
+                const ready = f.summary!.clauses.length === 1 || at === params.length - 1;
+                if (args.length === at + 1 && ready && args.some(x => holdsMixed(x.type))) {
                     const typed = boundedTypedCall(f.summary!, args, e);
                     if (typed) return typed;
                 }
