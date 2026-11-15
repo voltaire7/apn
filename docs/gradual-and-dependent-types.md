@@ -535,10 +535,12 @@ giving the argument items of one type (`(xs : List Dynamic)`) leaves them to
 the run. A recursive call given the types its call is being typed for is the
 type that typing finds; given others, it is typed for them in turn, each of
 its arguments' items costing a step. What is known of an argument's value
-(a scalar, a list's items, a record's fields) goes with its type and decides
-the body's conditionals, as the run's would (`f r = r.on ? "k" ++ r.name :
-"off"` takes `[on = False, name = 1]`): calls are told apart by such values
-where one decided a conditional.
+(a scalar, a list's items, a record's fields, a function, which is applied)
+goes with its type and decides the body's conditionals, as the run's would
+(`f r = r.on ? "k" ++ r.name : "off"` takes `[on = False, name = 1]`, and `f
+g p = g 1 > 0 ? "k" ++ head p : "none"` takes `(x -> x - 5) [1, "a"]`):
+calls are told apart by such values where one decided a conditional. A
+variable bound to a known function is that function (`mkv = mk`).
 So a recursion taking its list apart is typed exactly (`g (x :: rest) = x ++
 g rest` rejects `["a", 1]`, whose `1` it would append), one counting a known
 `n` down follows it (`f (step p) (n - 1)`, swapping a pair, takes `["a", 1]`

@@ -2987,8 +2987,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // calls branch) is the type that typing finds, not typed once more; one
     // given other types is typed for them in turn.
     const typingCalls = new WeakMap<Summary, Map<string, CallFrame[]>>();
-    // A known value's scalars, items and fields, as a key (a value not known
-    // is "").
+    // A known function, by the code it runs (its definition, or its lambda).
+    const functionIds = new WeakMap<object, number>();
+    function functionId(fn: KnownFunction): number {
+        const code = "summary" in fn ? fn.summary : fn.e;
+        if (!functionIds.has(code)) functionIds.set(code, nextFunctionId++);
+        return functionIds.get(code)!;
+    }
+    let nextFunctionId = 0;
+    // A known value's scalars, items, fields and function, as a key (a value
+    // not known is "").
     function knownPrint(k: Known, depth = 0): string {
         const r = resolveKnown(k);
         const parts = [
@@ -2998,6 +3006,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             r.size === undefined ? "" : `z${r.size}`,
             depth < 3 && r.items ? `[${r.items.map(x => knownPrint(x, depth + 1)).join(",")}]` : "",
             depth < 3 && r.fields ? `{${r.fields.map(([key, x]) => `${key}:${knownPrint(x, depth + 1)}`).join(",")}}` : "",
+            r.fn ? `λ${functionId(r.fn)}` : "",
         ];
         return parts.join("");
     }
@@ -3070,7 +3079,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // (A name takes its argument as it is, what is known of its value too,
         // a record's fields and a list's items as well as a scalar, which
         // decides the body's conditionals: see "ternary".)
-        if (param.p === "var") { scope.set(param.name, { ...argument }); return; }
+        // (Not as a reference to the caller's parameter, ref: its value here
+        // is the one given.)
+        if (param.p === "var") { const { ref: _, ...given } = argument; scope.set(param.name, given); return; }
         if (param.p === "wildcard") return;
         const a = resolve(argument.type);
         // A list whose items are known: its first and the rest, each its own,
@@ -5685,6 +5696,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const entry = scope.get(e.name);
             if (!entry) return {};
             if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: constructorNames.get(e.name) ?? e.name };
+            // A name bound to a known function (a typed call's argument) is it.
+            if (entry.fn) return { fn: entry.fn };
             if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope } };
             return { size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };
         }
@@ -6552,6 +6565,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // a section, a named or local function).
         if (env.has(head.name)) return apply(lookup(env, head.name), args.map(a => lazyValue(() => value(a), { exprs: [a], env })));
         const entry = scope.get(head.name);
+        // A name bound to a known function (a typed call's argument) applies it.
+        if (entry?.fn) return apply({ fn: entry.fn }, args.map(a => lazyValue(() => value(a), { exprs: [a], env })));
         // A named function applied to fewer arguments than it takes is a function value.
         if (entry && !entry.mono && isFunction(entry.type)) {
             let t: Ty | undefined = resolve(entry.type);

@@ -141,6 +141,13 @@ for (const [source, error] of [
     ['f p = length p == 2 ? "k" ++ head p : "none"\nf [1, "a"]', "cannot append String and Int"],
     ['f r = r.on ? "k" ++ r.name : "off"\nf [on = False, name = 1]', ""],
     ['f r = r.on ? "k" ++ r.name : "off"\nf [on = True, name = 1]', "cannot append String and Int"],
+    // And a known function's results.
+    ['f g p = g 1 > 0 ? "k" ++ head p : "none"\nf (x -> x - 5) [1, "a"]', ""],
+    ['f g p = g 1 > 0 ? "k" ++ head p : "none"\nf (x -> x + 5) [1, "a"]', "cannot append String and Int"],
+    ['neg x = 0 - x\nf g p = g 1 > 0 ? "k" ++ head p : "none"\nf neg [1, "a"]', ""],
+    ['f p g = g p ? "k" ++ head p : "none"\nf [1, "a"] (xs -> length xs > 5)', ""],
+    // Calls a function decided are told apart by it.
+    ['f g p = g 1 > 0 ? "k" ++ head p : "none"\n[f (x -> x - 5) [1, "a"], f (x -> x + 5) [1, "a"]]', "cannot append String and Int"],
     // A length a typed call cannot find is unknown, as anywhere: rejected.
     ['f [a,b] = a\ng p = f (filter (x -> True) p)\ng [1, "a"]', "cannot establish static types"],
 ] as const) Deno.test(`a recursive typed call ends: ${source}`, () => {

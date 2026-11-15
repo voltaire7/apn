@@ -643,6 +643,8 @@ for (const [source, expected] of [
     ['f 0 = [0]; f x = [1,2]; g [a] = a; zero x = 0; g (f (zero 9))', '0'],
     ['f "x" = [0]; f s = [1,2]; g [a] = a; named x = "x"; g (f (named 1))', '0'],
     ["f 'a' = [0]; f s = [1,2]; g [a] = a; letter x = 'a'; g (f (letter 1))", '0'],
+    // A variable holding a known function calls it.
+    ['std <- import "std"\nuse std.option\nf None = [0]; f x = [1,2]; g [a] = a; mk x = None; mkv = mk; g (f (mkv 1))', '0'],
 ] as const) Deno.test(`function results select clauses: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -650,9 +652,8 @@ for (const [source, expected] of [
 for (const source of [
     'std <- import "std"; use std.option; f None = [0]; f x = [1,2]; g [a] = a; mk x = Some x; g (f (mk 1))',
     'std <- import "std"\nuse std.option\nf None = [0]; f x = [1,2]; g [a] = a; pass v = v; g (f (pass (Some 2)))',
-    // Results that depend on a value, or calls through a variable, stay unknown.
+    // A call through a variable that picks the function its clause cannot take.
     'std <- import "std"; use std.option\nf None = [0]\nf x = [1,2]\ng [a] = a\nmk x = None\nmk2 x = Some x\nmkv = False ? mk : mk2\ng (f (mkv 1))',
-    'std <- import "std"\nuse std.option\nf None = [0]; f x = [1,2]; g [a] = a; mk x = None; mkv = mk; g (f (mkv 1))',
     // Code after a rebinding reads the new version.
     "f 'a' = [0]; f x = [1,2]; g [a] = a; c = 'a'; h u = g (f c); c = 'b'; g (f c)",
 ]) Deno.test(`function results stay checked: ${source}`, () => rejected(session(), source));
