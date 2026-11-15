@@ -152,6 +152,10 @@ for (const [source, error] of [
     ['f g p = g (head p) ? "k" ++ head p : "none"\nf (x -> x != "a") [1, "a"]', "cannot append String and Int"],
     ['f r = r == [a = 1] ? "k" ++ r.a : "none"\nf [b = "x", a = 1]', ""],
     ['f r = r == [a = 1, b = "x"] ? "k" ++ r.a : "none"\nf [b = "x", a = 1]', "cannot append String and Int"],
+    // An empty list is an item of its own type beside others.
+    ['f p = head p == "" ? "k" ++ head p : "none"\nf [[], "a"]', ""],
+    ['f p = "k" ++ head (tail p)\nf [[], "a"]', ""],
+    ['f r = null r.xs ? "none" : "k" ++ head r.xs\nf [xs = [], n = 1]', ""],
     // Calls a function decided are told apart by it.
     ['f g p = g 1 > 0 ? "k" ++ head p : "none"\n[f (x -> x - 5) [1, "a"], f (x -> x + 5) [1, "a"]]', "cannot append String and Int"],
     // A length a typed call cannot find is unknown, as anywhere: rejected.

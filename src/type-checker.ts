@@ -3167,9 +3167,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const r = resolve(t);
         if (seen.has(r)) return false;
         seen.add(r);
-        // (Only types known whole count: an unknown one is no different type.)
+        // (Only types known whole count: an unknown one is no different type.
+        // An empty list is known whole, whatever its element would be.)
+        const empty = (x: Ty) => { const t = resolve(x); return t.k === "list" && t.items?.length === 0; };
         const parts = (r.k === "list" ? r.items ?? [] : r.k === "record" && !(r.fields instanceof ModuleFields) ? [...r.fields.values()] : [])
-            .filter(x => !variables(x).size && !waiting(x));
+            .filter(x => empty(x) || !variables(x).size && !waiting(x));
         return new Set(parts.map(x => text(resolve(x)))).size > 1 || children(r).some(child => holdsMixed(child, seen));
     };
     function application(f: Ty, argument: Entry, e: Expr, builtin = false, ascribed = false): Ty {
