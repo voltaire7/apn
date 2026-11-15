@@ -35,6 +35,10 @@ for (const [source, expected] of [
     ["[(+ 1)]", '["[]",["()","+",1]]'],
     ["[(2 +)]", '["[]",["+",2]]'],
     ["[1 + missing]", '["[]",["+",1,"missing"]]'],
+    // An ascription, and a typed pattern, is [":", value, type]: no application.
+    ["[(x : Int)]", '["[]",[":","x","Int"]]'],
+    ["[f (Some (n : Int)) = n]", '["[]",["=",["f",["Some",[":","n","Int"]]],"n"]]'],
+    ["[((x -> x) : Int -> Int) 1]", '["[]",[[":",["->",["x"],"x"],["->",["Int"],"Int"]],1]]'],
 ] as const) Deno.test(`toAST: ${source}`, () => {
     const actual = shown(session(), `std <- import "std"; use std.option\ntoAST ${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -54,6 +58,7 @@ for (const source of [
     "run (x -> x)", "withFile path (file -> file.read)", 'withFile "notes" $ file -> file.read',
     "bracket 1 (_ -> []) (x -> y -> x)", "[(x, y -> x)]", "[x -> x]", "foo Bar (x -> x)",
     "a && (b || c)", "a == (b == c)", "-(a + b)", "f \\ g \\ h", "(f \\ g) \\ h", "1 + (x -> x)",
+    "(x : Int)", "f (Some (n : Int)) = n", "(m : HashMap _ _)", "((x -> x) : Int -> Int) 1",
 ]) Deno.test(`fromAST round trip: ${source}`, () => {
     const i = session(), text = JSON.stringify(source);
     const written = shown(i, `fromAST (intrinsics.syntax ${text})`, true);
@@ -64,6 +69,7 @@ for (const source of [
 
 for (const [source, expected] of [
     ["eval (toAST [1 + 2 * 3])", "[7]"],
+    ["eval (toAST [(1.0 : Int), ((x -> x + 1) : Int -> Int) 41])", "[1,42]"],
     ['eval ["+",1,2]', "3"],
     ['double e = ["*",e,2]\neval (double (toAST [3 + 1]))', "[8]"],
     ["square n = n * n\neval (toAST [square 7])", "[49]"],

@@ -1,16 +1,15 @@
 # The object language's explicit host boundary: values and collection operations.
 # No source evaluation or syntax inspection is exposed here.
-# Maps, which the object language makes and tells from other values with these
-# (it has no ascription): an association list's map, and whether a value is one.
-metaMap entries = (entries : HashMap _ _)
-isMetaMap x = isType (HashMap _ _) x
-metaPrimitives = metaMap [
+# Types for ascription, (entries : HashMap _ _): the object language checks
+# nothing before it runs, so the any type _ is Dynamic, which takes any value.
+metaPrimitives = ([
     ["^",(^)], ["+",(+)], ["-", (x, y -> x - y)], ["*",(*)], ["/",(/)], ["%",(%)]
     ["==",(==)],["!=",(!=)],["<",(<)],[">",(>)],["<=",(<=)],[">=",(>=)]
     ["++",(++)], ["::", (x, xs -> x :: xs)]
     ["not",not],["negate",negate],["head",head],["tail",tail],["null",null]
     ["isNumber",isNumber],["isList",isList],["length",length],["take",take],["drop",drop]
-    ["metaMap",metaMap],["isMetaMap",isMetaMap],["typeOf",typeOf],["has",has]
+    ["HashMap",HashMap],["_",Dynamic],["isType",isType],["typeOf",typeOf],["has",has]
     ["lookup",lookup],["insert",insert]
     ["fail",fail],["seq",seq],["to",to],["from",from],["List",List],["Char",Char]
-]
+    ["Int",Int],["Float",Float],["String",String]
+] : HashMap _ _)

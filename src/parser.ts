@@ -2794,9 +2794,8 @@ function recordOf(items: Expr[]): Expr | undefined {
     }
     return { t: "record", v: fields, items, ...declared.size ? { declared: [...declared] } : {} };
 }
-// e : T as the language reads it: a type applied to a value checks it and
-// collapses it (Int 1.0 is 1). A function type applied to a value would call
-// it, so a value of one is checked as a typed parameter's: ((T r) -> r) e.
+// e : T, marked ascribed: T makes e a member (Int 1.0 is 1), never an argument.
+// A function type's value is checked as a typed parameter's: ((r : T) -> r) e.
 function ascribed(e: Expr, type: Expr, fresh: string): Expr {
     if (!isFunctionType(type)) return { t: "app", f: type, a: e, ascribed: true };
     const check: Expr = { t: "patternLambda", params: [{ p: "schema", type, value: { p: "var", name: fresh } }], body: { t: "var", name: fresh } };

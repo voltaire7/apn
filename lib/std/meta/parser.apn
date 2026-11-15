@@ -181,9 +181,13 @@ mpName text tokens = {
         [mpLambda (map snd names) (fst body), snd body]
     } : [text, tail tokens]
 }
+# (x : T) is [":", x, T], as toAST gives it.
 mpGroup tokens = mpText tokens == ")" ? [["{}"], tail tokens] : {
-    [expression] = [mpExpr 1 "" tokens]
-    [fst expression, mpRequire ")" (snd expression)]
+    [expression] = [mpExpr 1 ":" tokens]
+    mpText (snd expression) == ":" ? {
+        type = mpExpr 1 "" (tail (snd expression))
+        [[":", fst expression, fst type], mpRequire ")" (snd type)]
+    } : [fst expression, mpRequire ")" (snd expression)]
 }
 mpArray tokens = {
     [items] = [mpItems tokens]

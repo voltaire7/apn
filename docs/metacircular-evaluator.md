@@ -51,7 +51,8 @@ gives (an item's, as `toAST [e] 1`): `metaParse "fact n = n * 2; fact 5"` is
 `["{}",["=",["fact","n"],["*","n",2]],["fact",5]]`, and `metaEvalSyntax`
 runs `toAST`'s output as it runs the reader's. A leaf is a number, a Bool, a
 name or a string literal's quoted source (which the evaluator unescapes); a
-list headed by `->`, `?:`, `[]`, `.`, `$` or `{}` is that form, and any other
+list headed by `->`, `?:`, `[]`, `.`, `$`, `:` (an ascription, `(x : T)`) or
+`{}` is that form, and any other
 list applies its first element to the rest. `$` is a form, not a primitive, so
 it can apply an object-language closure. To run the user's program, the
 self-evaluation names it and its primitives (`objectProgram`, `objectScope`)
@@ -99,9 +100,10 @@ standalone executable without the existing runtime.
 ## Primitive boundary and limits
 
 The object environment exposes arithmetic/comparisons, scalar types, list
-operations, maps (`metaMap entries` makes one, `isMetaMap x` tells one, as the
-language has no ascription; `lookup`, `insert`, ...), character conversion,
-`seq`, and `fail`. Those are explicit value-level operations, not evaluation shortcuts.
+operations, maps (made by ascription, `(entries : HashMap _ _)`, and told by
+`isType`; `lookup`, `insert`, ...), character conversion, `seq`, and `fail`.
+The object language checks nothing before it runs, so its any type `_` is
+`Dynamic`. Those are explicit value-level operations, not evaluation shortcuts.
 `lib/std/meta/primitives.apn` is the complete list.
 
 The non-I/O standard-library native layer contains six functions: `seq`,

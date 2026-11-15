@@ -75,3 +75,16 @@ for (const [source, error] of [
     }
     throw new Error(`Expected ${error}`);
 });
+// (x : t) with t a parameter is checked at each call, with the type it is given.
+for (const [source, expected] of [
+    ['ascribe t x = (x : t)\nascribe (HashMap _ _) [["a",1]]', '([["a",1]] : HashMap _ _)'],
+    ["ascribe t x = (x : t)\nascribe Int (2 / 2)", "1"],
+    ['ascribe t x = (x : t)\nascribe Int "a"', "error: cannot use String where Int is required"],
+] as const) Deno.test(`checked ascription to a parameter: ${source}`, () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    let actual: string;
+    try { actual = i.renderString(i.run(parseDocument(source))); }
+    catch (e) { actual = `error: ${(e as Error).message.split("\n")[0]}`; }
+    if (actual !== expected) throw new Error(`${actual} != ${expected}`);
+});

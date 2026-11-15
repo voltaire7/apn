@@ -2,7 +2,7 @@
 # Syntax is toAST's lists: a leaf is a number, a Bool, a name or a string
 # literal's quoted source; [function, arguments...] applies; other syntax is
 # headed by a tag: ["->",params,body], ["?:",c,a,b], ["[]",...], [".",f,input],
-# ["$",f,x] and ["{}",...], whose ["=",left,right] statements bind recursively.
+# ["$",f,x], [":",x,T] and ["{}",...], whose ["=",left,right] statements bind recursively.
 # Environments are persistent maps of lazy values.
 meCons x xs = x :: xs
 meEval scope expression = isList expression
@@ -33,8 +33,9 @@ meNode scope tag arguments = typeOf tag == typeOf "text"
         ? lookup tag meForms scope arguments
         : meApplyAll (meEval scope tag) (meList scope arguments))
     : meApplyAll (meEval scope tag) (meList scope arguments)
-meForms = insert [[".",meTemplateOf],["$",mePipe],["{}",meBlock]]
-    (metaMap [["->",meLambda],["?:",meIf],["[]",meList]])
+meForms = insert [[".",meTemplateOf],["$",mePipe],["{}",meBlock],[":",meAscription]]
+    ([["->",meLambda],["?:",meIf],["[]",meList]] : HashMap _ _)
+meAscription scope arguments = (meEval scope (head arguments) : meEval scope (arguments 1))
 meLambda scope arguments = meClosure (head arguments) (arguments 1) scope
 meIf scope arguments = meEval scope (head arguments)
     ? meEval scope (arguments 1)
@@ -70,8 +71,8 @@ meScope statements parent = {
     scope = [insert (meBindings statements (head scope)) parent]
     head scope
 }
-meClosure parameters body scope = metaMap ([["__closure",True],["parameters",parameters]]
-    ++ [["body",body],["scope",scope]])
+meClosure parameters body scope = ([["__closure",True],["parameters",parameters]]
+    ++ [["body",body],["scope",scope]] : HashMap _ _)
 meZipTemplate functions values = null functions
     ? (null values ? [] : fail "list template and input must have the same length")
     : (null values
@@ -84,7 +85,7 @@ meTemplateSlot function argument = isList function
     ? meTemplate function (meTemplateInput argument)
     : meApply function argument
 # A closure takes its parameters one at a time.
-meApply function argument = isMetaMap function
+meApply function argument = isType (HashMap _ _) function
     ? (has "__closure" function
         ? meEnter (lookup "parameters" function) (lookup "body" function)
             (insert [[head (lookup "parameters" function), argument]] (lookup "scope" function))

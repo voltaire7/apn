@@ -27,7 +27,7 @@ _kind (n : Number) = {
     text = to String n
     head (to (List Char) text) == '-' ? "negative" : (_digits n ? "piece" : "infix")
 }
-_kind (function :: args) = contains function ["[]","[:]","{}",".","..","()"] ? "piece"
+_kind (function :: args) = contains function ["[]","[:]","{}",".","..","()",":"] ? "piece"
     : (function == "->" ? "lambda"
     : (function == "?:" ? "ternary"
     : (contains function ["=","<-"] ? function
@@ -77,6 +77,8 @@ _node [_,_,follows] "?:" [c,yes,no] =
         ++ _branch ["operand",1,follows] no
 _node _ "." [r, (key : String)] = _shown ["selected",0,0] r ++ "." ++ key
 _node _ "." [r,selected] = _shown ["selected",0,0] r ++ "." ++ _bare _end selected
+# An ascription, (x : T), in its own parentheses.
+_node _ ":" [value,type] = "(" ++ _shown ["guard",0,-1] value ++ " : " ++ _shown _end type ++ ")"
 _node _ "{}" [] = "{}"
 _node _ "{}" statements = "{ " ++ joinWith "; " (map (_shown _end) statements) ++ " }"
 _node _ ".." [low,high] = "[" ++ _bound low ++ ".." ++ _bound high ++ "]"
@@ -111,7 +113,7 @@ _application _ function args =
 _isOperator (name : String) = _operator name
 _isOperator _ = False
 # The heads that are syntax, not functions.
-_tag head = contains head ["[]","[:]","->","?:",".","{}","..","=","<-","()","|"]
+_tag head = contains head ["[]","[:]","->","?:",".","{}","..","=","<-","()","|",":"]
 _operator name = contains (head (to (List Char) name)) (to (List Char) "!$%&*+-/<=>\\^|~:")
 
 # A ',' takes a space only when an item it separates has one (outside string

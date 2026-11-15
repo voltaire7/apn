@@ -79,6 +79,11 @@ const ZERO: Value = { kind: "int", v: 0n, typeName: "UInt" };
 // a list union is bound to the list type (see listUnion).
 const PRELUDE_TYPES = new Set(["Vect", "List"]);
 
+// The type an ascription was written with: the parser checks a function type's
+// value with the typed lambda ((r : T) -> r), so T is its parameter's type.
+function ascribedType(check: Expr): Expr {
+    return check.t === "patternLambda" && check.params[0].p === "schema" ? check.params[0].type : check;
+}
 export class Interpreter {
     // Enabled by normal CLI/REPL execution. Foreign name installation
     // and reflected writes must preserve the visible bindings it has checked.
@@ -1107,10 +1112,12 @@ export class Interpreter {
             case "pipe": return node(text("$"), of(e.f), of(e.x));
             case "unop": return node(text(e.op === "neg" ? "negate" : "not"), of(e.e));
             case "app": {
+                // (x : T) is [":", x, T]: no application, as a type takes no value.
+                if (e.ascribed) return node(text(":"), of(e.a), of(ascribedType(e.f)));
                 // f x y is ["f","x","y"]: one list for the whole spine.
                 const args: Expr[] = [];
                 let head: Expr = e;
-                while (head.t === "app") { args.unshift(head.a); head = head.f; }
+                while (head.t === "app" && !head.ascribed) { args.unshift(head.a); head = head.f; }
                 return node(of(head), ...args.map(of));
             }
             case "lambda": {
@@ -1181,9 +1188,14 @@ export class Interpreter {
             case "bool": return mkBool(p.v);
             case "list": return node(text("[]"), ...p.v.map(of));
             case "cons": return node(text(p.op ?? "::"), of(p.head), of(p.tail));
-            case "constr": return p.args.length ? node(text(p.tag), ...p.args.map(of)) : text(p.tag);
-            case "typeBind": return node(text(p.name), of(p.value));
-            case "schema": return node(this.sexprOf(p.type), of(p.value));
+            // A typed pattern is [":", value, type], as the ascription it reads as.
+            case "constr": {
+                if (!p.typed) return p.args.length ? node(text(p.tag), ...p.args.map(of)) : text(p.tag);
+                const types = p.args.slice(0, -1);
+                return node(text(":"), of(p.args[p.args.length - 1]), types.length ? node(text(p.tag), ...types.map(of)) : text(p.tag));
+            }
+            case "typeBind": return node(text(":"), of(p.value), text(p.name));
+            case "schema": return node(text(":"), of(p.value), this.sexprOf(p.type));
             case "as": return node(text("."), of(p.left), of(p.right));
             case "recPat": return node(text("[:]"), ...p.v.map(([k, v]) => node(text(keySource(k)), text(v))));
             case "range": return node(text(".."), mkInt(p.lo), mkInt(p.hi));

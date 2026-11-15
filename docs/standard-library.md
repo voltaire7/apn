@@ -267,9 +267,10 @@ node, so `toAST [e] 1` is `e`'s:
   (or a selection: `[".",r,["[]","x","y"]]`), `["{}",...]` a block,
   `["..",low,high]` (`[]` for no end; a step adds the second element),
   `["=",left,right]`, `["<-",left,right]`, `["()","+",x]` the section
-  `(+ x)`, and `["import",...]`;
-- a pattern is written as the expression it is (`Some x` is `["Some","x"]`),
-  and every binding is an `"="` node: `f n = ...` is `["=",["f","n"],...]`.
+  `(+ x)`, `[":",x,type]` the ascription `(x : type)`, and `["import",...]`;
+- a pattern is written as the expression it is (`Some x` is `["Some","x"]`,
+  the typed pattern `(n : Int)` is `[":","n","Int"]`), and every binding is an
+  `"="` node: `f n = ...` is `["=",["f","n"],...]`.
 
 Building code is building a list. `fromAST` writes such data as source,
 with parentheses only where the parser needs them (so it passes the

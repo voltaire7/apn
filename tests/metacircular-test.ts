@@ -22,6 +22,7 @@ const sourcePrograms = [
     '(x -> x + 40) $ 2',
     '(x -> x + 1) $ (x -> x * 2) $ 3',
     '# comment\nx = 41\nx + 1',
+    '(2 / 2 : Int)', '(41 : Int) + 1', 'lookup "a" ([["a",1]] : HashMap _ _)', '(x -> (x : Int)) 2',
 ];
 for (const source of sourcePrograms) Deno.test(`metacircular agrees with host: ${source}`, () => {
     const host = new Interpreter();
@@ -32,7 +33,7 @@ for (const source of sourcePrograms) Deno.test(`metacircular agrees with host: $
     const actual = meta.renderString(meta.run(parse('metaEval source')));
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
 });
-for (const source of ['["old"].["new"]', '[0].[123]', '"old" "new"', '0 123', 'foo =', '1 +', '[1, 2', '"unterminated', '1.2', '1; 2', 'missing', 'head []']) {
+for (const source of ['["old"].["new"]', '[0].[123]', '"old" "new"', '0 123', 'foo =', '1 +', '[1, 2', '"unterminated', '1.2', '1; 2', 'missing', 'head []', '("a" : Int)', '(1 : )']) {
     Deno.test(`metacircular rejects: ${source}`, () => {
         const i = new Interpreter(); i.run(parse('std <- import "std"; use std.meta'));
         i.env.setLocal("source", { kind: "string", v: source });
@@ -41,7 +42,8 @@ for (const source of ['["old"].["new"]', '[0].[123]', '"old" "new"', '0 123', 'f
         throw new Error("Expected a syntax/runtime error");
     });
 }
-for (const source of ['20 + 22', 'id x = x; id 42', 'True ? 42 : missing', 'head [x -> x * 2].[21]', 'head [c -> 42, c -> 42]."hi"']) {
+for (const source of ['20 + 22', 'id x = x; id 42', 'True ? 42 : missing', 'head [x -> x * 2].[21]', 'head [c -> 42, c -> 42]."hi"',
+    'lookup "a" ([["a",42]] : HashMap _ _)']) {
     Deno.test(`evaluator evaluates its own source, then: ${source}`, () => {
         const i = new Interpreter(); i.run(parse('std <- import "std"; use std.meta'));
         i.env.setLocal("evaluatorSource", { kind: "string", v: Deno.readTextFileSync(new URL("../lib/std/meta/evaluator.apn", import.meta.url)) });

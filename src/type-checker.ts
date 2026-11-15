@@ -52,7 +52,7 @@ type Ty =
     // possibly symbolic in a parameter), so clause ranking can use it later.
     // written: where a call deferred to its enclosing function's calls was written.
     // within: the top-level definition being checked when it was deferred.
-    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known; written?: Expr; within?: object; decided?: Ty; lossless?: boolean[] }
+    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known; written?: Expr; within?: object; decided?: Ty; lossless?: boolean[]; ascribed?: true }
     | { k: "dynamic"; explicit?: boolean }
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
@@ -964,8 +964,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let deciding = false;
     // The deferred call being evaluated, so deferring it again keeps the same node.
     let evaluatingCall: Extract<Ty, { k: "operation" }> | undefined;
-    function deferredCall(f: Ty, argument: Entry): Ty {
-        const result: Ty = { k: "operation", op: "call", args: [f, argument.type], known: { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, range: argument.range, mutable: argument.mutable, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr, payload: argument.payload, fields: argument.fields } };
+    // (A call deferred from an ascription, (x : t) with t not known yet, stays one.)
+    function deferredCall(f: Ty, argument: Entry, ascribed = false): Ty {
+        const result: Ty = { k: "operation", op: "call", ...ascribed ? { ascribed: true } : {}, args: [f, argument.type], known: { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, range: argument.range, mutable: argument.mutable, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr, payload: argument.payload, fields: argument.fields } };
         requirements.push(result);
         return resolve(result);
     }
@@ -1289,7 +1290,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // Decided while its own definition is checked (not at a call that
             // supplies the value, which reports there): report where it was written.
             if (t.written && outermost && t.within === outermost) activeExpression = t.written;
-            try { return application(a, { type: b, ...resolveKnown(t.known ?? {}) }, { t: "placeholder" }); }
+            try { return application(a, { type: b, ...resolveKnown(t.known ?? {}) }, { t: "placeholder" }, false, t.ascribed); }
             finally { evaluatingCall = outer; activeExpression = active; }
         }
         if (t.op === "compare") {
@@ -2987,7 +2988,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (f.name === "get") return application(args[0], entries[1], e, true);
             return operation(f.name, args);
         }
-        if (f.k === "operation") return deferredCall(f, argument);
+        if (f.k === "operation") return deferredCall(f, argument, ascribed);
         if (f.k === "dynamic") return f.explicit ? explicitDynamic : unknown();
         // A typed parameter (one that converts: Int n, a schema, a contract)
         // given a value that depends on an enclosing function's parameter
@@ -2996,7 +2997,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // (A Dynamic parameter takes anything: there is nothing to wait for.)
         if (f.k === "fn" && f.coerce && resolve(f.input).k !== "dynamic" && !deciding && !choosing && symbolicArgument(argument) &&
             (waiting(argument.type) || ["list", "record", "variant"].includes(resolve(f.input).k) && waitingWithin(argument.type))) {
-            const deferred = evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument);
+            const deferred = evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument, ascribed);
             if (deferred.k === "operation" && e.t !== "placeholder" && !deferred.written) { deferred.written = e; deferred.within = outermost; }
             return deferred;
         }
@@ -3013,7 +3014,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (f.k === "overload") {
             const input = resolve(argument.type);
-            if (input.k === "var" || input.k === "operation") return deferredCall(f, argument);
+            if (input.k === "var" || input.k === "operation") return deferredCall(f, argument, ascribed);
             // A value of a union of known types is one of them: each takes the
             // clause that accepts it, as the runtime dispatches, and every one must.
             // An empty list's element type is not one to know ([] | Vect 1 Int).
@@ -3072,7 +3073,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // Still ambiguous, and the arguments depend on an enclosing function's
                 // parameters: decide at that function's calls, where they are known.
                 if (!deciding && outputs.length > 1 && !outputs.every(x => sameChoice(x, outputs[0])) && accepted.some(a => a.call!.some(symbolic))) {
-                    return evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument);
+                    return evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument, ascribed);
                 }
             }
             if (!outputs.length && builtinError) throw builtinError;
@@ -3310,7 +3311,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // Given a record literal, the unknown value may be a function or a
             // record it updates (model [name = n]): decided once its type is known.
             // (Any other argument keeps a function being defined inferable.)
-            if (e.t === "record") return deferredCall(f, argument);
+            // (An ascription's type not known yet, (x : t), is applied once it is.)
+            if (e.t === "record" || ascribed) return deferredCall(f, argument, ascribed);
             const self = !choosing ? definingSelf.find(d => d.byType && resolve(d.pending) === f) : undefined;
             if (self) return selfCall(self, argument);
             const result = variable();
@@ -3440,7 +3442,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (f.k === "list") {
             const a = resolve(argument.type);
             // An index not known yet (a lambda's parameter) waits until it is.
-            if (a.k === "var" || a.k === "operation") return deferredCall(f, argument);
+            if (a.k === "var" || a.k === "operation") return deferredCall(f, argument, ascribed);
             if (indexType(a)) {
                 if (f.items && argument.index && !argument.index.terms.size) {
                     const n = Number(argument.index.constant), at = n < 0 ? f.items.length + n : n;
