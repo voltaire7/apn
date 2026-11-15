@@ -2967,18 +2967,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return value?.k === "atom" && value.name === "Type";
     }
     // Whether code that never runs (a branch a known condition passes over)
-    // types, as a trial: what it tells stays, a failure is no error. Its calls
-    // take their functions' own types, not typed for their arguments (a
-    // recursive one there may not end: f (p ++ p) (n - 1) past n == 0), its
-    // values are evaluated as anywhere, within the evaluation's own bound,
-    // and it takes at most CALL_BUDGET steps, given back.
-    let inTrial = 0;
+    // types, as a trial: what it tells stays, a failure is no error. It is
+    // typed as anywhere, its calls for their arguments and its values
+    // evaluated, but within CALL_BUDGET steps, given back: a recursive call
+    // there that would not end (f (p ++ p) (n - 1) past n == 0) runs out of
+    // them, and the trial fails.
     function typesInTrial(e: Expr, scope: Scope): boolean {
         const floor = callFloor, before = budget;
         callFloor = Math.max(floor, budget - CALL_BUDGET);
-        inTrial++;
         try { return succeeds(() => infer(e, new Map(scope))); }
-        finally { inTrial--; callFloor = floor; budget = before; }
+        finally { callFloor = floor; budget = before; }
     }
     // A call of a function typed for its arguments: its body's type with the
     // parameters bound as the call binds them. A name takes its
@@ -3315,7 +3313,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // The clauses of one function given items of different types, its
             // arguments all given: the call typed for them (see typedClauses).
             const own = f.choices.map(resolve), summary = own[0]?.k === "fn" ? own[0].summary : undefined;
-            if (summary && !choosing && !inTrial && own.every(c => c.k === "fn" && c.summary === summary)) {
+            if (summary && !choosing && own.every(c => c.k === "fn" && c.summary === summary)) {
                 const before = own[0] as Extract<Ty, { k: "fn" }>, args = [...before.callArgs ?? before.applied ?? [], argument];
                 if (args.length === summary.clauses[0].params.length && args.some(x => holdsMixed(x.type))) {
                     const typed = boundedTypedCall(summary, args, e);
@@ -3632,12 +3630,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const at = parameterAt(f), given = resolve(argument.type);
             const params = at >= 0 ? f.summary!.clauses[0].params : [], param = params[at];
             // (A list known empty too: it has nothing to take apart.)
-            // (In a trial only a list known empty, which ends at once: see
-            // typesInTrial.)
-            if (at === 0 && param.p === "cons" && given.k === "list" && given.items && (!inTrial || !given.items.length)) {
+            if (at === 0 && param.p === "cons" && given.k === "list" && given.items) {
                 const typed = typedCall(f.summary!, [argument], e);
                 if (typed) return typed;
-            } else if (at >= 0 && !choosing && !inTrial) {
+            } else if (at >= 0 && !choosing) {
                 // A call given items of different types is typed for them once
                 // its arguments are all given, with what is known of each; till
                 // then it is the function of the rest, carrying them (applied).

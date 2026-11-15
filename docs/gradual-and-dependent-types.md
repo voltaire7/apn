@@ -530,11 +530,12 @@ known takes its branch, and a `&&` or `||` whose left side is known its side,
 as the run does: the other, which never runs, is typed only where it can be,
 for what it tells (`x ? return [] : Err "no"` is a `Result`), and left out
 where it cannot (`False && head []`, `null xs ? 0 : head xs`, `length (head
-p) == 0 || head (head p) > 1` all pass). Such a trial evaluates known values
-as anywhere, its own conditions deciding its branches, but its calls take
-their functions' own types, so one that would not end there (`f (p ++ p) (n -
-1)` past `n == 0`) does not run on; joining known lists costs a step for each
-item, so evaluating a list that doubles stops at the evaluation's bound. A condition over
+p) == 0 || head (head p) > 1` all pass). Such a trial is typed as anywhere,
+its known values evaluated and its calls typed for their arguments, within a
+bound of steps: a recursive call there that would not end (`f (p ++ p) (n -
+1)` past `n == 0`) runs out of them, and the trial fails. Joining known lists
+costs a step for each item, so evaluating a list that doubles stops at the
+evaluation's bound. A condition over
 a function's parameters is known only in a call typed for its arguments; its
 own definition types both branches. A function of several clauses is typed so as
 the run dispatches it: each clause that may take the arguments, up to one

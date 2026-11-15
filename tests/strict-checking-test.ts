@@ -174,6 +174,8 @@ for (const [source, error] of [
     // A trial evaluates what is known as anywhere: the dead branch's own guard
     // decides its head xs.
     ['xs = []\ny = True ? 0 : (null xs ? 1 : head xs)\ny + 1', ""],
+    // Its calls are typed for their arguments: one that fails leaves it out.
+    ['g p = "k" ++ head p\ny = True ? g ["a", 1] : g [1, "a"]\ny ++ "!"', ""],
     // Calls a function decided are told apart by it.
     ['f g p = g 1 > 0 ? "k" ++ head p : "none"\n[f (x -> x - 5) [1, "a"], f (x -> x + 5) [1, "a"]]', "cannot append String and Int"],
     // A length a typed call cannot find is unknown, as anywhere: rejected.
