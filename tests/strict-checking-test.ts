@@ -71,6 +71,12 @@ for (const [source, error] of [
     ['g ((x : Float) :: _) = x\n"k" ++ g [1,2]', "cannot append String and Float"],
     ['g ((s : String) :: (n : Int) :: _) = s ++ to String n\ng ["a", 2]', ""],
     ['g ((s : String) :: (n : Int) :: _) = s ++ to String n\ng [2, "a"]', "cannot use Int where String is required"],
+    // Through a parameter: a name given items of different types is typed for them.
+    ['f p = "k" ++ head p\nf ["a", 1]', ""],
+    ['f p = "k" ++ head p\nf [1, "a"]', "cannot append String and Int"],
+    ['f p q = head p ++ q\nf ["a", 1] "!"', ""],
+    ['f r = "k" ++ head (head (pairs r))\nf [a = "x", b = 1]', ""],
+    ['f r = 1 + head (tail (head (tail (pairs r))))\nf [a = "x", b = 1]', ""],
 ] as const) Deno.test(`taking apart known items keeps their types: ${source}`, () => {
     const issues = checkSource(source, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
     if (error ? !issues.includes(error) : issues) throw new Error(issues || "accepted");

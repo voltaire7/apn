@@ -644,6 +644,8 @@ const QUICK_BUDGET = 2000;
 const DATA_KINDS = new Set(["list", "record", "variant", "map", "atom"]);
 // Inference work (unification steps) per top-level statement.
 const STATEMENT_BUDGET = 250000;
+// The steps typing one call for its argument may take (see typedCall).
+const CALL_BUDGET = 2000;
 function instantiate(entry: Entry): Ty {
     return entry.mono
         ? entry.type
@@ -806,9 +808,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             source: loc?.source, file: loc?.file, ...hint ? { hint } : {},
         } satisfies TypeIssue;
     };
+    // A call typed for its argument may spend down to callFloor (see typedCall).
+    let callFloor = 0;
     function spend(e?: Expr): void {
-        if (--budget < 0) {
-            problem("type checking limit exceeded; cannot establish the type", e);
+        if (--budget < callFloor) {
+            problem(budget < 0 ? "type checking limit exceeded; cannot establish the type" : "typing this call costs too much", e);
         }
     }
     let requirements: Ty[] = [];
@@ -2952,29 +2956,52 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const t = field && resolve(field), value = t?.k === "type" ? resolve(t.value) : undefined;
         return value?.k === "atom" && value.name === "Type";
     }
-    // A function of one clause taking a list apart (head (x :: _) = x), given a
-    // list whose items are known: its body's type with each part of the
-    // pattern bound as the call binds it, so head ["a", 1] is a String. A part
-    // has the type its pattern gives (a name any, (x : Float) a Float), and its
-    // item converts to it as an argument does. (Each call takes one item off,
-    // so a recursive one ends.)
-    let takingApart = 0;
-    function takenApart(f: Extract<Ty, { k: "fn" }>, argument: Entry, e: Expr): Ty | undefined {
+    // A call of a function of one clause typed for its argument: its body's
+    // type with the first parameter bound as the call binds it. A part of the
+    // pattern has the type the pattern gives (a name any, (x : Float) a
+    // Float), and its value converts to it as an argument does. Given a list
+    // whose items are known, a pattern taking it apart (head (x :: _) = x)
+    // binds each part to its own item, so head ["a", 1] is a String; any other
+    // call is typed so where its function's own type cannot take the argument
+    // (f p = "k" ++ head p takes ["a", 1]). (A recursive call takes an item off
+    // or is bounded, so typing calls ends.)
+    let typingCall = 0;
+    // Whether f takes the first parameter of a function of one clause (only
+    // then is the call's whole argument known: a later one's are not). A
+    // native's type has its definition but no pattern: it takes one argument.
+    const firstParameter = (f: Extract<Ty, { k: "fn" }>): boolean => {
+        const params = f.summary?.clauses.length === 1 ? f.summary.clauses[0].params : undefined;
+        return !!params?.length && (f.pattern ? f.pattern === params[0] : params.length === 1);
+    };
+    function typedCall(f: Extract<Ty, { k: "fn" }>, argument: Entry, e: Expr): Ty | undefined {
         const clause = f.summary?.clauses.length === 1 ? f.summary.clauses[0] : undefined;
-        const param = clause?.params.length === 1 ? clause.params[0] : undefined, a = resolve(argument.type);
-        if (param?.p !== "cons" || a.k !== "list" || !a.items?.length || takingApart > 64) return undefined;
-        const scope: Scope = new Map(f.summary!.scope), rest = a.items.slice(1);
-        const parts: [Pattern, Ty][] = [[param.head, a.items[0]], [param.tail, { k: "list", element: rest.length ? union(rest) : variable(), items: rest, length: constant(BigInt(rest.length)) }]];
-        takingApart++;
+        const [param, ...rest] = clause?.params ?? [], a = resolve(argument.type);
+        if (!param || !firstParameter(f) || typingCall > 64) return undefined;
+        const scope: Scope = new Map(f.summary!.scope);
+        const parts: [Pattern, Ty][] = param.p === "cons" && a.k === "list" && a.items?.length
+            ? [[param.head, a.items[0]], [param.tail, { k: "list", element: a.items.length > 1 ? union(a.items.slice(1)) : variable(), items: a.items.slice(1), length: constant(BigInt(a.items.length - 1)) }]]
+            : [[param, argument.type]];
+        typingCall++;
         try {
-            for (const [part, item] of parts) {
+            // A name takes the argument as it is, what is known of it too.
+            if (param.p === "var") scope.set(param.name, { ...argument });
+            else for (const [part, value] of parts) {
                 const typed = part.p !== "var" && part.p !== "wildcard", t = variable();
                 bind(part, t, scope, e);
-                convert(t, item, e, false, new Map(), typed, typed);
+                convert(t, value, e, false, new Map(), typed, typed);
             }
-            return infer(clause!.body, scope);
-        } finally { takingApart--; }
+            return infer(rest.length ? { t: "patternLambda", params: rest, body: clause!.body } : clause!.body, scope);
+        } finally { typingCall--; }
     }
+    // Whether a type holds a list whose known items, or a record whose fields,
+    // differ in type: what a function's own type (List (String | Int)) blurs.
+    const holdsMixed = (t: Ty, seen = new Set<Ty>()): boolean => {
+        const r = resolve(t);
+        if (seen.has(r)) return false;
+        seen.add(r);
+        const parts = r.k === "list" ? r.items ?? [] : r.k === "record" && !(r.fields instanceof ModuleFields) ? [...r.fields.values()] : [];
+        return new Set(parts.map(x => text(x))).size > 1 || children(r).some(child => holdsMixed(child, seen));
+    };
     function application(f: Ty, argument: Entry, e: Expr, builtin = false, ascribed = false): Ty {
         spend(e);
         f = resolve(f);
@@ -3397,8 +3424,25 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return result;
         }
         if (f.k === "fn") {
-            const taken = takenApart(f, argument, e);
-            if (taken) return taken;
+            const param = firstParameter(f) ? f.summary!.clauses[0].params[0] : undefined, given = resolve(argument.type);
+            if (param?.p === "cons" && given.k === "list" && given.items?.length) {
+                const typed = typedCall(f, argument, e);
+                if (typed) return typed;
+            } else if (param?.p === "var" && !choosing && holdsMixed(given)) {
+                // A name given items of different types: the body typed for them,
+                // or (a body this cannot type, or only at a cost) the function's
+                // own type, the steps spent given back.
+                const saved = requirements.length, before = budget, floor = callFloor;
+                callFloor = Math.max(floor, budget - CALL_BUDGET);
+                try {
+                    const typed = typedCall(f, argument, e);
+                    if (typed) return typed;
+                } catch (error) {
+                    if (!error || typeof error !== "object" || !("message" in error)) throw error;
+                    requirements.length = saved;
+                    budget = before;
+                } finally { callFloor = floor; }
+            }
             // A recursive call another clause's call has not typed for (ln [1]
             // in ln (String s) after ln ["a"]): the finished function decides it.
             const self = !choosing ? definingSelf.find(d => resolve(d.pending) === f) : undefined;
@@ -7723,7 +7767,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (let t = resolve(seq.type), n = 0; t.k === "fn" && n < 2; t = resolve(t.output), n++) t.summary = summary;
     } }
     // head and tail take a list apart as their definitions do (head (x :: _) =
-    // x), so a list's known items keep their own types (see takenApart).
+    // x), so a list's known items keep their own types (see typedCall).
     for (const [name, head, tail, body] of [["head", "x", "_", "x"], ["tail", "_", "xs", "xs"]]) {
         const entry = scope.get(name), part = (n: string): Pattern => n === "_" ? { p: "wildcard" } : { p: "var", name: n };
         const t = entry && resolve(entry.type);
