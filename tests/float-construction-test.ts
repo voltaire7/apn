@@ -10,7 +10,7 @@ for (const [source, expected] of [
     ['(.1 : Float32) + (.2 : Float32)', '0.3 : Float32'],
     ['(9007199254740993 : Float)', '9007199254740992.0 : Float'],
     ['(1/3 : Float64)', '0.3333333333333333 : Float64'],
-    ['[Float32].[.1]', '[0.1] : [Float32]'],
+    ['([.1] : [Float32])', '[0.1] : [Float32]'],
     ['f (x : Float32) = 1; f x = 2; f .1', '2 : Int'],
 ] as const) Deno.test(`explicit float construction: ${source}`, () => {
     const i = new Interpreter();

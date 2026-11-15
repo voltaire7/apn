@@ -1610,8 +1610,9 @@ export class Interpreter {
                         if (type?.kind === "type") { r = this.typeValue(this.valuesType(type), argument); break; }
                         // A function type's member is a contract (f : Int -> Int).
                         if (type?.kind === "functionType") { r = this.conform(type, argument); break; }
-                        // A record or list of types makes its value ([] : [v : Int]).
-                        if (ascribed && (ascribed.kind === "record" || this.isList(ascribed) && this.holdsType(ascribed) || this.asWritten.has(ascribed))) { r = this.conform(ascribed, argument); break; }
+                        // A record or list of types makes its value ([] : [v : Int],
+                        // [1] : [Float]); its first item tells a list of types.
+                        if (ascribed && (ascribed.kind === "record" || this.isList(ascribed) && this.listOfTypes(ascribed) || this.asWritten.has(ascribed))) { r = this.conform(ascribed, argument); break; }
                         this.writtenApplication = !e.ascribed;
                         if (e.types) {
                             this.typeOperands++;
@@ -1679,14 +1680,7 @@ export class Interpreter {
                         const binding = this.isList(rec) && !e.scoped ? this.codeBinding(rec, e.field) : undefined;
                         if (binding) { r = binding.value; break; }
                         if (this.isList(rec) && e.argument) {
-                            r = this.templateList(rec, this.eval(e.argument));
-                            break;
-                        }
-                        // (a -> a).(+ 1): a function read as a type, like [Int].[1].
-                        if ((rec.kind === "closure" || rec.kind === "clauseFn") && e.scoped && e.argument) {
-                            const type = this.asType(rec);
-                            if (!type) throw new APNError("runtime", "dotted application expects a type");
-                            r = this.conform(type, this.eval(e.argument));
+                            r = this.templateList(rec, this.eval(e.argument), false, true);
                             break;
                         }
                         if (rec.kind === "io") throw new APNError("runtime", "an action has no fields", { hint: "bind its result first: `x <- action; x.field`" });
@@ -1707,7 +1701,7 @@ export class Interpreter {
                     case "pluck": {
                         let rec = this.dataValue(this.eval(e.rec));
                         if (this.isList(rec) && e.values) {
-                            r = this.templateList(rec, this.eval(e.values));
+                            r = this.templateList(rec, this.eval(e.values), false, true);
                             break;
                         }
                         if (rec.kind !== "record") throw new Error("dotted application expects a list or record");
@@ -4416,6 +4410,17 @@ export class Interpreter {
     // Whether a value holds a type (a template: [x : Int, y = 0], [xs = [Int]]),
     // told without evaluating anything, so a record of values is never forced
     // to tell: only what is evaluated, and what a list literal is written with.
+    // A list whose first items, read down to a type, are types: [Int],
+    // [[Float]] (the empty list too, the type of no items).
+    private listOfTypes(list: Value): boolean {
+        for (let x = list, depth = 0; depth < 8; depth++) {
+            const cell = this.cell(x);
+            if (!cell) return true;
+            x = this.reference(cell.head);
+            if (!this.isList(x)) return this.holdsType(x);
+        }
+        return false;
+    }
     private holdsType(value: Value, depth = 0): boolean {
         while ((value.kind === "thunk" || value.kind === "deferred") && value.value) value = value.value;
         if (value.kind === "type" || value.kind === "functionType" || this.sharedType(value)) return true;
@@ -5469,11 +5474,13 @@ export class Interpreter {
         return this.isList(target) ? this.templateList(target, value, true) : this.filled(target, value);
     }
 
-    templateList(templates: Value, values: Value, replaceDefaults = false): Value {
+    // applying: templates.values, whose slots are functions (a type takes no
+    // value: [Float].[1] is ([1] : [Float])); otherwise a conversion.
+    templateList(templates: Value, values: Value, replaceDefaults = false, applying = false): Value {
         const input = this.dataValue(values);
         const list = input.kind === "string" ? this.callNative("chars", [input]) : input.kind === "record" ? mkList(input.v.map(([, value]) => value)) : input;
         if (!this.isList(list)) throw new APNError("runtime", "list template expects a list, record, or string");
-        let converted = this.applyListTemplate(templates, list, replaceDefaults);
+        let converted = this.applyListTemplate(templates, list, replaceDefaults, applying);
         if (input.kind !== "record") return converted;
         // Reuse positional conversion, but retain record keys and lazy fields.
         const fields: [string, Value][] = [];
@@ -5489,7 +5496,7 @@ export class Interpreter {
 
     // Multi-slot templates zip positionally. Shape errors appear when that
     // spine is demanded, without traversing infinite inputs or forcing heads.
-    applyListTemplate(templates: Value, values: Value, replaceDefaults = false): Value {
+    applyListTemplate(templates: Value, values: Value, replaceDefaults = false, applying = false): Value {
         return this.defer(() => {
             const template = this.cell(templates), value = this.cell(values);
             if (template === null && value === null) return mkList([]);
@@ -5499,11 +5506,15 @@ export class Interpreter {
                 head: this.defer(() => {
                     if (replaceDefaults) return this.applyTemplateSlot(template.head, value.head);
                     const target = this.force(template.head);
+                    if (applying && (target.kind === "type" || target.kind === "functionType" || target.kind === "record" && this.isTypeValue(target))) {
+                        const { message, hint } = typeApplied(this.renderString(target));
+                        throw new APNError("runtime", message, { hint: `${hint}; a list of types converts by ascription, ([1] : [Float])` });
+                    }
                     // A type variable no call decided takes any value, as conform's does.
                     if (target.kind === "type" && target.variable) return this.reference(value.head);
-                    return this.isList(target) ? this.templateList(target, value.head) : this.filled(target, value.head);
+                    return this.isList(target) ? this.templateList(target, value.head, false, applying) : this.filled(target, value.head);
                 }),
-                tail: this.applyListTemplate(template.tail, value.tail, replaceDefaults),
+                tail: this.applyListTemplate(template.tail, value.tail, replaceDefaults, applying),
             };
         });
     }

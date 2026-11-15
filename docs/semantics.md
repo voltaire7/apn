@@ -464,7 +464,7 @@ code 1 = x * 3              # x is the list's: [30,5]
 Code's bindings are its fields, as a record's are: `code.x` is the value
 the last item binding `x` gives, and `code.x = v` replaces that item with
 `x = v`, an update as above (`code.[x] = [v]` too). A list binding no `x`
-keeps dotted application (`[Int].x` applies `[Int]` to `x`). An `x <- m`
+keeps dotted application (`[(+ 1)].x` applies `[(+ 1)]` to `x`). An `x <- m`
 item binds `x` only when `do` runs the code, so `code.x` is an error there,
 as is replacing a binding made by a pattern (`[a,b] = ...`), which replaces
 as an item (`code 0 = ...`):
@@ -1797,8 +1797,8 @@ record-construction evaluation rules still apply.
 
 `record.(expression) = value` is not an assignment target; `record key = value`
 updates a computed key.
-List operands retain dotted template application: `[Int,Float].([1] ++ [2])`
-returns `[1,2.0]`, evaluating the input expression in the surrounding scope.
+List operands retain dotted template application: `[(+ 1), (* 2)].([1] ++ [2])`
+returns `[2,4]`, evaluating the input expression in the surrounding scope.
 
 ## Type descriptions
 

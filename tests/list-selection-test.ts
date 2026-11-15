@@ -16,11 +16,11 @@ for (const [source, expected] of [
     ['arr = [0..]; arr [1,3] = [11,33]; take 5 arr', '[0,11,2,33,4]'],
     ['Direction = North | East; [10,20] [East,North]', '[20,10]'],
     ['Direction = North | East; arr = [10,20]; arr [East,North] = [3,4]; arr', '[4,3]'],
-    ['[String,Int].["x",1]', '["x",1]'],
+    ['(["x",1] : [String,Int])', '["x",1]'],
     ['[(+ 1), (* 2)].[10,20]', '[11,40]'],
-    ['x = 10; [Int,Int].[x,x+1]', '[10,11]'],
-    ['templates = [Int,Float]; values = [1,2]; templates.(values)', '[1,2.0]'],
-    ['[Char,Char]."hi"', "['h','i']"],
+    ['x = 10; ([x,x+1] : [Int,Int])', '[10,11]'],
+    ['templates = [Int,Float]; values = [1,2]; (values : templates)', '[1,2.0]'],
+    ['("hi" : [Char,Char])', "['h','i']"],
     ['[Int] [0]', '[Int]'],
     ['Vector3 = [x : Float, y : Float, z : Float]; ([1,2,3] : Vector3)', '[x = 1.0, y = 2.0, z = 3.0]'],
     ['vec = [x = 1, y = 2]; vec.[y,x]', '[2,1]'],
@@ -73,7 +73,7 @@ Deno.test('selection rejects nested indices when consumed', () => {
     throw new Error('expected invalid index');
 });
 
-for (const source of ['[Int].[]', '[Int].[1,2]', '[Int]."hi"', 'cast [Int] [1,2]', '([x = [1,2]] : [x : [Int]])']) {
+for (const source of ['([] : [Int])', '([1,2] : [Int])', '("hi" : [Int])', '[Int]."hi"', 'to [Int] [1,2]', '([x = [1,2]] : [x : [Int]])']) {
     Deno.test(`one template slot never broadcasts: ${source}`, () => {
         const i = new Interpreter();
         try { i.renderString(i.run(parseDocument(source))); } catch { return; }

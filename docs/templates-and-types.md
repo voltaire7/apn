@@ -7,8 +7,10 @@ a value like any other, not a slot: `[x = Float]` holds the type `Float`, and
 is no template and no type. A record with a slot, given values, builds one;
 any other record given fields is updated, exactly as by field assignment (see
 [slot assignment](#slot-assignment)). Either way a given value converts to its
-field's type. Dotted list application applies its slots and rejects scalar slots.
-Concrete scalars (numbers, strings, characters, and booleans) are not callable.
+field's type. Dotted list application applies its slots, which are functions:
+it rejects scalar slots and type slots, as a type takes no value (a list of types
+converts by ascription instead, `([1] : [Float])`). Concrete scalars (numbers,
+strings, characters, and booleans) are not callable.
 
 ## Concrete defaults
 
@@ -22,8 +24,9 @@ Concrete scalars (numbers, strings, characters, and booleans) are not callable.
 [x = 1] [x = 2.5]               # error: lossy conversion
 [x = False] [x = 1]             # error: cannot use Int where Bool is required
 ["old"].["new"]             # error: cannot apply a string
-[Bool].[True]               # [True]
-[Char].['b']                 # ['b']
+[Bool].[True]               # error: Bool is a type, not a function
+([True] : [Bool])           # [True]
+(['b'] : [Char])            # ['b']
 ```
 
 A value given to a field (by position, by name, or by assignment) converts
@@ -50,10 +53,10 @@ construction `(.2 : Int)` also errors; use `(floor .2 : Int)` to round down expl
 | `[f].[]` or `[f].[x,y]` | Length mismatch |
 
 ```apn
-[(* 2), (* 3)].[1,2]  # [2,6]
-[Int,String].[1,"hi"] # [1,"hi"]
-Int * [1,2,3]       # mapping, separate from template application
-map Int [0..]           # lazy mapping over an infinite list
+[(* 2), (* 3)].[1,2]       # [2,6]
+([1,"hi"] : [Int,String])  # [1,"hi"], a list of types converting
+to Int * [1,2,3]           # mapping, separate from template application
+map (to Int) [0..]         # lazy mapping over an infinite list
 ```
 
 Every template length, including one, uses exact positional matching. Output
@@ -69,17 +72,18 @@ record's keys and order, and the template must have exactly as many slots as
 the record has fields. Converted fields remain lazy:
 
 ```apn
-[Float].[x = 1]                       # [x = 1.0]
-[String,Int].[name = "a", age = 2]   # [name = "a", age = 2]
-[(+ 1), (* 2)].[b = 3, a = 4]        # [b = 4, a = 8]
+([x = 1] : [Float])                     # [x = 1.0]
+([name = "a", age = 2] : [String,Int])  # [name = "a", age = 2]
+[(+ 1), (* 2)].[b = 3, a = 4]           # [b = 4, a = 8]
 ```
 
 Strings supply Unicode code-point characters using the same positional rules:
 
 ```apn
-[Char,Char]."hi"      # ['h','i']
-[Char]."h"              # ['h']
-[].""                  # []
+("hi" : [Char,Char])    # ['h','i']
+("h" : [Char])          # ['h']
+[c -> c, c -> c]."hi"   # ['h','i'], each slot given a character
+[].""                   # []
 to (List Char) "hello"  # arbitrary-length character conversion
 ```
 
@@ -111,7 +115,7 @@ A record argument names the selected indices and returns a record:
 
 Each record value must be an integer or enumeration index. Selection preserves
 its field names and order. This is indexing, not template conversion;
-`[Int].[x = 1]` instead converts the record's value and returns `[x = 1]`.
+`([x = 1] : [Int])` instead converts the record's value and returns `[x = 1]`.
 Named selections support assignment with exactly the same field names on the
 right; replacement order does not matter:
 
@@ -126,7 +130,7 @@ last selection entry's replacement, after all conversions succeed.
 
 Selection is lazy and preserves index order and duplicates. Integer and enumeration
 indices use the same rules as single indexing; negative indices require a finite input.
-Dotted application explicitly selects template behavior: `[Int].[0]` returns `[0]`; `[10].[0]` errors.
+Dotted application explicitly selects template behavior: `[(+ 1)].[0]` returns `[1]`; `[10].[0]` errors.
 For variable inputs use `template.values`; for other expressions use `template.(expression)`. This overload is only for
 lists; `record.(expression)` instead performs scoped evaluation.
 
@@ -210,7 +214,7 @@ Use `obj key` for a computed name. `obj.(expression)` performs
 See [records](semantics.md#records) for the full rules.
 
 List dot syntax performs template application, not indexing or assignment:
-`templates.values`, `templates.(expression)`, and `[Int,Float].[1,2]`.
+`templates.values` and `templates.(expression)`, of function slots.
 Use `arr indices = values` for a list update, not `arr.[indices] = values`.
 
 ## Slot assignment
@@ -389,7 +393,7 @@ Point = [x : Float, y : Float]
 Points = [Point]
 
 (123 : Count)              # 123
-Numbers.[1]                # [1]; Numbers.[1,2] errors
+([1] : Numbers)            # [1]; ([1,2] : Numbers) errors
 [x = 1, y = 2] : Point     # [x = 1.0, y = 2.0]
 to [Int,Int] [1,2]          # [1,2]
 ([Int] : Type)            # [Int]

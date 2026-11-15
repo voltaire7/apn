@@ -3,13 +3,13 @@ import { parseDocument } from "../src/parser.ts";
 import { checkSource } from "../src/type-checker.ts";
 
 for (const [source, expected] of [
-    ['templates = [Int,Float]; values = [1,2]; templates.values', '[1,2.0]'],
+    ['templates = [(* 2), (+ 1)]; values = [1,2]; templates.values', '[2,3]'],
     ['templates = [(* 2)]; values = [3]; templates.values', '[6]'],
-    ['templates = [Char,Char]; values = "hi"; templates.values', "['h','i']"],
-    ['templates = [Int]; values = [42]; { values = [7]; templates.values }', '[7]'],
+    ['templates = [c -> c, c -> c]; values = "hi"; templates.values', "['h','i']"],
+    ['templates = [(* 2)]; values = [42]; { values = [7]; templates.values }', '[14]'],
     ['values = missing; obj = [values = 42]; obj.values', '42'],
     ['obj = [unbound = 42]; obj.unbound', '42'],
-    ['values = [42]; templates = [Int]; templates.values 0', '42'],
+    ['values = [42]; templates = [(+ 0)]; templates.values 0', '42'],
     ['obj = [child = [x = 42]]; obj.child.x', '42'],
 ] as const) Deno.test(`named dot: ${source}`, () => {
     const i = new Interpreter();
@@ -18,8 +18,10 @@ for (const [source, expected] of [
 });
 
 for (const source of [
-    'templates = [Int]; values = [1,2]; templates.values',
+    'templates = [(* 2)]; values = [1,2]; templates.values',
     'templates = [0]; values = [1]; templates.values',
+    // A type takes no value: a list of types converts by ascription.
+    'templates = [Int]; values = [1]; templates.values',
     'templates = [Int]; templates.missing',
 ]) Deno.test(`named dot rejects invalid input: ${source}`, () => {
     const i = new Interpreter();
@@ -28,7 +30,7 @@ for (const source of [
 });
 
 Deno.test('checker distinguishes named list application from record fields', () => {
-    for (const source of ['templates = [Int]; values = [1]; templates.values', 'obj = [unbound = 42]; obj.unbound']) {
+    for (const source of ['templates = [(* 2)]; values = [1]; templates.values', 'obj = [unbound = 42]; obj.unbound']) {
         const result = checkSource(source);
         if (result.issues.length) throw new Error(JSON.stringify(result.issues));
     }

@@ -279,7 +279,7 @@ function helpText(): string {
         `  [x = a, y = b] = value  (rename destructure: pull fields out of a record)`,
         `  [["x",1]] "x"  (association lookup; first matching string key)`,
         `  nums 0 / nums -1 / nums [0,2]   (single or multiple indices)`,
-        `  [String,Int].["x",1] / templates.values / templates.(expr)  (list templates)`,
+        `  (["x",1] : [String,Int]) / templates.values / templates.(expr)  (list templates)`,
         `  vec [z = 3, x = 1]   (a copy with those fields; [] : T makes a type's value)`,
         `  rec.field / rec "key" / rec.[x,y] / rec.[a = x]  (access, pluck, renamed pluck)`,
         `  rec.(expression) / rec.{ statements }  (evaluate with record fields in a local scope)`,

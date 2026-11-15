@@ -612,7 +612,7 @@ r.c.n = 4
 print r.c
 twice = [x = 1, x = x + 1, x]
 print twice.x
-print [Int].[1]`, ["1", "[x = 10, x + 1]", "[11]", "[1,2]", "[16]", "2", "[1]"]);
+print ([1] : [Int])`, ["1", "[x = 10, x + 1]", "[11]", "[1,2]", "[16]", "2", "[1]"]);
 failure("an x <- m item binds when the code runs", "w = [x <- [1,2], return (x * 10)]\nprint w.x",
     "only when it runs");
 failure("a binding by a pattern is replaced as an item", "pc = [[a,b] = [3,4], a + b]\npc.a = 9",

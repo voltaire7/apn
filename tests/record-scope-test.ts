@@ -10,7 +10,7 @@ for (const [source, expected] of [
     ['obj = [x = 3]; values = obj.([x]); values', '[3]'],
     ['obj = [x = 3]; obj.()', '[]'],
     ['obj = [x = 3]; obj.(sqrt (x ^ 2))', '3'],
-    ['values = [1,2]; [Int,Float].(values)', '[1,2.0]'],
+    ['values = [1,2]; (values : [Int,Float])', '[1,2.0]'],
     ['obj = [child = [x = 1]]; result <- return obj.(child.x = 10; child.x); [result,obj.child.x]', '[10,1]'],
     ['obj = [x = 3]; obj.(inner = [x = 4]; inner.(x) + x)', '7'],
 ] as const) Deno.test(`record scope: ${source}`, () => {
@@ -51,7 +51,7 @@ for (const [source, expected] of [
     ['vec = [x = 1]; [vec.{ x = 10; x }, vec.x]', '[10,1]'],
     ['vec = [x = 1]; vec.{}', '[]'],
     ['vec = [x = 1]; f = vec.{ y -> x + y }; f 2', '3'],
-    ['[Int,Float].{ [1,2] }', '[1,2.0]'],
+    ['[(* 2), (+ 1)].{ [1,2] }', '[2,3]'],
     ['vec = [x = 1]; vec.{ [y = x + 1] }.y', '2'],
 ] as const) Deno.test(`braced scope: ${source}`, () => {
     const i = new Interpreter();

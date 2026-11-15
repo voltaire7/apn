@@ -30,7 +30,7 @@ for (const [source, expected] of [
     ['use [[one = 1], [two = 2]]; one + two', '3'],
     ['x = Mutable 1; set x 2; x + 1', '3'],
     ['Direction = North | South; [10,20] South', '20'],
-    ['templates = [String,Int]; values = ["x",1]; templates.values', '["x",1]'],
+    ['templates = [String,Int]; values = ["x",1]; (values : templates)', '["x",1]'],
     ['xs = [1]; xs = [2,3]; xs', '[2,3]'],
     // A union of this shape is the list type, as the prelude's List is.
     ['Seq a = [] | a :: Seq a; f (xs : Seq Int) = length xs; f [1,2]', '2'],

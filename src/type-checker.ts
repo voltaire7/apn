@@ -1171,7 +1171,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (resolve(a.value).k === "var") return t;
             return application(a, { type: b }, { t: "placeholder" }, false, true);
         }
-        if (t.op === "template") return template(a, b, { t: "placeholder" });
+        if (t.op === "template" || t.op === "convertTemplate") return template(a, b, { t: "placeholder" }, t.op === "convertTemplate");
         // do xs is the block whose statements are the elements, so its type is
         // the last one's ([] for none); a literal list is checked as that block.
         if (t.op === "do") {
@@ -1192,7 +1192,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             // A list template ([Char], [Int,String]) converts position by position.
             if (a.k === "list" && a.items?.length && a.items.every(item => resolve(item).k === "type")) {
-                if (t.op === "to") return template(a, b, activeExpression ?? { t: "placeholder" });
+                if (t.op === "to") return template(a, b, activeExpression ?? { t: "placeholder" }, true);
                 return problem("no from instance for a list template", undefined, "join characters with `from (List Char) cs`; convert with `to`, as in `to [Char,Char] \"hi\"`");
             }
             // So does a record schema ([quote : String, year : Int]), a type too.
@@ -2752,17 +2752,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         unify(target, actual, e);
         return target;
     }
-    // A list template applied to a list (templates.values, to [Char] s): each
-    // slot to its value, a function applied and a type converting it.
-    function template(target: Ty, input: Ty, e: Expr): Ty {
+    // A list template given a list: each slot to its value. Converting (to
+    // [Char] s, an ascription) a type slot converts it; applied (templates.
+    // values) a slot is a function, as a type takes no value.
+    function template(target: Ty, input: Ty, e: Expr, converting = false): Ty {
         const t = resolve(target), a = resolve(input);
-        if (t.k === "var" || a.k === "var" || t.k === "operation" || a.k === "operation") return operation("template", [t, a]);
+        if (t.k === "var" || a.k === "var" || t.k === "operation" || a.k === "operation") return operation(converting ? "convertTemplate" : "template", [t, a]);
         if (isExplicit(t) || isExplicit(a)) return explicitDynamic;
         if (t.k !== "list") return problem("list template requires a list", e);
-        if (a.k === "atom" && a.name === "String") return template(t, list(atom("Char")), e);
+        if (a.k === "atom" && a.name === "String") return template(t, list(atom("Char")), e, converting);
         if (a.k === "record") {
             const items = [...a.fields.values()];
-            const converted = resolve(template(t, { k: "list", items, element: items.length ? union(items) : variable(), length: constant(BigInt(items.length)) }, e));
+            const converted = resolve(template(t, { k: "list", items, element: items.length ? union(items) : variable(), length: constant(BigInt(items.length)) }, e, converting));
             if (converted.k !== "list") return converted;
             return { k: "record", fields: new Map([...a.fields.keys()].map((key, n) => [key, converted.items?.[n] ?? converted.element])) };
         }
@@ -2770,7 +2771,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.length && a.length) unify(list(variable(), t.length), list(variable(), a.length), e);
         else runtimeChecks++;
         const apply = (slot: Ty, value: Ty, expression: Expr): Ty => resolve(slot).k === "list"
-            ? template(slot, value, expression) : application(slot, { type: value }, expression, false, true);
+            ? template(slot, value, expression, converting) : application(slot, { type: value }, expression, false, converting);
         if (t.items) {
             const items = t.items.map((slot, n) => apply(slot, a.items?.[n] ?? a.element, e.t === "list" ? e.v[n] ?? e : e));
             return { k: "list", element: items.length ? union(items) : variable(), items, length: t.length };
@@ -3997,6 +3998,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 callees.add(e.f);
                 // e : T, T a constructor named as its type (Point, Box Int): the type there.
                 let callee = e.t === "app" && e.ascribed && namesItsType(e.f, scope) ? { k: "type", value: typeExpr(e.f, scope) } as Ty : infer(e.f, scope), resolved = resolve(callee);
+                // (x : [Float]): a list of types converts its items, position by
+                // position, as to [Float] x does.
+                if (e.t === "app" && e.ascribed && resolved.k === "list") return template(resolved, infer(e.a, scope), e.a, true);
                 // A type one of several, chosen by code (elemType flag): evaluate
                 // the code to learn which, as the program would.
                 if (resolved.k === "type" && resolved.chosen && e.f.t !== "var") {
