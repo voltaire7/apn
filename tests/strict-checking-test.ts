@@ -84,6 +84,13 @@ for (const [source, error] of [
     ['g p q r = p ++ head q ++ head (tail r)\nh = g "!" ["a", 1]\nh [2, "b"]', ""],
     ['g p q r = p ++ head q ++ head (tail r)\nh = g "!"\nh ["a", 1] ["b", 2]', "cannot append String and Int"],
     ['f p q = head p ++ q\nmap (f ["a", 1]) ["!"]', ""],
+    // A function of several clauses, as the run dispatches it.
+    ['f [] = ""\nf (x :: _) = "k" ++ x\nf ["a", 1]', ""],
+    ['f [] = ""\nf (x :: _) = "k" ++ x\nf [1, "a"]', "cannot append String and Int"],
+    ['g 0 p = ""\ng n p = head p ++ "!"\ng 1 ["a", 1]', ""],
+    ['g 0 p = ""\ng n p = head p ++ "!"\ng 1 [1, "a"]', "cannot append Int and String"],
+    ['g 0 p = ""\ng n p = head p ++ "!"\nh = g 1\nh ["a", 1]', ""],
+    ['k [] = ""\nk ([a,b] :: _) = a ++ "!"\nk (pairs [x = 1, y = "s"])', ""],
 ] as const) Deno.test(`taking apart known items keeps their types: ${source}`, () => {
     const issues = checkSource(source, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
     if (error ? !issues.includes(error) : issues) throw new Error(issues || "accepted");

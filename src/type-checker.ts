@@ -147,7 +147,7 @@ interface Known {
 }
 // A function's clauses and defining scope, so a direct call by name can
 // evaluate what its result value is from what is known about the arguments.
-interface Summary { clauses: (ClauseOrder & { body: Expr })[]; scope: Scope }
+interface Summary { clauses: (ClauseOrder & { body: Expr; guard?: Expr })[]; scope: Scope }
 interface Entry {
     type: Ty;
     // A constructor whose rules give values of other types (sin 0 = 0 before
@@ -2972,13 +2972,22 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // for none. A native's type has its definition but no pattern: it takes
     // one argument.
     const parameterAt = (f: Extract<Ty, { k: "fn" }>): number => {
-        const params = f.summary?.clauses.length === 1 ? f.summary.clauses[0].params : undefined;
-        if (!params?.length) return -1;
-        return f.pattern ? params.indexOf(f.pattern) : params.length === 1 ? 0 : -1;
+        const clauses = f.summary?.clauses ?? [], count = clauses[0]?.params.length ?? 0;
+        if (!count || clauses.some(c => c.params.length !== count)) return -1;
+        if (!f.pattern) return count === 1 ? 0 : -1;
+        for (const c of clauses) { const at = c.params.indexOf(f.pattern); if (at >= 0) return at; }
+        return -1;
     };
+    // Whether a pattern only takes values apart and compares them (no typed
+    // part, which checks a known value as typing a call does not: 300 : UInt8).
+    const untypedPattern = (p: Pattern): boolean =>
+        p.p === "list" ? p.v.every(untypedPattern) : p.p === "cons" ? untypedPattern(p.head) && untypedPattern(p.tail)
+        : p.p === "constr" ? !p.typed && p.args.every(untypedPattern)
+        : ["var", "wildcard", "int", "bool", "string", "char", "float"].includes(p.p);
     function typedCall(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
-        const clause = summary.clauses[0];
         if (typingCall > 64) return undefined;
+        if (summary.clauses.length > 1) return typedClauses(summary, args, e);
+        const clause = summary.clauses[0];
         const scope: Scope = new Map(summary.scope);
         typingCall++;
         try {
@@ -2992,15 +3001,43 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     function bindArgument(param: Pattern, argument: Entry, scope: Scope, e: Expr): void {
         if (param.p === "var") { scope.set(param.name, { ...argument }); return; }
+        if (param.p === "wildcard") return;
         const a = resolve(argument.type);
-        const parts: [Pattern, Ty][] = param.p === "cons" && a.k === "list" && a.items?.length
-            ? [[param.head, a.items[0]], [param.tail, { k: "list", element: a.items.length > 1 ? union(a.items.slice(1)) : variable(), items: a.items.slice(1), length: constant(BigInt(a.items.length - 1)) }]]
-            : [[param, argument.type]];
-        for (const [part, value] of parts) {
-            const typed = part.p !== "var" && part.p !== "wildcard", t = variable();
-            bind(part, t, scope, e);
-            convert(t, value, e, false, new Map(), typed, typed);
+        // A list whose items are known: its first and the rest, each its own.
+        if (param.p === "cons" && a.k === "list" && a.items?.length) {
+            const rest = a.items.slice(1);
+            bindArgument(param.head, { type: a.items[0] }, scope, e);
+            bindArgument(param.tail, { type: { k: "list", element: rest.length ? union(rest) : variable(), items: rest, length: constant(BigInt(rest.length)) } }, scope, e);
+            return;
         }
+        if (param.p === "list" && a.k === "list" && a.items?.length === param.v.length) {
+            param.v.forEach((q, n) => bindArgument(q, { type: a.items![n] }, scope, e));
+            return;
+        }
+        const typed = true, t = variable();
+        bind(param, t, scope, e);
+        convert(t, argument.type, e, false, new Map(), typed, typed);
+    }
+    // A call of a function of several clauses typed for its arguments, as the
+    // run dispatches it: each clause that may take them typed with them
+    // bound (one whose patterns cannot take them skipped), up to one that
+    // certainly does; the call is any of their results.
+    function typedClauses(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
+        const params = summary.clauses[0].params.length;
+        if (args.length !== params || !summary.clauses.every(c => c.params.every(untypedPattern))) return undefined;
+        const results: Ty[] = [];
+        typingCall++;
+        try {
+            for (const { clause, matches } of possibleClauses(summary.clauses, args).sort((a, b) => a.clause.place - b.clause.place)) {
+                const scope: Scope = new Map(summary.scope);
+                if (!succeeds(() => clause.params.forEach((param, n) => bindArgument(param, args[n], new Map(scope), e)))) continue;
+                clause.params.forEach((param, n) => bindArgument(param, args[n], scope, e));
+                if (clause.guard) infer(clause.guard, scope);
+                results.push(infer(clause.body, scope));
+                if (matches && !clause.guard) break;
+            }
+        } finally { typingCall--; }
+        return results.length ? results.reduce((a, b) => choice(a, b, e)) : undefined;
     }
     // A call typed for its arguments where that costs at most CALL_BUDGET
     // steps; failing that, undefined, the steps given back.
@@ -3141,6 +3178,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return { k: "overload", choices: [out, application(method, argument, e)], name: f.name, prefer: true };
         }
         if (f.k === "overload") {
+            // The clauses of one function given items of different types, its
+            // arguments all given: the call typed for them (see typedClauses).
+            const own = f.choices.map(resolve), summary = own[0]?.k === "fn" ? own[0].summary : undefined;
+            if (summary && !choosing && own.every(c => c.k === "fn" && c.summary === summary)) {
+                const before = own[0] as Extract<Ty, { k: "fn" }>, args = [...before.callArgs ?? before.applied ?? [], argument];
+                if (args.length === summary.clauses[0].params.length && args.some(x => holdsMixed(x.type))) {
+                    const typed = boundedTypedCall(summary, args, e);
+                    if (typed) return typed;
+                }
+            }
             const input = resolve(argument.type);
             if (input.k === "var" || input.k === "operation") return deferredCall(f, argument, ascribed);
             // A value of a union of known types is one of them: each takes the
@@ -3461,7 +3508,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // (Names only: a pattern's parts check known values, 300 : UInt8,
                 // which typing does not.)
                 const args = [...f.applied ?? [], argument];
-                if (args.length === at + 1 && params.slice(0, at + 1).every(q => q.p === "var") && args.some(x => holdsMixed(x.type))) {
+                const names = f.summary!.clauses.length === 1 ? params.slice(0, at + 1).every(q => q.p === "var") : at === params.length - 1;
+                if (args.length === at + 1 && names && args.some(x => holdsMixed(x.type))) {
                     const typed = boundedTypedCall(f.summary!, args, e);
                     if (typed) return typed;
                 }
@@ -7698,7 +7746,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // Every choice evaluates calls against all clauses, as the runtime dispatches.
         const summary: Summary = { scope, clauses: clauses.map((c, index) => {
             const order = [...orders.values()].flat().find(o => o.index === index)!;
-            return { ...order, body: c.body };
+            const guard = (c as { guard?: Expr }).guard;
+            return { ...order, body: c.body, ...guard ? { guard } : {} };
         }) };
         for (const [key, group] of groups) {
             const seen = new Set<Ty>();
