@@ -517,10 +517,13 @@ apart, as `head (x :: _) = x` does. A typed part takes its item converted, as
 an argument is (`g ((x : Float) :: _) = x` gives `g [1,2]` a `Float`), and a
 typed head keeps its own type beside the rest's: `(s : String) :: (n : Int) ::
 _` takes a list of either, the items checked in order where they are known.
-So does a parameter of a function of one clause given a list (or record)
+So do the parameters of a function of one clause given a list (or record)
 whose items differ in type: `f p = "k" ++ head p` takes `["a", 1]` and rejects
-`[1, "a"]`, its body typed for that argument. Where that fails or costs more
-than a bounded number of steps, the call takes the function's own type. Your own
+`[1, "a"]`, its body typed for its arguments from that one on, a later one
+too (`g p q = p ++ head q` takes `"!" ["a", 1]`), also through a partial
+application kept as a value. Where that fails or costs more than a bounded
+number of steps, the call takes the function's own type; a parameter that is
+a pattern, which checks the values it is given, always does. Your own
 functions carry lengths through too, including nested ones: a result that is an
 argument, a list literal of such results, or an argument passed through those
 operations (`twice xs = xs * x -> x * 2`, `h a b = [map f a, map f b]`). A

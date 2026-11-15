@@ -61,7 +61,7 @@ type Ty =
     // function's code, so they are trusted only at a direct call by name.
     // shared: a constructor sharing its type's name (Box x = _, Nothing = _),
     // which is that type where a type is expected (sharedType).
-    | { k: "fn"; input: Ty; output: Ty; shared?: boolean; constructs?: boolean; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; summary?: Summary }
+    | { k: "fn"; input: Ty; output: Ty; shared?: boolean; constructs?: boolean; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; summary?: Summary; applied?: Entry[] }
     // formula: a list literal's code; open: the names its code reads that are
     // bound nowhere yet (a list joined before it may bind them), by where read.
     // endless: infinitely many elements, [Int..] ([1..], a range of a type).
@@ -2956,42 +2956,64 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const t = field && resolve(field), value = t?.k === "type" ? resolve(t.value) : undefined;
         return value?.k === "atom" && value.name === "Type";
     }
-    // A call of a function of one clause typed for its argument: its body's
-    // type with the first parameter bound as the call binds it. A part of the
-    // pattern has the type the pattern gives (a name any, (x : Float) a
-    // Float), and its value converts to it as an argument does. Given a list
-    // whose items are known, a pattern taking it apart (head (x :: _) = x)
-    // binds each part to its own item, so head ["a", 1] is a String; any other
-    // call is typed so where its function's own type cannot take the argument
-    // (f p = "k" ++ head p takes ["a", 1]). (A recursive call takes an item off
-    // or is bounded, so typing calls ends.)
+    // A call of a function of one clause typed for its arguments: its body's
+    // type with the parameters bound as the call binds them. A name takes its
+    // argument as it is (what is known of it too); a part of any other pattern
+    // has the type the pattern gives ((x : Float) a Float), its value
+    // converting to it as an argument does. Given a list whose items are
+    // known, a pattern taking it apart (head (x :: _) = x) binds each part to
+    // its own item, so head ["a", 1] is a String; a call given a list or record
+    // whose items differ in type is typed so from that argument on (f p = "k"
+    // ++ head p takes ["a", 1]), each partial application before it carrying
+    // its arguments (applied). (A recursive call takes an item off or is
+    // bounded, so typing calls ends.)
     let typingCall = 0;
-    // Whether f takes the first parameter of a function of one clause (only
-    // then is the call's whole argument known: a later one's are not). A
-    // native's type has its definition but no pattern: it takes one argument.
-    const firstParameter = (f: Extract<Ty, { k: "fn" }>): boolean => {
+    // Where f stands among the parameters of its function of one clause, -1
+    // for none. A native's type has its definition but no pattern: it takes
+    // one argument.
+    const parameterAt = (f: Extract<Ty, { k: "fn" }>): number => {
         const params = f.summary?.clauses.length === 1 ? f.summary.clauses[0].params : undefined;
-        return !!params?.length && (f.pattern ? f.pattern === params[0] : params.length === 1);
+        if (!params?.length) return -1;
+        return f.pattern ? params.indexOf(f.pattern) : params.length === 1 ? 0 : -1;
     };
-    function typedCall(f: Extract<Ty, { k: "fn" }>, argument: Entry, e: Expr): Ty | undefined {
-        const clause = f.summary?.clauses.length === 1 ? f.summary.clauses[0] : undefined;
-        const [param, ...rest] = clause?.params ?? [], a = resolve(argument.type);
-        if (!param || !firstParameter(f) || typingCall > 64) return undefined;
-        const scope: Scope = new Map(f.summary!.scope);
+    function typedCall(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
+        const clause = summary.clauses[0];
+        if (typingCall > 64) return undefined;
+        const scope: Scope = new Map(summary.scope);
+        typingCall++;
+        try {
+            args.forEach((argument, n) => bindArgument(clause.params[n], argument, scope, e));
+            const rest = clause.params.slice(args.length);
+            if (!rest.length) return infer(clause.body, scope);
+            // The function of the rest, which holds these arguments already.
+            const made = resolve(infer({ t: "patternLambda", params: rest, body: clause.body }, scope));
+            return made.k === "fn" ? { ...made, applied: [] } : made;
+        } finally { typingCall--; }
+    }
+    function bindArgument(param: Pattern, argument: Entry, scope: Scope, e: Expr): void {
+        if (param.p === "var") { scope.set(param.name, { ...argument }); return; }
+        const a = resolve(argument.type);
         const parts: [Pattern, Ty][] = param.p === "cons" && a.k === "list" && a.items?.length
             ? [[param.head, a.items[0]], [param.tail, { k: "list", element: a.items.length > 1 ? union(a.items.slice(1)) : variable(), items: a.items.slice(1), length: constant(BigInt(a.items.length - 1)) }]]
             : [[param, argument.type]];
-        typingCall++;
-        try {
-            // A name takes the argument as it is, what is known of it too.
-            if (param.p === "var") scope.set(param.name, { ...argument });
-            else for (const [part, value] of parts) {
-                const typed = part.p !== "var" && part.p !== "wildcard", t = variable();
-                bind(part, t, scope, e);
-                convert(t, value, e, false, new Map(), typed, typed);
-            }
-            return infer(rest.length ? { t: "patternLambda", params: rest, body: clause!.body } : clause!.body, scope);
-        } finally { typingCall--; }
+        for (const [part, value] of parts) {
+            const typed = part.p !== "var" && part.p !== "wildcard", t = variable();
+            bind(part, t, scope, e);
+            convert(t, value, e, false, new Map(), typed, typed);
+        }
+    }
+    // A call typed for its arguments where that costs at most CALL_BUDGET
+    // steps; failing that, undefined, the steps given back.
+    function boundedTypedCall(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
+        const saved = requirements.length, before = budget, floor = callFloor;
+        callFloor = Math.max(floor, budget - CALL_BUDGET);
+        try { return typedCall(summary, args, e); }
+        catch (error) {
+            if (!error || typeof error !== "object" || !("message" in error)) throw error;
+            requirements.length = saved;
+            budget = before;
+            return undefined;
+        } finally { callFloor = floor; }
     }
     // Whether a type holds a list whose known items, or a record whose fields,
     // differ in type: what a function's own type (List (String | Int)) blurs.
@@ -2999,7 +3021,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const r = resolve(t);
         if (seen.has(r)) return false;
         seen.add(r);
-        const parts = r.k === "list" ? r.items ?? [] : r.k === "record" && !(r.fields instanceof ModuleFields) ? [...r.fields.values()] : [];
+        // (Only types known whole count: an unknown one is no different type.)
+        const parts = (r.k === "list" ? r.items ?? [] : r.k === "record" && !(r.fields instanceof ModuleFields) ? [...r.fields.values()] : [])
+            .filter(x => !variables(x).size && !waiting(x));
         return new Set(parts.map(x => text(x))).size > 1 || children(r).some(child => holdsMixed(child, seen));
     };
     function application(f: Ty, argument: Entry, e: Expr, builtin = false, ascribed = false): Ty {
@@ -3424,24 +3448,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return result;
         }
         if (f.k === "fn") {
-            const param = firstParameter(f) ? f.summary!.clauses[0].params[0] : undefined, given = resolve(argument.type);
-            if (param?.p === "cons" && given.k === "list" && given.items?.length) {
-                const typed = typedCall(f, argument, e);
+            const at = parameterAt(f), given = resolve(argument.type);
+            const params = at >= 0 ? f.summary!.clauses[0].params : [], param = params[at];
+            if (at === 0 && param.p === "cons" && given.k === "list" && given.items?.length) {
+                const typed = typedCall(f.summary!, [argument], e);
                 if (typed) return typed;
-            } else if (param?.p === "var" && !choosing && holdsMixed(given)) {
-                // A name given items of different types: the body typed for them,
-                // or (a body this cannot type, or only at a cost) the function's
-                // own type, the steps spent given back.
-                const saved = requirements.length, before = budget, floor = callFloor;
-                callFloor = Math.max(floor, budget - CALL_BUDGET);
-                try {
-                    const typed = typedCall(f, argument, e);
+            } else if (at >= 0 && !choosing) {
+                // A call given items of different types is typed for them (a
+                // partial one is the function of the rest that holds them), or (a
+                // body this cannot type, or only at a cost) takes the function's
+                // own type.
+                // (Names only: a pattern's parts check known values, 300 : UInt8,
+                // which typing does not.)
+                const args = [...f.applied ?? [], argument];
+                if (args.length === at + 1 && params.slice(0, at + 1).every(q => q.p === "var") && args.some(x => holdsMixed(x.type))) {
+                    const typed = boundedTypedCall(f.summary!, args, e);
                     if (typed) return typed;
-                } catch (error) {
-                    if (!error || typeof error !== "object" || !("message" in error)) throw error;
-                    requirements.length = saved;
-                    budget = before;
-                } finally { callFloor = floor; }
+                }
             }
             // A recursive call another clause's call has not typed for (ln [1]
             // in ln (String s) after ln ["a"]): the finished function decides it.
@@ -4234,7 +4257,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // known values (see application).
                 const condition = resolved.k === "intrinsic" && resolved.name === "refine" && resolved.args?.length === 1 && a.t === "lambda"
                     ? { fn: { e: a, env: [], scope } } : {};
-                const result = application(callee, { type: argumentType, ...valueEntry(a, scope), ...condition }, a, false, e.t === "app" && !!e.ascribed);
+                const entry: Entry = { type: argumentType, ...valueEntry(a, scope), ...condition };
+                let result = application(callee, entry, a, false, e.t === "app" && !!e.ascribed);
+                // A partial application of a function of one clause carries its
+                // arguments to the last (see typedCall).
+                const before = resolve(callee), after = resolve(result);
+                if (before.k === "fn" && after.k === "fn" && before.summary && after.summary === before.summary && parameterAt(after) > 0) {
+                    result = { ...after, applied: [...before.applied ?? [], entry] };
+                }
                 if (!callees.has(e)) noClauseMatches(e, scope);
                 // A partial application that leaves its call chain is an ordinary function value.
                 return callees.has(e) ? result : withoutShapes(result);
@@ -4709,13 +4739,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return !!entry && !entry.mono && (!!entry.clauses || !!entry.builtin);
     }
     // A copy of a function type's result chain without shapes or collected args.
-    function withoutShapes(type: Ty, seen = new Map<Ty, Ty>()): Ty {
+    // (One carrying its arguments, applied, keeps its definition: with them it
+    // says what the rest of the call does, see typedCall.)
+    function withoutShapes(type: Ty, seen = new Map<Ty, Ty>(), carried = false): Ty {
         const t = resolve(type);
         if (t.k !== "fn" || !t.shape && !t.args && !t.summary && resolve(t.output).k !== "fn") return type;
         if (seen.has(t)) return seen.get(t)!;
-        const result = { ...t, shape: undefined, args: undefined, summary: undefined };
+        const keep = carried || !!t.applied;
+        const result = { ...t, shape: undefined, args: undefined, summary: keep ? t.summary : undefined };
         seen.set(t, result);
-        result.output = withoutShapes(t.output, seen);
+        result.output = withoutShapes(t.output, seen, keep);
         return result;
     }
     // What the runtime knows about an argument's value from its static type.
