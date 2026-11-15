@@ -522,10 +522,18 @@ whose items differ in type: `f p = "k" ++ head p` takes `["a", 1]` and rejects
 `[1, "a"]`, its body typed for its arguments from that one on, a later one
 too (`g p q = p ++ head q` takes `"!" ["a", 1]`), also through a partial
 application kept as a value. An empty list is an item of its own type
-(`[[], "a"]` is mixed, whatever its element would be), and in a typed call it
-is known empty: taking its `head` is an error, as at runtime, and a `&&` or
-`||` whose left side is known does not run its right (`length (head p) == 0
-|| head (head p) > 1` takes it). A function of several clauses is typed so as
+(`[[], "a"]` is mixed, whatever its element would be).
+
+A list known empty, anywhere, has nothing to take apart: `head []`, or `head
+xs` after `xs = []`, is an error, as at runtime. A condition whose value is
+known takes its branch, and a `&&` or `||` whose left side is known its side,
+as the run does: the other, which never runs, is typed only where it can be,
+for what it tells (`x ? return [] : Err "no"` is a `Result`), and left out
+where it cannot (`False && head []`, `null xs ? 0 : head xs`, `length (head
+p) == 0 || head (head p) > 1` all pass); in a call typed for its arguments
+the other is left out, as a recursive call there may not end. A condition
+over a function's parameters is known only in such a call; its own
+definition types both branches. A function of several clauses is typed so as
 the run dispatches it: each clause that may take the arguments, up to one
 that certainly does (`f [] = ""; f (x :: _) = "k" ++ x` takes `["a", 1]`),
 the call any of their results. A typed part takes its argument converted and

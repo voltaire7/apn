@@ -3611,9 +3611,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (f.k === "fn") {
             const at = parameterAt(f), given = resolve(argument.type);
             const params = at >= 0 ? f.summary!.clauses[0].params : [], param = params[at];
-            // (A list known empty too, in a call typed for its arguments: it has
-            // nothing to take apart.)
-            if (at === 0 && param.p === "cons" && given.k === "list" && given.items && (given.items.length || typingCall > 0)) {
+            // (A list known empty too: it has nothing to take apart.)
+            if (at === 0 && param.p === "cons" && given.k === "list" && given.items) {
                 const typed = typedCall(f.summary!, [argument], e);
                 if (typed) return typed;
             } else if (at >= 0 && !choosing) {
@@ -4693,12 +4692,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return rec.fields.get(e.field)!;
             }
             case "ternary": {
-                // In a call typed for its arguments, a condition their known
-                // values decide takes its branch, as the run does (the
-                // function's own definition types both).
-                if (typingCall > 0) {
+                // A condition whose value is known takes its branch, as the run
+                // does: the other, which never runs, is typed only where it can
+                // be, for what it tells (x ? return [] : Err "no" is a Result),
+                // and left out where it cannot (False ? head [] : 0); in a call
+                // typed for its arguments, left out (a recursive call there may
+                // not end: f (n - 1) past n == 0). (A condition over a function's
+                // parameters is known only in such a call; its own definition
+                // types both.)
+                {
                     const known = peek(() => resolveKnown(computed(e.cond, scope)), {} as Known);
-                    if (known.boolean !== undefined) {
+                    if (known.boolean !== undefined && (typingCall > 0 || !succeeds(() => infer(known.boolean ? e.els : e.then, new Map(scope))))) {
                         // (Every call being typed now depends on these values.)
                         callFrames.forEach(frame => frame.decided = true);
                         infer(e.cond, scope);
@@ -4709,12 +4713,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "binop": {
                 if (e.reassociate) return infer(regrouped(e, scope), scope, expected);
-                // In a call typed for its arguments, a && or || its left side's
-                // known value decides gives that, the right side not run (False
-                // && head []), as a conditional takes its branch.
-                if (typingCall > 0 && (e.op === "&&" || e.op === "||") && builtinAt(e, scope)) {
+                // A && or || its left side's known value decides gives that, the
+                // right side not run (False && head []), as a conditional takes
+                // its branch.
+                if ((e.op === "&&" || e.op === "||") && builtinAt(e, scope)) {
                     const known = peek(() => resolveKnown(computed(e.l, scope)), {} as Known);
-                    if (known.boolean === (e.op === "||")) {
+                    if (known.boolean === (e.op === "||") && (typingCall > 0 || !succeeds(() => infer(e.r, new Map(scope))))) {
                         callFrames.forEach(frame => frame.decided = true);
                         infer(e.l, scope);
                         return atom("Bool");

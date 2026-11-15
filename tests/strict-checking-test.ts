@@ -163,6 +163,14 @@ for (const [source, error] of [
     ['f r = null r.xs ? 0 : head r.xs\nf [xs = [], n = "a"]', ""],
     ['f p = length (head p) == 0 || head (head p) > 1\nf [[], "a"]', ""],
     ['f p = True && head (head p)\nf [[], "a"]', "length mismatch"],
+    // Outside one too: an empty list is known empty, and a known condition,
+    // && or || takes its side, the other typed only where it can be.
+    ['head []', "length mismatch: expected at least 1, got 0"],
+    ['xs = []\nhead xs', "length mismatch: expected at least 1, got 0"],
+    ['xs = []\nnull xs ? 0 : head xs', ""],
+    ['False ? head [] : 0', ""],
+    ['print (False && head [])\nprint (True || head [])', ""],
+    ['x = True ? 1 : "a"\nx + 1', ""],
     // Calls a function decided are told apart by it.
     ['f g p = g 1 > 0 ? "k" ++ head p : "none"\n[f (x -> x - 5) [1, "a"], f (x -> x + 5) [1, "a"]]', "cannot append String and Int"],
     // A length a typed call cannot find is unknown, as anywhere: rejected.
