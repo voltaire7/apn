@@ -644,8 +644,9 @@ const QUICK_BUDGET = 2000;
 const DATA_KINDS = new Set(["list", "record", "variant", "map", "atom"]);
 // Inference work (unification steps) per top-level statement.
 const STATEMENT_BUDGET = 250000;
-// The steps typing one call for its argument may take (see typedCall).
-const CALL_BUDGET = 2000;
+// The steps typing one call for its argument may take (see typedCall), and
+// what running out of them says.
+const CALL_BUDGET = 2000, CALL_COST = "typing this call costs too much";
 function instantiate(entry: Entry): Ty {
     return entry.mono
         ? entry.type
@@ -812,7 +813,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let callFloor = 0;
     function spend(e?: Expr): void {
         if (--budget < callFloor) {
-            problem(budget < 0 ? "type checking limit exceeded; cannot establish the type" : "typing this call costs too much", e);
+            problem(budget < 0 ? "type checking limit exceeded; cannot establish the type" : CALL_COST, e);
         }
     }
     let requirements: Ty[] = [];
@@ -3010,12 +3011,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             param.v.forEach((q, n) => bindArgument(q, item(n), scope, e));
             return;
         }
-        // Any other pattern has its own type, the argument converting to it,
-        // and checks a known value as a call does (300 is no UInt8).
+        // Any other pattern has its own type, and the argument converts to it
+        // as a call of a function with that parameter converts it (a record's
+        // fields by name, a known value checked: 300 is no UInt8).
         const t = variable();
         bind(param, t, scope, e);
-        convert(t, argument.type, e, false, new Map(), true, true);
-        castPattern(param, argument, e, scope);
+        application({ k: "fn", input: t, output: t, coerce: true, pattern: param }, argument, e);
     }
     // A call of a function of several clauses typed for its arguments, as the
     // run dispatches it: each clause that may take them typed with them
@@ -3024,24 +3025,38 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function typedClauses(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
         const params = summary.clauses[0].params.length;
         if (args.length !== params) return undefined;
+        // A clause that certainly takes the arguments makes the call fail
+        // where it does; one that may not (its patterns or guard decide at
+        // the run) is left out where it fails, as the run may take another,
+        // and the call fails only where every one that may does.
         const results: Ty[] = [];
+        let failed: unknown;
         typingCall++;
         try {
             for (const { clause, matches } of possibleClauses(summary.clauses, args).sort((a, b) => a.clause.place - b.clause.place)) {
                 const scope: Scope = new Map(summary.scope);
                 if (!succeeds(() => clause.params.forEach((param, n) => bindArgument(param, args[n], new Map(scope), e)))) continue;
-                clause.params.forEach((param, n) => bindArgument(param, args[n], scope, e));
-                if (clause.guard) infer(clause.guard, scope);
-                results.push(infer(clause.body, scope));
-                if (matches && !clause.guard) break;
+                const certain = matches && !clause.guard;
+                try {
+                    clause.params.forEach((param, n) => bindArgument(param, args[n], scope, e));
+                    if (clause.guard) infer(clause.guard, scope);
+                    results.push(infer(clause.body, scope));
+                } catch (error) {
+                    if (certain || costly(error)) throw error;
+                    if (!error || typeof error !== "object" || !("message" in error)) throw error;
+                    failed ??= error;
+                }
+                if (certain) break;
             }
         } finally { typingCall--; }
+        if (!results.length && failed) throw failed;
         return results.length ? results.reduce((a, b) => choice(a, b, e)) : undefined;
     }
-    // A call typed for its arguments where that costs at most CALL_BUDGET
-    // steps; failing that, undefined, the steps given back.
-    // (One that leaves something unknown, as a length typing alone cannot
-    // find, is no better than the function's own type: it is given up too.)
+    // A call typed for its arguments, which fails where its body does. One
+    // that costs more than CALL_BUDGET steps, or leaves something unknown (a
+    // length typing alone cannot find), is no better than the function's own
+    // type: it is given up, undefined, the steps given back.
+    const costly = (error: unknown) => !!error && typeof error === "object" && "message" in error && error.message === CALL_COST;
     function boundedTypedCall(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
         const saved = requirements.length, before = budget, floor = callFloor, boundaries = dynamicBoundaries, unknown = firstUnknown, length = unknownLength;
         callFloor = Math.max(floor, budget - CALL_BUDGET);
@@ -3055,7 +3070,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const typed = typedCall(summary, args, e);
             return dynamicBoundaries > boundaries ? giveUp() : typed;
         } catch (error) {
-            if (!error || typeof error !== "object" || !("message" in error)) throw error;
+            if (!costly(error)) throw error;
             return giveUp();
         } finally { callFloor = floor; }
     }
@@ -5861,7 +5876,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // a cell.
     function possibleClauses<C extends ClauseOrder>(clauses: C[], entries: Entry[]): { clause: C; matches: boolean }[] {
         const ranked = clauses.map(c => ({ clause: c, ...peek(() => rankClause(c, entries), { low: -1000, high: Infinity, matches: false, fails: false }) }));
-        const sure = ranked.filter(r => r.matches);
+        // (A guarded clause may still pass the call on.)
+        const sure = ranked.filter(r => r.matches && !(r.clause as { guard?: Expr }).guard);
         const before = (a: typeof ranked[number], b: typeof ranked[number]) =>
             a.low > b.high || a.low >= b.high && a.clause.place < b.clause.place;
         return ranked.filter(r => !r.fails && !sure.some(d => d !== r && before(d, r)));
@@ -7213,6 +7229,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const items = left.items.map((item, n) => join(item, right.items![n]));
                 return { k: "list", element: items.length ? union(items) : variable(), items, length: constant(BigInt(items.length)) };
             }
+            // (Numbers of two types, a Float beside a Number, are either.)
+            const numbers = [left.element, right.element].map(resolve);
+            if (numbers.every(x => x.k === "atom" && NUMERIC_TYPES.includes(x.name))) return list(union([left.element, right.element]));
             if (!left.items?.length || !right.items?.length) { unify(left.element, right.element, e); return list(left.element); }
             return list(union([left.element, right.element]));
         }

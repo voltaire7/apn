@@ -97,6 +97,14 @@ for (const [source, error] of [
     ['g [(a : UInt8), (b : String)] = to String a ++ b\ng [3, "x"]', ""],
     ['g [(a : UInt8), (b : String)] = a\ng [300, "x"]', "value out of range for UInt8"],
     ['g [(a : UInt8), (b : String)] = a\ng _ = 0\ng [300, "x"]', ""],
+    // A failed typed call is the call's error: where a clause that certainly
+    // takes the arguments fails, or every one that may; one the run may pass
+    // over (its guard, or a value the run decides) is left out.
+    ['f p | length p > 5 = "long"\nf p = head p ++ "!"\nf [1, "a"]', "cannot append Int and String"],
+    ['f p | length p > 5 = "long"\nf p = head p ++ "!"\nf ["a", 1]', ""],
+    ['f p | isType Int (head p) = head p + 1\nf p = 0\nf ["a", 1]', ""],
+    ['g 0 p = head p + 1\ng n p = ""\nh n = g n ["a", 1]\nh 1', ""],
+    ['g 0 p = head p + 1\ng n p = head p + 2\nh n = g n ["a", 1]\nh 1', "cannot combine"],
 ] as const) Deno.test(`taking apart known items keeps their types: ${source}`, () => {
     const issues = checkSource(source, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
     if (error ? !issues.includes(error) : issues) throw new Error(issues || "accepted");
