@@ -1809,6 +1809,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!type || type.k !== "type" && type.k !== "fn" && type.k !== "intrinsic") typeVariable(name);
             }
             if (x.t === "block" && x.stmts.length === 1) return read(x.stmts[0]);
+            // _ is any type (Int -> _), as a type's argument is.
+            if (x.t === "placeholder") return variable();
             return x.t === "lambda" || x.t === "patternLambda" ? lambdaType(x, local, variables) : typeExpr(lift(x), local);
         };
         // f a with f a type variable: the applied type, under a fresh name.

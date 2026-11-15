@@ -4115,6 +4115,8 @@ export class Interpreter {
             || (this.isList(value) || value.kind === "record") && this.isTypeValue(value));
     }
     private typeIn(e: Expr, scope: Env, variables: Map<string, Value>): Value | undefined {
+        // _ as a type is any type (Int -> _), as it is a type's argument (List _).
+        if (e.t === "placeholder") return { kind: "type", name: "$any" };
         for (const name of freeTypeNames(e)) {
             if (!this.typeVariableName(name, scope)) continue;
             if (!variables.has(name)) variables.set(name, { kind: "type", name, variable: true });

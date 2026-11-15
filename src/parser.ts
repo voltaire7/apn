@@ -2227,12 +2227,13 @@ class Parser {
                     if (k > arity) throw new APNError("parse", `${name} is declared with ${arity} parameter${arity === 1 ? "" : "s"}, but a clause takes ${k}`, { pos, len: name.length });
                     const params = clause.params.map((p, i) => typedPattern(p, pieces[i]));
                     const result = k === arity ? pieces[arity] : declaration.rest(k);
-                    // A result naming a type variable no parameter binds is
-                    // checked by inference, not by a claim the clause can read.
+                    // A result naming a type variable no parameter binds, or _
+                    // (any), is checked by inference, not by a claim the clause
+                    // can read.
                     const bound = new Set(params.flatMap(typedNames));
                     const free = freeLowercase(result).filter(x => !bound.has(x));
                     const body = k < arity || isFunctionType(result) ? ascribed(clause.body, result, this.freshName())
-                        : free.length ? clause.body : { t: "app" as const, f: result, a: clause.body, ascribed: true as const };
+                        : free.length || result.t === "placeholder" ? clause.body : { t: "app" as const, f: result, a: clause.body, ascribed: true as const };
                     return { ...clause, params, body };
                 });
             }

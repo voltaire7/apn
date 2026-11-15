@@ -370,7 +370,8 @@ the claim of its body, proved per clause (see
 above is a length mismatch. A clause with fewer parameters than the type
 takes (`inc : Int -> Int` then `inc = (+ 1)`) has the rest of the type as its
 body's. A result naming a type variable no parameter binds (`List b` beside
-`(a -> b)`) is left to inference.
+`(a -> b)`) is left to inference, and so is `_`, any type: `func : Int -> Int
+-> _` declares only the parameters.
 
 `e : T` is `e` as a value of `T`: `e` itself if it is one, else what a
 conversion to `T` makes of it, and an error if none does. The conversions are

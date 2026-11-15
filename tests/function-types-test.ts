@@ -48,6 +48,9 @@ for (const [name, source, expected] of [
     ["a contract with type variables", "applyTwice (f : a -> a) x = f (f x)\nprint (applyTwice (* 3) 2)\nfirst (f : a -> b -> a) = f 1 \"x\"\nprint (first (x, y -> x))",
         ["18", "1"]],
     ["isType reads a lambda as a type", "print (isType (Int -> Int) (+ 1))\nprint (isType (a -> b) 5)", ["True", "False"]],
+    // _ is any type there too, a result's as a parameter's.
+    ["_ as a function type's result", 'func : Int -> Int -> _\nfunc a b = [a,b]\nprint (func 1 2)\nk = ((x -> x) : Int -> _)\nprint (k 3)\nprint (isType (Int -> _) (x -> x))',
+        ["[1,2]", "3", "True"]],
     ["a constructor field of a function type", "Counter s a = | MkCounter (s -> [a,s])\nrunCounter (MkCounter f) s = f s\nprint (runCounter (MkCounter (s -> [s, s + 1])) 5)",
         ["[5,6]"]],
 ] as const) Deno.test(`function types: ${name}`, () => {

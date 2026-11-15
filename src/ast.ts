@@ -82,10 +82,12 @@ export type DataVariant = { tag: string; arity: number; fields?: Expr[]; result?
 export const TYPE_RANGE = "a range of a type repeats it, without a step or bound: [Int..]";
 // Whether an expression holds _ as a value (a constructor's logic does), not
 // as the any a type is given (List _).
+// (A type's _, in an ascription (x : Int -> _), is any type, not the value.)
 export function holdsPlaceholder(e: unknown): boolean {
     if (!e || typeof e !== "object") return false;
-    const node = e as { t?: string; f?: Expr; name?: string };
+    const node = e as { t?: string; f?: Expr; a?: Expr; name?: string; ascribed?: boolean };
     if (node.t === "placeholder") return true;
+    if (node.t === "app" && node.ascribed) return holdsPlaceholder(node.a);
     if (node.t === "app") {
         let head = e as Expr;
         while (head.t === "app") head = head.f;
@@ -99,7 +101,7 @@ export function fillPlaceholders(e: Expr, by: Expr): Expr {
     if (e.t === "placeholder") return by;
     const go = (x: Record<string, unknown>): void => {
         for (const [key, child] of Object.entries(x)) {
-            if (!child || typeof child !== "object" || child === by) continue;
+            if (!child || typeof child !== "object" || child === by || x.t === "app" && x.ascribed && key === "f") continue;
             if ((child as { t?: string }).t === "placeholder") x[key] = by;
             else go(child as Record<string, unknown>);
         }
