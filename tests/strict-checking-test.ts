@@ -146,6 +146,12 @@ for (const [source, error] of [
     ['f g p = g 1 > 0 ? "k" ++ head p : "none"\nf (x -> x + 5) [1, "a"]', "cannot append String and Int"],
     ['neg x = 0 - x\nf g p = g 1 > 0 ? "k" ++ head p : "none"\nf neg [1, "a"]', ""],
     ['f p g = g p ? "k" ++ head p : "none"\nf [1, "a"] (xs -> length xs > 5)', ""],
+    // Equality between values of different kinds is False, as at runtime; records
+    // compare by their fields, in any order.
+    ['f g p = g (head p) ? "k" ++ head p : "none"\nf (x -> x == "a") [1, "a"]', ""],
+    ['f g p = g (head p) ? "k" ++ head p : "none"\nf (x -> x != "a") [1, "a"]', "cannot append String and Int"],
+    ['f r = r == [a = 1] ? "k" ++ r.a : "none"\nf [b = "x", a = 1]', ""],
+    ['f r = r == [a = 1, b = "x"] ? "k" ++ r.a : "none"\nf [b = "x", a = 1]', "cannot append String and Int"],
     // Calls a function decided are told apart by it.
     ['f g p = g 1 > 0 ? "k" ++ head p : "none"\n[f (x -> x - 5) [1, "a"], f (x -> x + 5) [1, "a"]]', "cannot append String and Int"],
     // A length a typed call cannot find is unknown, as anywhere: rejected.

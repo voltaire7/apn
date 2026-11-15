@@ -6040,9 +6040,36 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return dynamic;
     }
     // Whether two known values are equal, as the runtime compares them.
+    // The kind of value a known one is, where that is known: values of two
+    // kinds are never equal (1 == "a", "" == [], [a = 1] == [1]), as at runtime.
+    function knownKind(k: Known): string | undefined {
+        if (numericOf(k) !== undefined) return "number";
+        if (k.string !== undefined) return "string";
+        if (k.char !== undefined) return "char";
+        if (k.boolean !== undefined) return "Bool";
+        if (k.fields) return "record";
+        if (k.tag !== undefined) return "constructor";
+        if (k.fn) return "function";
+        if (k.items || k.cell || k.size !== undefined) return "list";
+        return undefined;
+    }
     function equalKnown(a: Known | undefined, b: Known | undefined): boolean | undefined {
         a = readMutable(a); b = readMutable(b);
         if (!a || !b) return undefined;
+        const kinds = [knownKind(a), knownKind(b)];
+        if (kinds[0] && kinds[1] && kinds[0] !== kinds[1]) return false;
+        // Records are equal where their fields are, in any order.
+        if (a.fields && b.fields) {
+            const right = new Map(b.fields);
+            if (a.fields.length !== right.size || a.fields.some(([key]) => !right.has(key))) return false;
+            let all: boolean | undefined = true;
+            for (const [key, value] of a.fields) {
+                const same = equalKnown(value, right.get(key));
+                if (same === false) return false;
+                if (same === undefined) all = undefined;
+            }
+            return all;
+        }
         const x = numericOf(a), y = numericOf(b);
         if (x !== undefined && y !== undefined) {
             try { return equalNumbers(x, y); } catch { return undefined; }
