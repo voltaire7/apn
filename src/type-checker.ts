@@ -2326,6 +2326,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (scope.has(op) ? builtinOperator(scope.get(op)!.type) !== "::" : op !== "::") {
                     problem(`'${op}' is not a constructor, so it cannot take a value apart`, e, `bind it to a two-field constructor, as in \`(${op}) = Cons\``);
                 }
+                // A typed head in a pattern being defined has its own type: where
+                // the rest's items differ from it ((s : String) :: (n : Int) :: _),
+                // the list holds either.
+                if (resolve(expected).k === "var" && p.head.p !== "var" && p.head.p !== "wildcard") {
+                    const h = variable(), b = variable();
+                    bind(p.head, h, scope, e, bound);
+                    bind(p.tail, list(b), scope, e, bound);
+                    const same = succeeds(() => unify(copy(h), copy(b), e));
+                    if (same) unify(h, b, e);
+                    unify(list(same ? h : union([h, b])), expected, e);
+                    return;
+                }
                 const a = variable(), t = list(a);
                 unify(t, expected, e);
                 const vector = resolve(expected);
@@ -2940,21 +2952,26 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const t = field && resolve(field), value = t?.k === "type" ? resolve(t.value) : undefined;
         return value?.k === "atom" && value.name === "Type";
     }
-    // A function of one clause taking a list apart into names (head (x :: _) =
-    // x), given a list whose items are known: its body's type with the names
-    // bound to them, so head ["a", 1] is a String. (A typed part converts at
-    // a call, which binding does not, so it is left to the call. Each call
-    // takes one item off, so a recursive one ends.)
+    // A function of one clause taking a list apart (head (x :: _) = x), given a
+    // list whose items are known: its body's type with each part of the
+    // pattern bound as the call binds it, so head ["a", 1] is a String. A part
+    // has the type its pattern gives (a name any, (x : Float) a Float), and its
+    // item converts to it as an argument does. (Each call takes one item off,
+    // so a recursive one ends.)
     let takingApart = 0;
     function takenApart(f: Extract<Ty, { k: "fn" }>, argument: Entry, e: Expr): Ty | undefined {
         const clause = f.summary?.clauses.length === 1 ? f.summary.clauses[0] : undefined;
-        const a = resolve(argument.type);
-        const param = clause?.params.length === 1 ? clause.params[0] : undefined, named = (q: Pattern) => q.p === "var" || q.p === "wildcard";
-        if (param?.p !== "cons" || !named(param.head) || !named(param.tail) || a.k !== "list" || !a.items?.length || takingApart > 64) return undefined;
-        const scope: Scope = new Map(f.summary!.scope);
+        const param = clause?.params.length === 1 ? clause.params[0] : undefined, a = resolve(argument.type);
+        if (param?.p !== "cons" || a.k !== "list" || !a.items?.length || takingApart > 64) return undefined;
+        const scope: Scope = new Map(f.summary!.scope), rest = a.items.slice(1);
+        const parts: [Pattern, Ty][] = [[param.head, a.items[0]], [param.tail, { k: "list", element: rest.length ? union(rest) : variable(), items: rest, length: constant(BigInt(rest.length)) }]];
         takingApart++;
         try {
-            bind(param, a, scope, e);
+            for (const [part, item] of parts) {
+                const typed = part.p !== "var" && part.p !== "wildcard", t = variable();
+                bind(part, t, scope, e);
+                convert(t, item, e, false, new Map(), typed, typed);
+            }
             return infer(clause!.body, scope);
         } finally { takingApart--; }
     }

@@ -512,8 +512,11 @@ element type. Length-preserving operations keep their input's length: `map`,
 `zipWithIndex`, and `forceList`. `pairs record` has one pair per field, each
 a `String` key and its field's value. Taking a list with known items apart
 keeps their types: `head ["a", 1]` is a `String`, `tail` the rest of the items,
-and so is a `x :: rest` pattern and a function of one clause that only takes
-its list apart into names, as `head (x :: _) = x` does. Your own
+and so is a `x :: rest` pattern and a function of one clause taking its list
+apart, as `head (x :: _) = x` does. A typed part takes its item converted, as
+an argument is (`g ((x : Float) :: _) = x` gives `g [1,2]` a `Float`), and a
+typed head keeps its own type beside the rest's: `(s : String) :: (n : Int) ::
+_` takes a list of either, the items checked in order where they are known. Your own
 functions carry lengths through too, including nested ones: a result that is an
 argument, a list literal of such results, or an argument passed through those
 operations (`twice xs = xs * x -> x * 2`, `h a b = [map f a, map f b]`). A
