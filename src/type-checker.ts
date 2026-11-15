@@ -2968,9 +2968,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Whether code that never runs (a branch a known condition passes over)
     // types, as a trial: what it tells stays, a failure is no error. Its calls
-    // take their functions' own types, not typed for their arguments, and its
-    // values are not evaluated (a recursive call there may not end: f (p ++ p)
-    // (n - 1) past n == 0); it takes at most CALL_BUDGET steps, given back.
+    // take their functions' own types, not typed for their arguments (a
+    // recursive one there may not end: f (p ++ p) (n - 1) past n == 0), its
+    // values are evaluated as anywhere, within the evaluation's own bound,
+    // and it takes at most CALL_BUDGET steps, given back.
     let inTrial = 0;
     function typesInTrial(e: Expr, scope: Scope): boolean {
         const floor = callFloor, before = budget;
@@ -5844,8 +5845,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Calls of a widened constructor no rule takes (see infer's app).
     const ownCalls = new WeakSet<Expr>();
     function computed(e: Expr, scope: Scope): Known {
-        // (A trial types code that never runs: it evaluates none of it.)
-        if (inTrial) return {};
         const names = new Set<string>();
         const collect = (x: Expr): void => {
             if (x.t === "var" && scope.get(x.name)?.ref) names.add(x.name);
@@ -6284,7 +6283,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // same bindings of the names it mentions: nested arguments (f (g (h x)))
     // are each checked as call arguments, in copies of one scope.
     function evaluateShared(e: Expr, scope: Scope, depth: number): Known | undefined {
-        if (inTrial) return undefined;
         // A part of a statement that writes top-level cells has the value the
         // statement's static run computed for it, in the run's order.
         if (!executing && statementWrote && executedParts.has(e)) { cellEvents++; return executedParts.get(e); }
@@ -6546,7 +6544,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (op === "++") {
             const l = value(left), r = value(right);
             if (l?.string !== undefined && r?.string !== undefined) return { string: l.string + r.string };
-            if (l?.items && r?.items) return known([...l.items, ...r.items]);
+            // (A step for each item joined: a list that doubles at each call
+            // runs out of steps as soon as of items.)
+            if (l?.items && r?.items) {
+                for (let n = 0; n < l.items.length + r.items.length; n++) if (!spendEvaluation(depth)) return undefined;
+                return known([...l.items, ...r.items]);
+            }
             const size = l?.size !== undefined && r?.size !== undefined ? { size: l.size + r.size } : {};
             if (!l?.items && !l?.cell) return l?.size !== undefined && r?.size !== undefined ? size : undefined;
             const append = (rest: Known): Known => lazyList(() => {
