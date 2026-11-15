@@ -2987,17 +2987,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // calls branch) is the type that typing finds, not typed once more; one
     // given other types is typed for them in turn.
     const typingCalls = new WeakMap<Summary, Map<string, CallFrame[]>>();
-    // A known scalar of a value: a number, string, character, Bool or tag.
-    function knownScalar(k: Known): Known {
-        const r = resolveKnown(k);
-        return {
-            ...r.index && !r.index.terms.size ? { index: r.index } : {}, ...r.boolean === undefined ? {} : { boolean: r.boolean },
-            ...r.string === undefined ? {} : { string: r.string }, ...r.char === undefined ? {} : { char: r.char },
-            ...r.float === undefined ? {} : { float: r.float }, ...r.number ? { number: r.number } : {},
-            ...r.tag && !r.payload?.length ? { tag: r.tag } : {},
-        };
-    }
-    // A known value's scalars and shape, as a key (a value not known is "").
+    // A known value's scalars, items and fields, as a key (a value not known
+    // is "").
     function knownPrint(k: Known, depth = 0): string {
         const r = resolveKnown(k);
         const parts = [
@@ -3006,6 +2997,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             r.float === undefined ? "" : `f${r.float}`, r.number ? `n${numberText(r.number)}` : "", r.tag ? `t${r.tag}` : "",
             r.size === undefined ? "" : `z${r.size}`,
             depth < 3 && r.items ? `[${r.items.map(x => knownPrint(x, depth + 1)).join(",")}]` : "",
+            depth < 3 && r.fields ? `{${r.fields.map(([key, x]) => `${key}:${knownPrint(x, depth + 1)}`).join(",")}}` : "",
         ];
         return parts.join("");
     }
@@ -3075,11 +3067,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         } finally { typingCall--; }
     }
     function bindArgument(param: Pattern, argument: Entry, scope: Scope, e: Expr): void {
-        // (A name takes its argument's type and, where its value is a known
-        // scalar, the value, which decides the body's conditionals: see
-        // "ternary". A known record, list or function stays unevaluated: its
-        // actions would run here.)
-        if (param.p === "var") { scope.set(param.name, { ...knownScalar(argument), type: argument.type }); return; }
+        // (A name takes its argument as it is, what is known of its value too,
+        // a record's fields and a list's items as well as a scalar, which
+        // decides the body's conditionals: see "ternary".)
+        if (param.p === "var") { scope.set(param.name, { ...argument }); return; }
         if (param.p === "wildcard") return;
         const a = resolve(argument.type);
         // A list whose items are known: its first and the rest, each its own,

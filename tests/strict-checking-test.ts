@@ -136,6 +136,11 @@ for (const [source, error] of [
     ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n == 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 3', "cannot append String and Int"],
     ['g 0 p = head p + 1\ng n p = ""\ng 0 ["a", 1]', "cannot combine"],
     ['g 0 p = head p + 1\ng n p = ""\ng 1 ["a", 1]', ""],
+    // A known list's items and a known record's fields decide them too.
+    ['f p = length p == 3 ? "k" ++ head p : "none"\nf [1, "a"]', ""],
+    ['f p = length p == 2 ? "k" ++ head p : "none"\nf [1, "a"]', "cannot append String and Int"],
+    ['f r = r.on ? "k" ++ r.name : "off"\nf [on = False, name = 1]', ""],
+    ['f r = r.on ? "k" ++ r.name : "off"\nf [on = True, name = 1]', "cannot append String and Int"],
     // A length a typed call cannot find is unknown, as anywhere: rejected.
     ['f [a,b] = a\ng p = f (filter (x -> True) p)\ng [1, "a"]', "cannot establish static types"],
 ] as const) Deno.test(`a recursive typed call ends: ${source}`, () => {
