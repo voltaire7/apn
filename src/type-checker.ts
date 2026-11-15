@@ -3090,23 +3090,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return results.length ? results.reduce((a, b) => choice(a, b, e)) : undefined;
     }
     // A call typed for its arguments, which fails where its body does, and
-    // where typing it takes more than CALL_BUDGET steps. One that leaves
-    // something unknown (a length typing alone cannot find) is no better than
-    // the function's own type: it is given up, undefined.
+    // where typing it takes more than CALL_BUDGET steps. What it leaves
+    // unknown (a length typing alone cannot find) is unknown as anywhere: a
+    // boundary, which a checked run rejects.
     const costly = (error: unknown) => !!error && typeof error === "object" && "message" in error && error.message === CALL_COST;
     function boundedTypedCall(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
-        const saved = requirements.length, before = budget, floor = callFloor, boundaries = dynamicBoundaries, unknown = firstUnknown, length = unknownLength;
+        const floor = callFloor;
         callFloor = Math.max(floor, budget - CALL_BUDGET);
-        const giveUp = () => {
-            requirements.length = saved;
-            budget = before;
-            dynamicBoundaries = boundaries; firstUnknown = unknown; unknownLength = length;
-            return undefined;
-        };
-        try {
-            const typed = typedCall(summary, args, e);
-            return dynamicBoundaries > boundaries ? giveUp() : typed;
-        } catch (error) {
+        try { return typedCall(summary, args, e); }
+        catch (error) {
             if (!costly(error)) throw error;
             callFloor = floor;
             return problem(`typing this call for its arguments takes more than ${CALL_BUDGET} steps`, e,

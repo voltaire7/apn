@@ -112,6 +112,7 @@ for (const [source, error] of [
 // Typing a call for its arguments past the step bound is an error; items of
 // one type (List Dynamic) leave them to the run. A recursive call given new
 // types (a list that doubles) takes the function's own type, so typing ends.
+// A length it leaves unknown is rejected as any other.
 {
     const body = ["g p = [", ...Array.from({ length: 600 }, () => "    " + Array(4).fill('head p ++ "!"').join(", ")), "]"].join("\n");
     Deno.test("a typed call past the step bound is an error", () => {
@@ -126,6 +127,8 @@ for (const [source, error] of [
 for (const [source, error] of [
     ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\nf ["a", 1] 12', ""],
     ['f p n = n == 0 ? "k" ++ head p : f (p ++ p) (n - 1)\nf [1, "a"] 12', "cannot append String and Int"],
+    // A length a typed call cannot find is unknown, as anywhere: rejected.
+    ['f [a,b] = a\ng p = f (filter (x -> True) p)\ng [1, "a"]', "cannot establish static types"],
 ] as const) Deno.test(`a recursive typed call ends: ${source}`, () => {
     const issues = checkSource(source, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
     if (error ? !issues.includes(error) : issues) throw new Error(issues || "accepted");
