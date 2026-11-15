@@ -1321,7 +1321,7 @@ print (to Bool True)     # => True
 print ("hi" : String)    # => hi
 print ('a' : Char)       # => 'a'
 print []                # => []
-print ([1,2] : List)    # => [1,2]
+print ([1,2] : List _)  # => [1,2]
 print ([x = 1] : Record) # => [x = 1]
 print ((x -> x + 1 : Function) 2) # => 3
 print (Bool : Type)      # => Bool

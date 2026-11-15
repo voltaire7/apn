@@ -103,6 +103,12 @@ export function withArticle(noun: string): string {
 
 // A type applied to a value as written (Int x): the message and the
 // spellings that say it.
+// A type of values is a type given all its parameters: Option _, not Option
+// (which is a function of types), wherever it is the type of a value.
+export function missingTypeParameters(name: string, given: string[], missing: number): { message: string; hint: string } {
+    const total = given.length + missing, all = [name, ...given, ...Array.from({ length: missing }, () => "_")].join(" ");
+    return { message: `${name} takes ${total} type parameter${total === 1 ? "" : "s"}; a type is given all of them`, hint: `(x : ${all})` };
+}
 export function typeApplied(type: string, written = type): { message: string; hint: string } {
     const convert = type === "Dynamic" ? "" : `, or convert it (to ${/\s/.test(written) ? `(${written})` : written} x)`;
     return { message: `${type} is a type, not a function`, hint: `ascribe a value (x : ${written})${convert}` };

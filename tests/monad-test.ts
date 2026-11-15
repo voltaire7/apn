@@ -109,7 +109,7 @@ for (const [name, source, expected] of [
         ["[Some 1]\nSome (Some 1)\nOk (Some 1)", "Some (Some -1)", "Some [1,2]"]],
     ["overloads chosen by result type", 'f x = 1\nf x = "one"\nprint (f 0)\nprint (f 0 : Int)\nprint (f 0 : String)\nprint (typeOf (f 0))\ng (n : Int) = n + 1\nprint (g (f 0))',
         ["1\n\"one\"", "1", "one", "Int | String", "2"]],
-    ["return prints as the list's value, then its overloads applied", 'std <- import "std"; use std.option\nprint (return 5)\nprint (return 1 : Option)',
+    ["return prints as the list's value, then its overloads applied", 'std <- import "std"; use std.option\nprint (return 5)\nprint (return 1 : Option _)',
         ["[5]\nSome 5\nOk 5", "Some 1"]],
     ["partly applied functions show their arguments", "addOp = (+)\nprint (addOp 1)\nprint (+ 1)\nf a b = a + b\nprint (f 1)\ng = x, y, z -> x * y * z\nprint (g 2 3)",
         ["(1 +)", "(+ 1)", "b -> 1 + b", "z -> 2 * 3 * z"]],
@@ -124,7 +124,7 @@ for (const [name, source, expected] of [
         ["6", "[1,2]", "ran"]],
     ["guard stops a list, Option or Result block; empty is decided by its context", 'std <- import "std"; use std.[option,number]\nevens = {\n    x <- [1..6]\n    guard (x % 2 == 0)\n    return x\n}\nprint evens\npositive n = {\n    _ <- Some n\n    guard (n > 0)\n    return n\n}\nprint [positive 3, positive -1]\nprint (empty : Option Int)\nprint (empty : List Int)\nprint empty\ncheck n = {\n    _ <- Ok n\n    guard (n > 0)\n    return n\n}\nprint [check 1, check 0]\nhalf n = {\n    guard (n % 2 == 0)\n    return (n / 2)\n} : Result Int String\nprint [half 4, half 3, ({ guard False; return 1 } : Option Int)]',
         ["[2,4,6]", "[Some 3, None]", "None", "[]", '[]\nNone\nErr "empty"', '[Ok 1, Err "guard failed: n > 0"]', '[Ok 2, Err "guard failed: n % 2 == 0", None]']],
-    ["when and unless work in any monad", 'std <- import "std"; use std.option\nprint (unless False (Err "no"))\nprint (when False (Some 1) : Option)\nwhen True (print "ran")',
+    ["when and unless work in any monad", 'std <- import "std"; use std.option\nprint (unless False (Err "no"))\nprint (when False (Some 1) : Option _)\nwhen True (print "ran")',
         ['Err "no"', "Some []", "ran"]],
     // As Haskell's: m (List x) in the elements' monad, each in turn.
     ["sequence and mapM work in any monad", 'std <- import "std"; use std.option\nprint (sequence [Some 1, Some "a"])\nprint (sequence [Some 1, None])\nprint (sequence [[1,2],[3,4]])\nprint (mapM (x -> x > 0 ? Ok x : Err x) [1,-2,-3])\nxs <- mapM (x -> return (x * 2)) [1,2]\nprint (xs 1 + 1)\nprint (typeOf sequence)',

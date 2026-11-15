@@ -8,8 +8,8 @@ import { IMPORT_ONE, standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { builtinContains, castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_CLASSES, NUMERIC_TYPES, OWN_SCALAR_TYPES, numericWithin, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
-import { ACTION_SHOWN, APNError, didYouMean, formatFileReadError, placeholderError, typeApplied, withArticle } from "./errors.ts";
-import { bindingItem, DEFAULT_FIXITY, getPreludeUsed, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
+import { ACTION_SHOWN, APNError, didYouMean, formatFileReadError, missingTypeParameters, placeholderError, typeApplied, withArticle } from "./errors.ts";
+import { bindingItem, DEFAULT_FIXITY, exprToSource, getPreludeUsed, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
 import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
@@ -3932,8 +3932,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return infer(call, scope, expected);
                 }
                 const a = e.t === "app" ? e.a : e.x;
-                // isType's first argument is a type: a lambda there is read as one.
+                // isType's first argument is a type: a lambda there is read as
+                // one. It is the type of values, given all its parameters.
                 const rule = denotes(e.f, scope);
+                if (e.t === "app" && e.f.t === "app" && denotes(e.f.f, scope) === "isType") valuesType(e.f.a, scope);
+                if (e.t === "app" && e.ascribed) valuesType(e.f, scope);
                 const typeArgument = e.t === "app" && rule === "isType" ? lambdaLiteral(a) : undefined;
                 if (typeArgument) {
                     const isType = scope.get((e.f as { name: string }).name)!;
@@ -6826,6 +6829,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // A name in it is free unless it names a type: a type variable, or a
     // length, is one whether or not an earlier pattern bound it.
+    // A type written as the type of values ((x : T), isType T x) is given all
+    // its parameters: Option _, not Option, which is a function of types.
+    function valuesType(type: Expr, scope: Scope): void {
+        const args: Expr[] = [];
+        let head = type;
+        while (head.t === "block" && head.style === "(" && head.stmts.length === 1) head = head.stmts[0] as Expr;
+        for (; head.t === "app"; head = head.f) args.unshift(head.a);
+        if (head.t !== "var" || !/^[A-Z]/.test(head.name)) return;
+        const entry = scope.get(head.name), t = entry && resolve(entry.type);
+        if (t?.k !== "type" || t.applied || resolve(t.value).k === "variant" && (resolve(t.value) as { indexed?: boolean }).indexed) return;
+        const missing = typeParameters(t) - args.length;
+        if (missing <= 0) return;
+        const { message, hint } = missingTypeParameters(head.name, args.map(a => exprToSource(a)), missing);
+        problem(message, type, hint);
+    }
     function freeListType(type: Expr, scope: Scope): boolean {
         const args: Expr[] = [];
         let head = type;

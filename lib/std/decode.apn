@@ -58,4 +58,4 @@ at path decoder = path ~ [
     name :: rest -> field name (at rest decoder)
 ]
 list decoder = Decoder (value ->
-    isType List value ? _all (map (decodeValue decoder) value) : Err "Expecting a LIST")
+    isType (List _) value ? _all (map (decodeValue decoder) value) : Err "Expecting a LIST")

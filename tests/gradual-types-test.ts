@@ -155,7 +155,7 @@ Deno.test("vector checking follows lossless element conversion", () => {
 });
 Deno.test("first-class builtin constructors remain checkable", () => {
     const source =
-        "a = [1,2] : List\nb = [x = 1] : Record\nc = x -> x : Function\nv = [1,2] : Vect 2 (Int : Type)\nm = Mutable 1";
+        "a = [1,2] : List _\nb = [x = 1] : Record\nc = x -> x : Function\nv = [1,2] : Vect 2 (Int : Type)\nm = Mutable 1";
     const result = checkSource(source);
     if (result.issues.length) throw new Error(JSON.stringify(result));
 });

@@ -395,12 +395,14 @@ passed where a function goes (`f t = t 1`) are errors, `5 : Int` ascribes and
 `Option Int`, a computed `Sized 2`): until given them it is a function of types,
 as any function is (`Option : Type -> Type`, `map Option [Int,String]` is
 `[Option Int, Option String]`), and a constructor is a function that does not
-evaluate (`map Box [1,2]`). And `HashMap`, `Mutable` and `Pointer`,
-types that are their own constructors, build their values (`([...] : HashMap _ _)`,
-`Mutable 0`). A typed pattern writes its type after the value: `(Int x)`,
-`((T) p)` and `(t x)` are errors whose hint is `(x : Int)`. A type is given
-every parameter it takes, `_` for any (`(xs : List _)`): unapplied it is a
-function, so `(xs : List)` is an error, as is any name used with another arity.
+evaluate (`map Box [1,2]`). And `Mutable` and `Pointer`, types that are their
+own constructors, build their values (`Mutable 0`). A typed pattern writes its
+type after the value: `(Int x)`, `((T) p)` and `(t x)` are errors whose hint is
+`(x : Int)`. A type of values is given every parameter it takes, `_` for any:
+unapplied it is a function of types, so `(xs : List)`, `([1] : List)` and
+`isType Option x` are errors (write `List _`, `Option _`), as is any name used
+with another arity. `_` reads nothing: `isType (Option _) (Some missing)` is
+`True`.
 
 ### Code
 

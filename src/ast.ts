@@ -1,6 +1,6 @@
 import type { Numeric, Real } from "./numbers.ts";
 import type { DefClause } from "./types.ts";
-import { APNError } from "./errors.ts";
+import { APNError, missingTypeParameters } from "./errors.ts";
 
 // ---------------- AST ----------------
 
@@ -582,8 +582,8 @@ export function rewriteTypedPatterns(node: unknown, head: (tag: string) => Patte
     if (kind.kind === "type") {
         if (given.length < kind.arity) {
             const written = (q: Pattern): string => q.p === "var" ? q.name : q.p === "int" ? String(q.v) : q.p === "constr" && !q.args.length ? q.tag : "_";
-            const all = [tag, ...given.map(written), ...Array.from({ length: kind.arity - given.length }, () => "_")].join(" ");
-            throw new APNError("type", `${tag} takes ${kind.arity + given.length} type parameter${kind.arity + given.length === 1 ? "" : "s"}; a type is given all of them`, { hint: `(x : ${all})` });
+            const { message, hint } = missingTypeParameters(tag, given.map(written), kind.arity - given.length);
+            throw new APNError("type", message, { hint });
         }
         return;
     }

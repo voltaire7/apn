@@ -16,7 +16,7 @@ import { parseLiteral, textNatives } from "./text-natives.ts";
 import { bundledText, IMPORT_ONE, loadPath, type ModuleFile, readLoad, resolveModule, sourcePath, unknownModule } from "./modules.ts";
 import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_CLASSES, NUMERIC_TYPES, OWN_SCALAR_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
-import { ACTION_SHOWN, APNError, didYouMean, placeholderError, typeApplied, withArticle } from "./errors.ts";
+import { ACTION_SHOWN, APNError, didYouMean, missingTypeParameters, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { type Alternative, type Binding, clausePlaces, listRole, readPatterns, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, declaresNames, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
@@ -1607,7 +1607,7 @@ export class Interpreter {
                         // constructor named as its type is the type there (Point, Box Int).
                         const ascribed = e.ascribed ? this.reference(head) : undefined;
                         const type = ascribed && (this.sharedType(ascribed) ?? ascribed);
-                        if (type?.kind === "type") { r = this.typeValue(type, argument); break; }
+                        if (type?.kind === "type") { r = this.typeValue(this.valuesType(type), argument); break; }
                         // A function type's member is a contract (f : Int -> Int).
                         if (type?.kind === "functionType") { r = this.conform(type, argument); break; }
                         // A record or list of types makes its value ([] : [v : Int]).
@@ -4348,7 +4348,13 @@ export class Interpreter {
                 type.family.parameters?.forEach((name, index) => scope.setLocal(name, arguments_?.[index] ?? { kind: "type", name: "$any" }));
                 const fields = type.family.fields?.get(value.tag) ?? [];
                 const caller = this.env; this.env = scope;
-                try { return fields.every((field, index) => this.belongsToType(this.asType(this.eval(field)) ?? this.eval(field), payloads[index])); }
+                // (A field of _ or a type variable takes any value, unread.)
+                try {
+                    return fields.every((field, index) => {
+                        const type = this.asType(this.eval(field)) ?? this.eval(field);
+                        return type.kind === "type" && (type.variable || this.isAny(type)) || this.belongsToType(type, payloads[index]);
+                    });
+                }
                 finally { this.env = caller; }
             }
             return this.matchesValueType(type.name, type.name === "Mutable" ? value : this.demand(value));
@@ -4467,7 +4473,7 @@ export class Interpreter {
             const test: Value = { kind: "native", name: "$constructed", arity: 1, applied: [], invoke: ([given]) => {
                 const v = this.dataValue(given);
                 return mkBool(v.kind === "variant" && v.family === family && v.tag === tag && v.v.length === args.length &&
-                    args.every((arg, n) => arg.kind === "type" && arg.variable || this.belongsToType(arg, v.v[n])));
+                    args.every((arg, n) => arg.kind === "type" && (arg.variable || this.isAny(arg)) || this.belongsToType(arg, v.v[n])));
             } };
             const name = this.appliedName(tag, args);
             // It is written as the constructor applied to the types, which a
@@ -4541,8 +4547,16 @@ export class Interpreter {
     // How many parameters a type still takes (List 1, List Int 0).
     private typeArity(t: Extract<Value, { kind: "type" }>): number {
         const takes = t.alias ? t.alias.parameters.length : t.family ? t.family.parameters?.length ?? 0
-            : this.counted(t) ? 2 : !t.family && (t.name === "List" || t.name === "IO") ? 1 : 0;
+            : this.counted(t) || t.name === "HashMap" ? 2 : !t.family && (t.name === "List" || t.name === "IO") ? 1 : 0;
         return Math.max(0, takes - (t.arguments?.length ?? 0));
+    }
+    // A type as the type of values (x : T, isType T x): given all its
+    // parameters, Option _ and not Option, a function of types.
+    private valuesType(t: Extract<Value, { kind: "type" }>): Extract<Value, { kind: "type" }> {
+        const missing = t.variable ? 0 : this.typeArity(t);
+        if (!missing) return t;
+        const { message, hint } = missingTypeParameters(t.name, (t.arguments ?? []).map(a => this.renderString(a)), missing);
+        throw new APNError("runtime", message, { hint });
     }
     // Whether a name is bound to the list's cons (the prelude's Cons).
     // Whether :: here is the prelude's (or not bound yet), so a written list
@@ -5007,6 +5021,7 @@ export class Interpreter {
         if (name === "isType") {
             const target = this.asType(argsIn[0]);
             if (!target || !this.isTypeValue(target)) throw new APNError("runtime", "isType expects a type as its first argument");
+            if (target.kind === "type") this.valuesType(target);
             return mkBool(this.belongsToType(target, argsIn[1]));
         }
         if (["insert", "lookup", "has", "remove"].includes(name)) {
