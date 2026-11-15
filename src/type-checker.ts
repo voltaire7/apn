@@ -2985,21 +2985,34 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The calls being typed, by function and argument types: a call made again
     // while its typing is under way (a recursive one, as branch calls limb
     // calls branch) is the type that typing finds, not typed once more; one
-    // given other types (f (p ++ p) (n - 1)) takes the function's own type,
-    // as a recursive call always has, so typing calls ends.
+    // given other types is typed for them in turn.
     const typingCalls = new WeakMap<Summary, Map<string, Ty>>();
     function typedCall(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
-        if (typingCall > 64) return undefined;
+        if (typingCall > 256) problem(CALL_COST, e);
         const calls = typingCalls.get(summary) ?? new Map<string, Ty>(), key = args.map(a => text(resolve(a.type))).join("\u0000");
         typingCalls.set(summary, calls);
         const pending = calls.get(key);
         if (pending) return pending;
+        // A recursive call given other types (its function's typing under way)
+        // costs a step for each part of its arguments' types, so a recursion
+        // whose arguments grow (f (p ++ p) (n - 1)) reaches the step bound,
+        // as one that takes them apart ends.
+        // (A list's every item counts, each place, as a record's every field.)
+        const seen = new Set<Ty>(), count = (t: Ty) => {
+            const r = resolve(t);
+            if (r.k === "list" && r.items) for (let n = 0; n < r.items.length; n++) spend(e);
+            if (r.k === "record" && !(r.fields instanceof ModuleFields)) for (let n = 0; n < r.fields.size; n++) spend(e);
+            if (seen.has(r)) return;
+            seen.add(r);
+            children(r).forEach(count);
+            if (r.k === "list") r.items?.forEach(count);
+        };
+        if (calls.size) args.forEach(a => count(a.type));
         // (One whose parameters are all names depends on their types alone:
         // typed once, for each of its calls given them.)
         const names = summary.clauses.every(c => c.params.slice(0, args.length).every(q => q.p === "var"));
         const done = names ? typedCalls.get(summary)?.get(key) : undefined;
         if (done) return copy(done);
-        if (calls.size) return undefined;
         const result = variable();
         calls.set(key, result);
         try {
