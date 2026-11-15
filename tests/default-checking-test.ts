@@ -359,7 +359,6 @@ for (const source of [
     'h (_ : Vect n a) (_ : Vect n a) = n; h [1,2] [3]',
     'f (xs : List _) = xs; f 5',
     'toList Z = []; toList (S k) = k :: toList k; (toList 3 : Vect 2 UInt)',
-    'g [a,b] = tail [0, b, a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1,2]',
     `${TK2}tk n xs = n < 0 ? [] : tk2 n xs\nf (tk 1 [1,2,3])`,
     `${TK2}tk n xs = n > 0 ? tk2 n xs : []\nf (tk 0 [1,2,3])`,
     'hd (x :: _) = x; hd [] = fail "e"; h x = hd x > 1; h ["a"]',
@@ -391,8 +390,16 @@ for (const source of [
     '[1,2] + [3,4,5]',
     'g [p,q] = p; g (pairs [x = 1])',
     'h a b = [map (x -> x) a, map (x -> x) b]; g [[x],[y,z]] = x + y + z; g (h [1,2] [1])',
-    'g [p,q] = p + q; g (tail [1,2,3] * x -> x)',
 ]) Deno.test(`checker rejects mismatched builtin list lengths: ${source}`, () => rejected(session(), source));
+// tail of a list whose items are known is the rest of them, its length one less.
+for (const [source, expected] of [
+    ['g [a,b] = tail [0, b, a + b]; h n f s = n == 0 ? s : h (n - 1) f (f s); h 3 g [1,2]', '[5,8]'],
+    ['g [p,q] = p + q; g (tail [1,2,3] * x -> x)', '5'],
+    ['g [p,q] = p + q; g (tail [1,2,3,4])', ''],
+] as const) Deno.test(`tail keeps the rest of known items: ${source}`, () => {
+    if (!expected) return rejected(session(), source);
+    if (run(session(), source) !== expected) throw new Error(source);
+});
 // Standard-library list functions keep their argument's length; functions that
 // change a list's length (folds, cons, append, filter) stay unknown, even when
 // their result has the same type as their input.

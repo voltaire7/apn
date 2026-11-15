@@ -58,3 +58,15 @@ for (const source of [
     const issues = checkSource(source, "<test>", { strict: true }).issues;
     if (issues.length) throw new Error(issues.map(i => i.message).join("; "));
 });
+// Taking apart a list whose items are known (head and tail, a function of one
+// clause doing it as they are defined, a :: pattern) keeps each item's type.
+for (const [source, error] of [
+    ['"k" ++ head (head (pairs [a = "x", b = 1, c = [1]]))', ""],
+    ['r = [a = "x", b = 1]\n1 + head (tail (head (tail (pairs r))))', ""],
+    ['first (x :: _) = x\nr = [a = "x", b = 1]\n"k" ++ first (first (pairs r))', ""],
+    ['xs = [1, "a"]\nx :: rest = xs\n[x + 1, "k" ++ head rest]', ""],
+    ['1 + head ["a", 1]', "cannot combine Int and String"],
+] as const) Deno.test(`taking apart known items keeps their types: ${source}`, () => {
+    const issues = checkSource(source, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
+    if (error ? !issues.includes(error) : issues) throw new Error(issues || "accepted");
+});

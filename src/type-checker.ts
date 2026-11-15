@@ -2333,6 +2333,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (vector.k === "list" && vector.length && !vector.length.terms.size && vector.length.constant < 1n) {
                     problem(`length mismatch: expected at least 1, got ${vector.length.constant}`, e);
                 }
+                // A list whose items are known gives its first and the rest.
+                if (vector.k === "list" && vector.items?.length) {
+                    const rest = vector.items.slice(1);
+                    bind(p.head, vector.items[0], scope, e, bound);
+                    bind(p.tail, { k: "list", element: rest.length ? union(rest) : variable(), items: rest, length: constant(BigInt(rest.length)) }, scope, e, bound);
+                    return;
+                }
                 const tail = vector.k === "list" && vector.length ? list(a, indexAdd(vector.length, constant(-1n))) : t;
                 bind(p.head, a, scope, e, bound);
                 bind(p.tail, tail, scope, e, bound);
@@ -2933,6 +2940,24 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const t = field && resolve(field), value = t?.k === "type" ? resolve(t.value) : undefined;
         return value?.k === "atom" && value.name === "Type";
     }
+    // A function of one clause taking a list apart into names (head (x :: _) =
+    // x), given a list whose items are known: its body's type with the names
+    // bound to them, so head ["a", 1] is a String. (A typed part converts at
+    // a call, which binding does not, so it is left to the call. Each call
+    // takes one item off, so a recursive one ends.)
+    let takingApart = 0;
+    function takenApart(f: Extract<Ty, { k: "fn" }>, argument: Entry, e: Expr): Ty | undefined {
+        const clause = f.summary?.clauses.length === 1 ? f.summary.clauses[0] : undefined;
+        const a = resolve(argument.type);
+        const param = clause?.params.length === 1 ? clause.params[0] : undefined, named = (q: Pattern) => q.p === "var" || q.p === "wildcard";
+        if (param?.p !== "cons" || !named(param.head) || !named(param.tail) || a.k !== "list" || !a.items?.length || takingApart > 64) return undefined;
+        const scope: Scope = new Map(f.summary!.scope);
+        takingApart++;
+        try {
+            bind(param, a, scope, e);
+            return infer(clause!.body, scope);
+        } finally { takingApart--; }
+    }
     function application(f: Ty, argument: Entry, e: Expr, builtin = false, ascribed = false): Ty {
         spend(e);
         f = resolve(f);
@@ -3355,6 +3380,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return result;
         }
         if (f.k === "fn") {
+            const taken = takenApart(f, argument, e);
+            if (taken) return taken;
             // A recursive call another clause's call has not typed for (ln [1]
             // in ln (String s) after ln ["a"]): the finished function decides it.
             const self = !choosing ? definingSelf.find(d => resolve(d.pending) === f) : undefined;
@@ -7678,6 +7705,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const summary: Summary = { scope, clauses: [{ index: 0, place: 0, params: [{ p: "var", name: "a" }, { p: "var", name: "b" }], body: { t: "var", name: "b" }, refutable: new Set() }] };
         for (let t = resolve(seq.type), n = 0; t.k === "fn" && n < 2; t = resolve(t.output), n++) t.summary = summary;
     } }
+    // head and tail take a list apart as their definitions do (head (x :: _) =
+    // x), so a list's known items keep their own types (see takenApart).
+    for (const [name, head, tail, body] of [["head", "x", "_", "x"], ["tail", "_", "xs", "xs"]]) {
+        const entry = scope.get(name), part = (n: string): Pattern => n === "_" ? { p: "wildcard" } : { p: "var", name: n };
+        const t = entry && resolve(entry.type);
+        if (t?.k === "fn") t.summary = { scope, clauses: [{ index: 0, place: 0, params: [{ p: "cons", head: part(head), tail: part(tail) }], body: { t: "var", name: body }, refutable: new Set() }] };
+    }
     native("toString", [variable()], str);
     native("intToString", [int], str);
     native("format", [str, list(variable())], str);
