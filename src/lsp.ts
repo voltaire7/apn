@@ -1,5 +1,5 @@
 // Startup loads the bundled interpreter prelude; editor launchers must allow
-// reading lib/prelude.apn, lib/std/type.apn and lib/std/do.apn for Deno versions that gate text imports on permissions.
+// reading lib/prelude.apn and lib/std/do.apn for Deno versions that gate text imports on permissions.
 import { lint, position, type Range } from "./lint.ts";
 import { parseDocument, setLooseSpacing } from "./parser.ts";
 import { lex, KEYWORDS } from "./lexer.ts";
@@ -58,7 +58,7 @@ const builtins = new Map<string, string>([
     ["set", "set cell value — action replacing a Mutable cell's contents; yields []."],
     ["IO", "IO T — the type of actions yielding T; IO [] action checks an action (return x makes one)."],
     ["map", "map f m — m with f applied to what it holds: an action, a list, or a type with an instance."],
-    ["to", "to T x — x written as a T: to String, to JSON, to (List Char); another type converts as applying it. A method: define to T = ... for your types."],
+    ["to", "to T x — x written as a T: to String, to JSON, to (List Char); another type converts as ascription does (x : T). A method: define to T = ... for your types."],
     ["from", "from T x — a T read back: from String parses, from JSON decodes, from (List Char) joins. A method: define from T = ... for your types."],
     ["JSON", "JSON — JSON text, a named String: to JSON x encodes, from JSON text decodes."],
     ["Z", "Z — the natural number zero, UInt 0; the pattern Z matches 0."],
@@ -74,7 +74,6 @@ const builtins = new Map<string, string>([
     ["guard", "guard condition — return [] when the condition holds, else throw \"guard failed: condition\" (as written): a False guard stops a do-block."],
     ["empty", "empty — throw \"empty\": the monad's value holding nothing."],
     ["throw", "throw e — the monad's failure, decided by the context: [] in a list, None in an Option, Err e in a Result, a failing action in IO."],
-    ["cast", "cast Type value — APN prelude compatibility wrapper for lossless Type application."],
     ["use", "use namespace — open a record or list of records in the current scope; later fields win; returns ()."],
     ["do", "do statements — the block with those statements: do [a, b] is { a; b }; do [] is {}."],
     ["~", "value ~ [alternatives] — the most specific unary pattern function that fits, as among clauses."],

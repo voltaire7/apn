@@ -3,9 +3,9 @@ import { parseDocument } from "../src/parser.ts";
 for (const [source, expected] of [
     ['(+ 1) * [1,2,3]', '[2,3,4]'],
     ['increment x = x + 1\nincrement * [1,2,3]', '[2,3,4]'],
-    ['Int * 3', '[0,1,2]'],
-    ['Int * -3', '[0,-1,-2]'],
-    ['Int * []', '[]'],
+    ['to Int * 3', '[0,1,2]'],
+    ['to Int * -3', '[0,-1,-2]'],
+    ['to Int * []', '[]'],
     ['(entry -> entry 1) * [x = 1, y = 2]', '[1,2]'],
     ['((+ 1) \\ (* 2)) * [1,2,3]', '[3,5,7]'],
     ['(increment : Int -> Int) <- return (+ 1); increment * [1,2]', '[2,3]'],

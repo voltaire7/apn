@@ -13,7 +13,7 @@ for (const [source, expected] of [
     ['D = Dynamic; x = 123 : D; (x : Int)', '123'],
     ['f (x : Dynamic) = x x; (f (y -> 42) : Int)', '42'],
     ['f (x : Int) = x + 1; f (2 : Dynamic)', '3'],
-    ['cast Int (42 : Dynamic)', '42'],
+    ['((42 : Dynamic) : Int)', '42'],
     ['(f : Int -> Int) <- return (x -> x + 1 : Dynamic); f 2', '3'],
     ['(f : Int -> Int) <- return (x -> x); f (2 : Dynamic)', '2'],
     ['(([1,2] : Dynamic) : Vect 2 Int)', '[1,2]'],

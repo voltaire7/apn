@@ -30,7 +30,7 @@ for (const [source, expected] of [
     ["describe Int = \"integer\"\ndescribe String = \"text\"\n[describe Int, describe String]", '["integer","text"]'],
     [TEMPERATURE + "to Celsius (F 212)", "C 100.0"],
     [TEMPERATURE + "to String 2", '"2"'],
-    // A list template converts position by position, as cast does: [Char] is one Char.
+    // A list template converts position by position: [Char] is one Char.
     ["to [Char] \"h\"", "['h']"],
     ["to [Char,Char] \"hi\"", "['h','i']"],
     ["to [Float] [1]", "[1.0]"],

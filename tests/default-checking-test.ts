@@ -24,7 +24,7 @@ function rejected(i: Interpreter, source: string): void {
 }
 for (const [source, expected] of [
     ['std <- import "std"; use std.sequence; sum [1,2,3]', '6'],
-    ['seqs <- import "std/sequence"; seqs.sum (Int * [1,2,3])', '6'],
+    ['seqs <- import "std/sequence"; seqs.sum (to Int * [1,2,3])', '6'],
     ['std <- import "std"; use std.[function,number]; id (sq 3)', '9'],
     ['ns = [double = x -> x * 2]; use ns; double 3', '6'],
     ['use [[one = 1], [two = 2]]; one + two', '3'],
@@ -88,7 +88,7 @@ for (const [source, expected] of [
     ['f (xs : List String) = "strings"; f (xs : List Int) = "ints"; [f [1], f ["a"]]', '["ints","strings"]'],
     ['f x = x + 1; [f 1, f 2.0]', '[2,3.0]'],
     ['factorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))\nfactorial 5', '120'],
-    ['std <- import "std"; use std.type; cast Float32 (.2 : Float64)', '0.2'],
+    ['((.2 : Float64) : Float32)', '0.2'],
     // A parameter's record is known from the fields code uses, also when it assigns them.
     ['f r = { r.a = 5; r }; f [a = 1, b = 2]', '[a = 5, b = 2]'],
     ['g r = { r.p.q = 3; r }; g [p = [q = 1, z = 0]]', '[p = [q = 3, z = 0]]'],
@@ -291,7 +291,7 @@ Deno.test("invalid loaded source is rejected before any output", () => {
 });
 Deno.test("all standard modules check without evaluation", () => {
     const checker = new CheckingSession();
-    for (const name of ['type', 'function', 'option', 'sequence', 'array', 'number', 'text', 'map', 'combinator', 'io', 'system', 'search', 'meta', 'html', 'browser', 'p5', 'ffi']) checker.module(`std/${name}`);
+    for (const name of ['function', 'option', 'sequence', 'array', 'number', 'text', 'map', 'combinator', 'io', 'system', 'search', 'meta', 'html', 'browser', 'p5', 'ffi']) checker.module(`std/${name}`);
 });
 
 Deno.test("Dynamic writes cannot invalidate a checked Mutable payload", () => {
@@ -303,7 +303,7 @@ Deno.test("Dynamic writes cannot invalidate a checked Mutable payload", () => {
     }
     throw new Error('unchecked Mutable write');
 });
-for (const source of ['cast (x -> x) 1', 'isExact "bad"', 'keys [x = 1]', 'values [x = 1]']) {
+for (const source of ['isExact "bad"', 'keys [x = 1]', 'values [x = 1]']) {
     Deno.test(`native signatures reject incompatible values: ${source}`, () => rejected(session(), source));
 }
 

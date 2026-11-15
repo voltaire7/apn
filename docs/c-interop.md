@@ -83,7 +83,7 @@ and signatures you trust. See [Deno FFI](https://docs.deno.com/runtime/fundament
 Native numeric results retain their APN type: `add` above returns `42`, an `Int32`.
 Arguments convert only without loss. Out-of-range integers and lossy float
 conversions fail before the C function is called. Float32 arithmetic rounds to binary32;
-constructors and `cast` require lossless conversion even for bare literals. Unbounded `Int`, `UInt`, fractions, complex
+ascription requires lossless conversion even for bare literals. Unbounded `Int`, `UInt`, fractions, complex
 numbers, and aggregate numeric types are not C ABI descriptors. Match platform
 `long` and `size_t` to the appropriate fixed width yourself.
 
@@ -96,8 +96,8 @@ print c.greeting
 
 A bare `c.donut_finish` statement calls it. In `print c.greeting`, APN calls
 `greeting` when its value is needed. Separate calls repeat their effects; unused
-lazy expressions do not run them. `c.greeting []` remains valid for compatibility,
-but [] is optional. Functions with parameters keep normal curried application.
+lazy expressions do not run them; it takes no argument (`c.greeting []` is an
+error). Functions with parameters keep normal curried application.
 
 Input strings are temporary UTF-8 buffers valid for the duration of that call;
 C must not retain them. Embedded NULs are rejected. Returned String pointers must

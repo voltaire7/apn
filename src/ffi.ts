@@ -163,7 +163,7 @@ export function ffiNative(i: Interpreter, name: string, args: Value[]): Value {
         const symbol = key;
         const fn: Value = { kind: "native", name: symbol, arity: signature.parameters.length, applied: [], invoke: (values) => {
             if (owner.closed) return fail(`cannot call ${symbol}: library is closed`);
-            if (!signature.parameters.length && values.length && (!i.isList(i.demand(values[0])) || i.cell(i.demand(values[0])) !== null)) return fail(`${symbol} takes no arguments (an explicit [] is also accepted)`);
+            if (!signature.parameters.length && values.length) return fail(`${symbol} takes no arguments: a C function of none is called as it is used (c.f, not c.f [])`);
             const evaluated = signature.parameters.map((_, index) => i.demand(values[index]));
             const converted = signature.parameters.map((type, index) => encode(i, type, evaluated[index]));
             const call = library.symbols[symbol] as (...args: unknown[]) => unknown;

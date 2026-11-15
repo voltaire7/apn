@@ -115,7 +115,7 @@ allocate mutable cells. Use `Mutable (0 : Int)` for an explicit cell.
 
 ## Lossless construction
 
-Constructors now apply the same checks to bare and annotated numbers:
+Ascription applies the same checks to bare and annotated numbers:
 
 ```apn
 (.2 : Int)                   # error: lossy conversion
@@ -129,16 +129,8 @@ Overflow and imaginary-part loss still error. `.2` remains an inexact binary64
 literal, not an infinitely precise number whose representation is chosen later.
 Numeric patterns remain lossless and do not match `.2` as an Int.
 
-`cast` stays APN-defined as a compatibility wrapper:
-
-```apn
-cast (target : Type) value = target value
-```
-
-It is now equivalent to direct application, including rejection of lossy inputs.
-Prefer the constructor directly; choose `floor`, `ceiling`, `round`, `truncate`,
-or `inexact` explicitly when the value needs rounding first. Float32 arithmetic
-continues to round its results to binary32, but `(.1 : Float32)` now errors.
+Choose `floor`, `ceiling`, `round`, `truncate`, or `inexact` explicitly when the
+value needs rounding first. Float32 arithmetic rounds its results to binary32.
 
 Numeric assignment uses the same type as `typeOf`, including for literals:
 `v = [x = 1]; v.x = 1.0` keeps Int 1, while `v.x = 1.5` fails.

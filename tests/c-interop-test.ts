@@ -42,18 +42,17 @@ for (const [name, body, expected] of [
     ['float32', 'c.half_f32 .5', '0.25 : Float32'],
     ['booleans', 'c.invert True', 'False : Bool'],
     ['no C arguments', 'c.answer', '42 : Int32'],
-    ['optional explicit unit', 'c.answer []', '42 : Int32'],
     ['bare C action repeats', 'c.tick_void\nc.tick_void\nc.cell_value', '2 : Int32'],
     ['bare C calls in arithmetic', 'c.tick + c.tick', '3 : Int32'],
     ['bare C call shares an argument thunk', 'twice x = x + x\ntwice c.tick', '2 : Int32'],
     ['unused bare C calls remain lazy', 'unused = [c.tick]\nc.cell_value', '0 : Int32'],
     ['UTF8 input', 'c.text_length "hé😀"', '7 : Int32'],
     ['UTF8 result', 'c.greeting', '"hello from C" : String'],
-    ['null pointer', 'isType Pointer (c.null_pointer [])', 'True : Bool'],
+    ['null pointer', 'isType Pointer c.null_pointer', 'True : Bool'],
     ['managed pointer mutation', 'p = ffi.allocate Int32 1\nset p $ 41\nc.increment p\nreturn (ffi.peek Int32 p)', '42 : Int32'],
     ['byte offset', 'p = ffi.allocate Int32 2\nffi.poke Int32 9 (ffi.offset 4 p)\nffi.peek Int32 (ffi.offset 4 p)', '9 : Int32'],
     ['pointer identity through C', 'p = ffi.allocate Int32 1\nc.echo_pointer p == p', 'True : Bool'],
-    ['external C memory writes', 'p = c.cell_pointer []\nffi.poke Int32 42 p\nc.cell_value []', '42 : Int32'],
+    ['external C memory writes', 'p = c.cell_pointer\nffi.poke Int32 42 p\nc.cell_value', '42 : Int32'],
     ['pointer keeps argument alive', 'p = c.echo_pointer (ffi.allocate Int32 1)\nc.increment p\nffi.peek Int32 p', '1 : Int32'],
 ] as const) {
     Deno.test({ name: `C interop: ${name}`, ignore: !library, fn() {
@@ -68,7 +67,8 @@ for (const [body, error] of [
     ['c.invert 1', 'Bool argument expected'],
     ['c.text_length "a\u0000b"', 'embedded NUL'],
     ['c.answer 1', 'takes no arguments'],
-    ['ffi.peek Int32 (c.null_pointer [])', 'null pointer'],
+    ['c.answer []', 'takes no arguments'],
+    ['ffi.peek Int32 c.null_pointer', 'null pointer'],
     ['p = ffi.allocate Int32 1\nffi.peek Int64 p', 'exceeds allocated memory'],
     ['p = c.echo_pointer (ffi.allocate Int32 1)\nffi.peek Int64 p', 'exceeds allocated memory'],
     ['p = ffi.allocate Int32 1\nffi.offset 5 p', 'exceeds allocated memory'],
@@ -84,7 +84,7 @@ Deno.test({ name: 'escaped C functions cannot call unloaded code', ignore: !libr
     throw new Error('Expected closed-library error');
 } });
 Deno.test({ name: 'escaped C pointers cannot access unloaded storage', ignore: !library, fn() {
-    try { run(`escaped <- ${call('c.null_pointer []')}\nffi.peek Int32 escaped`); }
+    try { run(`escaped <- ${call('c.null_pointer')}\nffi.peek Int32 escaped`); }
     catch (e) { if (String(e).includes('closed library')) return; throw e; }
     throw new Error('Expected closed-library error');
 } });

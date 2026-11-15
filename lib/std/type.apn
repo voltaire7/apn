@@ -1,3 +1,0 @@
-# cast T x is x : T as a function (map (cast Int) xs). Rounding is explicit.
-cast (target : List _) value = (target : Type).(value)
-cast (target : Type) value = value : target

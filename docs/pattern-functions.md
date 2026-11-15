@@ -287,9 +287,9 @@ func (Some 123)
 variant to `value` without forcing its fields (`(value : Option t)` also binds
 `t` to its payload's type; see [type patterns](semantics.md#patterns-variants-and-scope)).
 `(Some x)` instead binds the payload. Unrelated values fail the parent type
-pattern and may fall through to another clause. `Option value`, `cast Option
-value`, and `isType Option value` also check this membership; `typeOf (Some 123)` returns `Option Int`. Specialization such
-as `(Option Int) (Some 123)` applies the parameter's payload contract lazily.
+pattern and may fall through to another clause. `(value : Option _)` and `isType
+(Option _) value` also check this membership; `typeOf (Some 123)` returns `Option
+Int`. `(Some 123 : Option Int)` applies the parameter's payload contract lazily.
 See [templates and type aliases](templates-and-types.md).
 
 When the parent and constructor share a name (`Box x = _`), that name keeps

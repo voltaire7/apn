@@ -1439,7 +1439,7 @@ Ascribing `Float`, `Float32`, or `Float64` rounds to the target floating-point
 precision, for bare or annotated inputs: `(.1 : Float32)` is `0.1` as a Float32
 (the nearest binary32 value, displayed with the shortest round-tripping
 decimal); `((9007199254740993 : Int) : Float)` rounds to `9007199254740992.0`.
-This also applies through aliases and `cast`.
+This also applies through aliases and `to T` (`to Float32 x` is `(x : Float32)`).
 
 Integer ascription stays lossless: `(.2 : Int)` and `((.2 : Float) : Int)` both error.
 Choose integer rounding explicitly: `(floor .2 : Int)` is `0`, while
@@ -1451,14 +1451,10 @@ Numeric equality ignores
 annotations: `.2 == (.2 : Float)` remains true. Int and Float values display without
 a prefix; specialized types such as Int32, Float32 and Float64 retain theirs.
 
-`cast` remains a compatibility helper in the APN prelude and `type`:
-
-```apn
-cast (target : Type) value = target value
-```
-
-It has the same behavior as applying the type directly: floating constructors
-round to their precision, while integer construction still rejects truncation.
+A type takes types and never a value: `Int32 5`, `map Int32 xs` and `xs *
+Int32` are errors, however the type reaches the value, as applying any name to
+more than it takes is. A value is made a member by ascription, `(5 : Int32)`,
+and `to T` is that conversion as a function: `map (to Int32) xs`.
 
 ### Flexible and fixed floating precision
 
@@ -1476,7 +1472,7 @@ not mutated. This is runtime precision selection, not backwards type inference.
 x = .2
 (.1 : Float32) + x            # 0.3, a Float32
 # (.1 : Float32) + (.2 : Float64)  # error: cannot combine Float32 and Float64
-(.1 : Float32) + cast Float32 (.2 : Float64) # 0.3, a Float32
+(.1 : Float32) + ((.2 : Float64) : Float32) # 0.3, a Float32
 ```
 
 Different fixed precisions do not mix, even where a conversion would be
@@ -1579,26 +1575,22 @@ Values stay lazy; keys are evaluated at construction. `(m : HashMap k v)` is a
 map's pattern, `k` and `v` its keys' and values' types (see
 [intrinsics](intrinsics.md#maps)).
 
-Type constructors also work directly with function iteration: `100 * Int`
-returns typed integers `0` through `99`; `[1..100] * Int` returns `1` through
-`100`. This differs from `100 * (0 : Int)`, which multiplies and returns typed zero.
+Iterating a conversion converts each: `100 * to Int` is the integers `0` through
+`99`, and `[1..100] * to Int` `1` through `100`; `100 * (0 : Int)` multiplies.
 
-The nonnumeric type names are also first-class constructors:
-`Bool`, `String`, `Char`, `List`, `Record`, `Function`, `Type`, and
-`Variant`. Except for `Bool`, they validate and return a value of the corresponding
-kind without forcing list elements or coercing unrelated values. `Bool` converts
-using truthiness. Their constructor patterns
-work in overloads, e.g. `f (x : Bool) = x`. `isType` and identity `cast` support
-these types too. Use declared constructors to create a particular variant;
-`Variant` validates any such value.
+The nonnumeric type names are types as the numeric ones are: `Bool`, `String`,
+`Char`, `List a`, `Record`, `Function`, `Type`, and `Variant`. Ascription to one
+checks a value of its kind without forcing list elements or coercing unrelated
+values (`([1,missing] : List _)` reads nothing), and their typed patterns work
+in overloads, e.g. `f (x : Bool) = x`; `isType` tests them. Use declared
+constructors to create a particular variant; `Variant` holds any such value.
 
-A lowercase pair pattern `(t x)` captures the runtime type descriptor in `t`
-and the numeric payload without its explicit type annotation in `x`. Nonnumeric
-values are returned unchanged. For example, `myTypeOf (_ : t) = print t` still prints
-`Int32` for `(5 : Int32)`, while `payload (x : _) = x` returns `5`: `_` discards the
-type, as it discards a value.
-It inspects the outer value without forcing list contents. Repeating the type
-variable, as in `(t x) (t y)`, requires both arguments to have the same type.
+A typed pattern whose type is a lowercase name, `(x : t)`, binds `t` to the
+value's type and `x` to the value, a number without its explicit type:
+`myTypeOf (_ : t) = print t` prints `Int32` for `(5 : Int32)`, while `payload (x :
+_) = x` returns `5`, as `_` discards the type, as it discards a value. It
+inspects the outer value without forcing list contents. Repeating the type
+variable, as in `(x : t) (y : t)`, requires both arguments to have the same type.
 
 ## Module imports
 

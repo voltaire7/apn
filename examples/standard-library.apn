@@ -30,4 +30,4 @@ print (mapError upper $ Err "invalid input")
 print (reverse "APN 😀")
 
 # Typed values still use checked arithmetic.
-print (sum $ [1..4] * Int32)
+print (sum $ [1..4] * to Int32)

@@ -69,14 +69,6 @@ into code, and `std.io`'s `readFileFrom` reads a file beside the running one,
 as `load` does (`readFile` reads from the working directory).
 `sq` lives in `number`; `halt` lives in `system`.
 
-## Types — `type`
-
-`cast Type value` is an ordinary APN compatibility wrapper for `(value : Type)`,
-implemented in `lib/std/type.apn` and loaded by the default prelude. Both require
-lossless conversion. Use `(floor value : Int)`, `(truncate value : Int)`, or
-`(inexact value : Float)` to choose the intended rounding explicitly.
-See [zero initialization](zero-initialization.md) for type defaults and inspection.
-
 ## Functions — `function`
 
 | API | Behavior |
@@ -101,7 +93,7 @@ See [zero initialization](zero-initialization.md) for type defaults and inspecti
 | `to JSON x`, `from JSON text` | JSON text; decode it (`Dynamic`) |
 | `to (List Char) text`, `from (List Char) chars` | A string's characters (code points); join them |
 | `to T x` for another type | Applies `T`, as a conversion: `to Float 3`, `to Quote [year = 1]` |
-| `to [T1,T2] x` | A list template converts position by position, as `cast` does: `to [Char,Char] "hi"`; `[Char]` is exactly one `Char` |
+| `to [T1,T2] x` | A list template converts position by position: `to [Char,Char] "hi"`; `[Char]` is exactly one `Char` |
 
 They are methods, like `map`: a program adds a type by defining an instance
 beside the type's declaration, which [travels with the
@@ -446,7 +438,7 @@ writes `"status"`. `from JSON` returns an object as a record named by the JSON
 keys (`r.status`, ``r.`odd-key` ``), an integer as an exact `Int`,
 other numbers as `Float`, and `null` as `[]`, so `from JSON (to JSON v)` gives
 back `v`. Its result is `Dynamic`; give it a type with a
-pattern or `cast` where the program needs one.
+pattern or an ascription where the program needs one.
 
 ## Browser modules
 

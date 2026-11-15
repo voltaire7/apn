@@ -27,7 +27,7 @@ draw (p : Sketch) = {
 
 mousePressed (p : Sketch) = {
     cells <- mapM (row -> mapM (_ -> p.call "random" [[0,1]]) row) board
-    set board (map (map Int) cells)
+    set board (map (map (to Int)) cells)
     p.loop
 }
 

@@ -4,7 +4,7 @@ import { checkSource } from "../src/type-checker.ts";
 for (const [source, expected] of [
     ['(.1 : Float32)', '0.1 : Float32'],
     ['((.1 : Float) : Float32)', '0.1 : Float32'],
-    ['cast Float32 (.1 : Float)', '0.1 : Float32'],
+    ['((.1 : Float) : Float32)', '0.1 : Float32'],
     ['F = Float32; (.1 : F)', '0.1 : F'],
     ['(.1 : Float32) + .2', '0.3 : Float32'],
     ['(.1 : Float32) + (.2 : Float32)', '0.3 : Float32'],

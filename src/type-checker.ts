@@ -1164,17 +1164,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (isExplicit(a)) return a;
             return problem(`cannot negate ${text(a)}`);
         }
-        if (t.op === "cast") {
-            if (a.k === "list") return template(a, b, { t: "placeholder" });
-            if (a.k !== "type") return problem("cast expects a type description");
-            return application(a, { type: b }, { t: "placeholder" });
-        }
         if (t.op === "construct") {
             // A record schema converts the value once it is known.
             if (a.k === "record") return waiting(b) ? t : application(a, { type: b }, { t: "placeholder" }, false, true);
             if (a.k !== "type") return problem("expected a type constructor");
             if (resolve(a.value).k === "var") return t;
-            return application(a, { type: b }, { t: "placeholder" });
+            return application(a, { type: b }, { t: "placeholder" }, false, true);
         }
         if (t.op === "template") return template(a, b, { t: "placeholder" });
         // do xs is the block whose statements are the elements, so its type is
@@ -1195,7 +1190,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const placeholder = { t: "placeholder" } as Expr;
                 return application(application(copy(own), { type: a }, placeholder), { type: b }, placeholder);
             }
-            // A list template ([Char], [Int,String]) converts position by position, as cast does.
+            // A list template ([Char], [Int,String]) converts position by position.
             if (a.k === "list" && a.items?.length && a.items.every(item => resolve(item).k === "type")) {
                 if (t.op === "to") return template(a, b, activeExpression ?? { t: "placeholder" });
                 return problem("no from instance for a list template", undefined, "join characters with `from (List Char) cs`; convert with `to`, as in `to [Char,Char] \"hi\"`");
@@ -1217,7 +1212,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (t.op === "to") {
                 if (string || named("JSON")) return atom("String");
                 if (chars) { unify(atom("String"), b); return list(atom("Char")); }
-                return application(a, { type: b }, { t: "placeholder" });
+                // Any other type converts as ascription does (to Int 1.0 is 1.0 : Int).
+                return application(a, { type: b }, { t: "placeholder" }, false, true);
             }
             if (string || named("JSON")) { unify(atom("String"), b); return explicitDynamic; }
             if (chars) { unify(list(atom("Char")), b); return atom("String"); }
@@ -1282,7 +1278,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return kept;
         }
         const numeric = (x: Ty) => x.k === "atom" && NUMERIC_TYPES.includes(x.name);
-        const callable = (x: Ty) => ["fn", "type", "overload"].includes(x.k);
+        // (A type is no function: it takes types, and a value only by ascription.)
+        const callable = (x: Ty) => ["fn", "overload", "intrinsic"].includes(x.k);
         if (t.op === "call") {
             // An argument holding the call itself (left in f (hd left), its
             // elements what hd gives) cannot decide it: it stays deferred.
@@ -2753,6 +2750,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         unify(target, actual, e);
         return target;
     }
+    // A list template applied to a list (templates.values, to [Char] s): each
+    // slot to its value, a function applied and a type converting it.
     function template(target: Ty, input: Ty, e: Expr): Ty {
         const t = resolve(target), a = resolve(input);
         if (t.k === "var" || a.k === "var" || t.k === "operation" || a.k === "operation") return operation("template", [t, a]);
@@ -2769,7 +2768,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.length && a.length) unify(list(variable(), t.length), list(variable(), a.length), e);
         else runtimeChecks++;
         const apply = (slot: Ty, value: Ty, expression: Expr): Ty => resolve(slot).k === "list"
-            ? template(slot, value, expression) : application(slot, { type: value }, expression);
+            ? template(slot, value, expression) : application(slot, { type: value }, expression, false, true);
         if (t.items) {
             const items = t.items.map((slot, n) => apply(slot, a.items?.[n] ?? a.element, e.t === "list" ? e.v[n] ?? e : e));
             return { k: "list", element: items.length ? union(items) : variable(), items, length: t.length };
@@ -3152,7 +3151,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // and the result is checked when the run applies the chosen one.
             if (f.chosen) {
                 const t = resolve(f.value), choices = t.k === "union" ? t.choices : [t];
-                if (!choices.some(choice => succeeds(() => application({ k: "type", value: choice }, { ...argument, type: copy(argument.type) }, e)))) {
+                if (!choices.some(choice => succeeds(() => application({ k: "type", value: choice }, { ...argument, type: copy(argument.type) }, e, false, ascribed)))) {
                     return problem(`cannot use ${text(argument.type)} where ${choices.map(c => text(c)).join(" or ")} is required`, e);
                 }
                 runtimeChecks++;
@@ -3161,6 +3160,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (refinementFails(f, argument, e)) return f;
             const t = resolve(f.value);
             let a = resolve(argument.type);
+            // A type takes types, never a value, wherever it is applied (map
+            // Int32 xs, xs * Int32): a value is made a member by ascription.
+            // (An indexed family takes values too, its indices: Vec 2 Int; [] is
+            // the type of nothing, IO [].)
+            const typeArgument = (x: Ty): boolean => x.k === "type" || x.k === "var" || x.k === "dynamic" || x.k === "operation"
+                || x.k === "union" && x.choices.every(c => typeArgument(resolve(c))) || describing(x) || x.k === "list" && x.items?.length === 0;
+            if (!ascribed && !typeArgument(a) && !(t.k === "atom" && CONSTRUCTING_TYPES.has(t.name)) && !(t.k === "variant" && t.indexed)) {
+                const { message, hint } = typeApplied(text(t), text(t) + " _".repeat(Math.max(0, typeParameters(f) - (f.applied ?? 0))));
+                return problem(message, e, hint);
+            }
             // A type taking parameters is given types (a value is ascribed):
             // given one not known yet (t -> Option t), it is a type.
             if (!(t.k === "variant" && t.indexed) && a.k === "var" && typeParameters(f) > 0) {
@@ -3200,19 +3209,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 convert((t as Extract<Ty, { k: "variant" }>).args[0], result, e);
                 return t;
             }
-            // A base type applied to a named value unwraps it, as at runtime:
-            // Float (Money 1.2), Int (Money 1.0) as Int 1.0 would.
-            if (t.k === "atom" && OWN_SCALAR_TYPES.has(t.name) && a.k === "variant" && a.base) return application(f, { ...argument, type: a.base }, e);
-            // Applying a named subtype applies its base, as at runtime: F .1 with
-            // F = Float32 rounds like Float32 .1. Another name must be unwrapped.
+            // A base type's member made from a named value unwraps it, as at
+            // runtime: (Money 1.2 : Float), (Money 1.0 : Int) as (1.0 : Int) would.
+            if (t.k === "atom" && OWN_SCALAR_TYPES.has(t.name) && a.k === "variant" && a.base) return application(f, { ...argument, type: a.base }, e, false, ascribed);
+            // A named subtype's member is its base's, as at runtime: (.1 : F) with
+            // F = Float32 rounds like (.1 : Float32). Another name must be unwrapped.
             if (t.k === "variant" && t.base) {
                 const given = resolve(argument.type);
                 // A value of a type it refines (a Positive given to Small) is one
                 // of its base's, as at runtime; any other must be unwrapped.
                 const refines = (x: Ty | undefined): boolean => { const r = x && resolve(x); return r?.k === "variant" && given.k === "variant" && (r.name === given.name || refines(r.base)); };
-                if (given.k === "variant" && given.base && given.name !== t.name && refines(t.base)) { application({ k: "type", value: t.base }, argument, e); return t; }
+                if (given.k === "variant" && given.base && given.name !== t.name && refines(t.base)) { application({ k: "type", value: t.base }, argument, e, false, ascribed); return t; }
                 if (given.k === "variant" && given.base) { if (given.name !== t.name) problem(`${t.name} requires explicit unwrapping of ${given.name}`, e); return t; }
-                application({ k: "type", value: t.base }, argument, e);
+                application({ k: "type", value: t.base }, argument, e, false, ascribed);
                 return t;
             }
             if (t.k === "var") {
@@ -3261,7 +3270,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
             }
             const measured = measuredList(t, argument);
-            if (measured) return application(f, measured, e);
+            if (measured) return application(f, measured, e, false, ascribed);
             // An indexed family takes a value for an index (Vec 2 Int): it fills
             // the next parameter, which values, not types, decide.
             if (t.k === "variant" && t.indexed && a.k !== "type" && !(a.k === "variant" && a.name === t.name)) {
@@ -7558,7 +7567,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             filter: fn(fn(a, b), fn(list(a), list(a))),
             length: fn(dynamic, atom("Int")),
             typeOf: fn(a, { k: "type", value: b }),
-            cast: fn({ k: "type", value: a }, fn(explicitDynamic, a)),
         })
     ) scope.set(name, { type });
     // fail marks code still to write: the prelude's, as at runtime.
@@ -7661,7 +7669,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("intrinsics.negate", { type: { k: "intrinsic", name: "negate", arity: 1 } });
     native("while", [list(variable()), variable()], io(empty));
     native("for", [list(variable()), variable()], io(empty));
-    scope.set("cast", { type: { k: "intrinsic", name: "cast", arity: 2 } });
     // Natural numbers are UInt: Z is UInt 0, S n the next one (converting n as UInt n does).
     scope.set("Z", { type: atom("UInt"), number: { kind: "int", v: 0n, typeName: "UInt" } });
     scope.set("S", { type: fn(atom("UInt"), atom("UInt"), undefined, true) });

@@ -1084,7 +1084,7 @@ print (to String 1.5 ++ "!")               # => 1.5!
 print ((from String "41" : Int) + 1)       # => 42
 print (to JSON [n = 1])                    # => {"n":1}
 print (from (List Char) (to (List Char) "abc"))        # => abc
-# A list template converts position by position, as cast does ([Char] is one Char).
+# A list template converts position by position ([Char] is one Char).
 print (to [Char,Char] "hi")             # => ['h','i']
 describeType Int = "integer"               # a bare type name matches that type
 describeType String = "text"
@@ -1185,8 +1185,8 @@ print (isExact 2@3) # => False
 print 2@3 # => -1.9799849932008908+0.2822400161197344i
 
 # First-class checked numeric types and overloads.
-print (take 3 (100 * Int))           # => [0,1,2]
-print (take 3 ([1..100] * Int))      # => [1,2,3]
+print (take 3 (100 * to Int))        # => [0,1,2]
+print (take 3 ([1..100] * to Int))   # => [1,2,3]
 print (100 * (0 : Int))              # => 0
 print (123 : Int)                    # => 123
 print (4294967295 : UInt32)           # => 4294967295, a UInt32
@@ -1247,7 +1247,6 @@ numericPayload (value : _) = value    # _ discards the type, keeps the payload
 print (numericPayload (123 : Int32)) # => 123
 retypedAdd (x : Int) (y : Int) = x + y : Int
 print (retypedAdd (2 : Int) (3 : Int)) # => 5
-print cast                          # => its clauses, one pattern lambda per line
 
 # Container templates apply their existing slots to incoming values.
 namedTemplates = [Int,Float]
@@ -1262,12 +1261,12 @@ print [String,Bool,Char].["new",True,'b'] # => ["new",True,'b']
 print ([name = "old", enabled = False] [name = "new", enabled = True])
 print [Int].[floor .2]               # => [0]
 print ((* 2) * [1,2,3,4])     # => [2,4,6,8]
-print (cast String $ cast [Char,Char] $ "a😀") # => "a😀"
+print (to [Char,Char] "a😀" : String) # => "a😀"
 print [Char,Char,Char,Char,Char]."hello"            # => ['h','e','l','l','o']
 print [Char,Char]."a😀"                  # => ['a','😀']
-print (Int * [1,2,3,4])       # => [1,2,3,4]
+print (to Int * [1,2,3,4])    # => [1,2,3,4]
 print [Int,String].[123,"hello"] # => [123,"hello"]
-print (take 3 (map Int [0..]))         # => [0,1,2]
+print (take 3 (map (to Int) [0..]))    # => [0,1,2]
 print ([x = 1, y = 2] : [x : Int, y = 0]) # => [x = 1, y = 2]
 print ([x = 123] : [x : Int, y : Int]) # => [x = 123, y = 0]
 # [Int].[1,2] and [Int].[] error: one template slot requires one value.
@@ -1295,7 +1294,7 @@ print Numbers.[1]                  # => [1]
 print ([x = 1, y = 2] : Point)      # => [x = 1.0, y = 2.0]
 firstNumber (Numbers values) = head values
 print (firstNumber [123])           # => 123
-print (cast [Int,Int] [1,2])         # => [1,2]
+print (to [Int,Int] [1,2])           # => [1,2]
 NumericOption a = Option a
 print (Some 123 : NumericOption Int) # => Some 123
 UserId = | MkUserId Int
@@ -1357,8 +1356,8 @@ print decoded                                 # => [1,2.5,[]]
 # opens them (use std.option one, use std.[option,text] several). import
 # "std/option" reads one module alone. Using a standard export before its module
 # is opened (fail, upper, okOr) is a static error at the name naming the module.
-use std.[type,function,option,sequence,array,number,text,map,combinator,io,system,search]
-print (cast String $ to (List Char) "hello") # => "hello"
+use std.[function,option,sequence,array,number,text,map,combinator,io,system,search]
+print (to (List Char) "hello" : String) # => "hello"
 # reverse is implemented in APN with a linear-time accumulator fold.
 print (head (reverse [1..10000]))   # 10000
 print (reverse [1,2,3])           # [3,2,1]
@@ -1799,7 +1798,7 @@ print (matmul [[1,2],[3,4]] [[5,6],[7,8]]) # => [[19,22],[43,50]]
 # Iteration accepts the function on either side.
 print * [1,2,3,4]                     # prints 1, 2, 3, 4
 print ((+ 1) * [1,2,3])                # => [2,3,4]
-print (Int * 3)                          # => [0,1,2]
+print (to Int * 3)                       # => [0,1,2]
 "hi" * print                             # a string's characters: prints 'h', 'i'
 
 # Zero initialization happens at construction; bare types stay constructors.
@@ -1819,7 +1818,7 @@ print typeTemplate                       # => [x : Int, y : Float, z : Float]
 replacement = [nested = [x = 1]]
 replacement.nested = [y = 2]
 print replacement                    # => [nested = [y = 2]]
-print (Int * [1,2,3])            # => [1,2,3]
+print (to Int * [1,2,3])         # => [1,2,3]
 print ([1,2,3] : ZeroVector)      # => [x = 1.0, y = 2.0, z = 3.0]
 # ZeroVector [1,2]                  # error: positional fields must be complete
 # Int + 1 and sqrt Float are errors; constructors are not numbers.
@@ -1829,7 +1828,7 @@ DefaultChoice a = Present a | Absent
 print ([] : [choice : DefaultChoice Int]) # => [choice = Absent]
 DefaultUser = | MakeDefaultUser Int String
 print ([] : [user : DefaultUser])       # => [user = MakeDefaultUser 0 ""]
-# Int .2, cast Int .2 and [Int].[.2] reject lossy conversion.
+# (.2 : Int), to Int .2 and [Int].[.2] reject lossy conversion.
 print (floor .2 : Int)               # => 0
 
 # Collection assignments evaluate variable and computed indices in the old scope.
@@ -2069,8 +2068,8 @@ print ((.1 : Float32) + (.2 : Float32)) # => 0.3, a Float32
 flexibleValue = .2
 print ((.1 : Float32) + flexibleValue) # => 0.3, a Float32
 print ((.2 : Float) + (.1 : Float32)) # => 0.3, a Float32
-# Float32 .1 + Float64 .2 errors: choose a precision with a cast.
-print ((.1 : Float32) + cast Float32 (.2 : Float64)) # => 0.3, a Float32
+# (.1 : Float32) + (.2 : Float64) errors: choose a precision by ascription.
+print ((.1 : Float32) + ((.2 : Float64) : Float32)) # => 0.3, a Float32
 
 print scopedPoint.{
     result = x + y

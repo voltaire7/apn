@@ -59,7 +59,7 @@ map Int [0..]           # lazy mapping over an infinite list
 Every template length, including one, uses exact positional matching. Output
 heads and tails are deferred; mismatch or conversion errors surface when the
 relevant part is consumed. A singleton never broadcasts. `[Int]` describes
-exactly one position when used as a schema, including through `cast` and `isType`;
+exactly one position when used as a schema, including through `to` and `isType`;
 a list of any length is `List Int`, and `[Int..]` is endlessly many (see
 [type descriptions](semantics.md#type-descriptions)).
 Nested list templates use the same exact-length rule.
@@ -90,8 +90,8 @@ with the record fields in scope.
 `String` converts a finite character list back to text, as `from (List Char)` does:
 
 ```apn
-cast String $ to (List Char) "hello"  # "hello"
-cast String $ cast [Char,Char] $ "hi"  # "hi"
+(to (List Char) "hello" : String)    # "hello"
+(to [Char,Char] "hi" : String)       # "hi"
 (['h','i'] : String)               # "hi"
 ([] : String)                        # ""
 ```
@@ -391,7 +391,7 @@ Points = [Point]
 (123 : Count)              # 123
 Numbers.[1]                # [1]; Numbers.[1,2] errors
 [x = 1, y = 2] : Point     # [x = 1.0, y = 2.0]
-cast [Int,Int] [1,2]        # [1,2]
+to [Int,Int] [1,2]          # [1,2]
 ([Int] : Type)            # [Int]
 isType Type [(* 2)]        # False
 ```

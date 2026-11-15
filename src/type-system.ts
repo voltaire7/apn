@@ -109,7 +109,7 @@ export function implicitOperands(a: Numeric, b: Numeric): [Numeric, Numeric] {
 }
 // Float (including unannotated floating values) leaves precision flexible.
 // A fixed floating operand supplies the precision; two different fixed types
-// require an explicit constructor/cast before arithmetic.
+// require an explicit ascription before arithmetic.
 function floatingOperands(a: Numeric, b: Numeric): [Numeric, Numeric, string] | undefined {
     if (a.kind !== "float" || b.kind !== "float") return undefined;
     const fixed = (v: Numeric) => v.typeName === "Float32" || v.typeName === "Float64" ? v.typeName : undefined;

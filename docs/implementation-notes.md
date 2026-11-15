@@ -177,10 +177,10 @@ Behavior: `docs/standard-library.md` (`http`, `json`).
   Tests: `tests/http-test.ts` (its server test needs `--allow-net`),
   `tests/repl-interrupt-pty.py` (Ctrl+C during a slow request).
 
-## Prelude and `cast`
+## Prelude
 
-The default prelude embeds `lib/prelude.apn`, `lib/type.apn` and `lib/do.apn`
-as text imports, so editor launchers must let Deno read them.
+The default prelude embeds `lib/prelude.apn` and `lib/std/do.apn` as text
+imports, so editor launchers must let Deno read them.
 
 The checker reads the prelude too: its own scope holds only what TypeScript
 implements (the natives and `intrinsics.*`), and `preludeScope` checks
@@ -229,12 +229,8 @@ key (`overloadAccepts`), as a binop takes an operator's overload, and a call of
 the intrinsic `with` itself is a runtime check. The evaluator's `indexed`
 mirrors both: a program's `get` clauses that take the inferred types, else the
 builtin on a known list or record. Tests: `tests/operators-test.ts`,
-`tests/default-checking-test.ts`. `cast` is a `clauseFn`, not a native:
-its clauses validate list templates with `Type` and dispatch to
-`(target : Type).(value)`, other types to `target value`. Expose `type`
-through module loading and browser bundles. `do` is an ordinary function
-exported by `function`. Tests: `tests/language-cast-test.ts`,
-`tests/do-test.ts`.
+`tests/default-checking-test.ts`. `do` is an ordinary function exported by
+`function`. Tests: `tests/do-test.ts`.
 
 ## Records, keys, and assignment
 

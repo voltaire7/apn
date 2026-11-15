@@ -305,7 +305,7 @@ export function standardExports(): Map<string, string[]> {
     try { files = [...Deno.readDirSync(STD_DIRECTORY)].filter(e => e.isFile && e.name.endsWith(".apn")).map(e => e.name).sort(); } catch { /* natives only */ }
     for (const file of files) {
         const module = file.slice(0, -".apn".length);
-        if (["prelude", "type", "do"].includes(module) || QUALIFIED_MODULES.has(module)) continue;
+        if (["prelude", "do"].includes(module) || QUALIFIED_MODULES.has(module)) continue;
         try {
             const items = parseDocument(Deno.readTextFileSync(new URL(file, STD_DIRECTORY)));
             const prelude = preludeNames ??= new Set([...METHOD_INTRINSICS.values(), ...parseDocument(preludeSource).flatMap(item => item.t === "def" ? [item.name] : [])]);

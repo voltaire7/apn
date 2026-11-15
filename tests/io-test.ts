@@ -77,8 +77,8 @@ for (const [source, message, kind] of [
     ["x = print 1 >>= v -> 5", "IO", "type"],
     ["x = (+ 1) <$> 5", "map needs an action", "type"],
     ["x <- 2 + 3", "<- runs an action, not Int", "type"],
-    ['sayHello = IO { print "hello" }', "IO is a type constructor", "type"],
-    ["x = IO 5", "IO is a type constructor", "type"],
+    ['sayHello = IO { print "hello" }', "IO is a type, not a function", "type"],
+    ["x = IO 5", "IO is a type, not a function", "type"],
     ['x = print 1 : IO Int', "where Int is required", "type"],
     // An action has no value to show until it runs, wherever it is held.
     ['print (print "hi")', "an action has no value to show until it runs", "type"],

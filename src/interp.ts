@@ -6,7 +6,6 @@ import { describeElementType, describeType } from "./type-description.ts";
 import { isForTypes, METHOD_INTRINSICS, sourceLocations, boolSelection, ternaryExpansion, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { fieldSource, keySource } from "./record-keys.ts";
-import typeSource from "../lib/std/type.apn" with { type: "text" };
 import doSource from "../lib/std/do.apn" with { type: "text" };
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { captureSnapshot } from "./snapshot.ts";
@@ -72,9 +71,9 @@ const CALLABLE_KINDS = new Set(["functionType", "contract", "mutable", "type", "
 
 const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 
-// The names editors color as built-in functions (the natives, cast and do).
+// The names editors color as built-in functions (the natives and do).
 // The names natives are bound by (each intrinsic is a field of intrinsics).
-export const NATIVE_NAMES = new Set(["cast", "do", ...NATIVES.map(([name]) => name.split(".")[0])]);
+export const NATIVE_NAMES = new Set(["do", ...NATIVES.map(([name]) => name.split(".")[0])]);
 const ZERO: Value = { kind: "int", v: 0n, typeName: "UInt" };
 // The types the prelude declares (Vect n a = ..., List a = [] | a :: List a);
 // a list union is bound to the list type (see listUnion).
@@ -363,9 +362,6 @@ export class Interpreter {
             this.sourceDir = file.directory;
             this.runDepth++;
             try { this.run(program); } finally { this.runDepth--; }
-            // The bundled cast is already installed from this exact source.
-            // Reuse its identity when type reexports it.
-            if (file.std === "type" && file.source === typeSource) this.env.setLocal("cast", this.preludeBindings.get("cast")!);
             // A module the file names for itself (std <- import "std", or a
             // load's) is its own: <- bound the record itself, so nothing is forced.
             return [...this.env.bindings().entries()].filter(([, value]) => !this.moduleValues.has(value));
@@ -399,9 +395,8 @@ export class Interpreter {
             // Bind each operator to its value itself, so evaluation finds the intrinsic.
             // (fail, which marks code still to write, is the prelude's too.)
             for (const [name, value] of this.env.bindings()) this.preludeBindings.set(name, this.reference(value));
-            this.run(parse(typeSource));
             this.run(parse(doSource));
-            for (const name of ["cast", "do"]) this.preludeBindings.set(name, this.env.get(name)!);
+            this.preludeBindings.set("do", this.env.get("do")!);
         }
         this.loadingPrelude = false;
         this.env = this.programEnv = outer;
@@ -1613,6 +1608,8 @@ export class Interpreter {
                         const ascribed = e.ascribed ? this.reference(head) : undefined;
                         const type = ascribed && (this.sharedType(ascribed) ?? ascribed);
                         if (type?.kind === "type") { r = this.typeValue(type, argument); break; }
+                        // A function type's member is a contract (f : Int -> Int).
+                        if (type?.kind === "functionType") { r = this.conform(type, argument); break; }
                         // A record or list of types makes its value ([] : [v : Int]).
                         if (ascribed && (ascribed.kind === "record" || this.isList(ascribed) && this.holdsType(ascribed) || this.asWritten.has(ascribed))) { r = this.conform(ascribed, argument); break; }
                         this.writtenApplication = !e.ascribed;
@@ -1975,9 +1972,15 @@ export class Interpreter {
         let l = this.demand(lThunk);
         let r = this.demand(rThunk);
         if (op === "*") {
-            const callable = (v: Value) => ["closure", "clauseFn", "native", "type", "contract", "functionType"].includes(v.kind);
+            // (A type is no function: it takes types, and a value only by ascription.)
+            const callable = (v: Value) => ["closure", "clauseFn", "native", "contract"].includes(v.kind);
             if (callable(r)) return this.iterate(l, r);
             if (callable(l)) return this.iterate(r, l);
+            const type = [l, r].find(v => v.kind === "type" || v.kind === "functionType");
+            if (type) {
+                const { message, hint } = typeApplied(this.renderString(type));
+                throw new APNError("runtime", message, { hint });
+            }
         }
         if (op === "==" || op === "!=") return mkBool(this.equals(l, r) === (op === "=="));
         // A named subtype keeps its name through arithmetic with itself or a
@@ -2010,7 +2013,7 @@ export class Interpreter {
         };
         if (isNumeric(l) && isNumeric(r) && ["+", "-", "*", "/", "%"].includes(op)) return typedArithmetic(op, l, r);
         if (op === "\\") {
-            const functions = ["closure", "clauseFn", "native", "type", "contract", "functionType"];
+            const functions = ["closure", "clauseFn", "native", "contract"];
             if (!functions.includes(l.kind) || !functions.includes(r.kind)) {
                 throw new APNError("runtime", "composition expects functions on both sides of '\\'");
             }
@@ -2264,7 +2267,11 @@ export class Interpreter {
             return get ? this.apply(this.apply(get, f), arg) : this.builtinGet(f, arg);
         }
         switch (f.kind) {
-            case "functionType": return this.conform(f, arg);
+            // A function type takes no value either: f : Int -> Int makes a contract.
+            case "functionType": {
+                const { message, hint } = typeApplied(typeToString(f));
+                throw new APNError("runtime", message, { hint });
+            }
             // Each call decides the contract's type variables from its
             // arguments: with (a -> a), 1 makes a Int, so the result must be one.
             case "contract": return this.defer(() => {
@@ -2288,7 +2295,10 @@ export class Interpreter {
             case "type": {
                 const parameter = this.typeParameter(f, arg);
                 if (parameter) return parameter;
-                if (written && !CONSTRUCTING_TYPES.has(f.name)) {
+                // A type takes types, never a value: Int32 5, or map Int32 xs, is
+                // an error, as applying any name to more than it takes is; a
+                // value is made a member by ascription (x : Int32).
+                if (!CONSTRUCTING_TYPES.has(f.name)) {
                     // (Its hint writes the parameters it still takes: HashMap _ _.)
                     const missing = Math.max(0, (f.alias ? 0 : this.typeParameters(f.name)) - (f.arguments?.length ?? 0));
                     const { message, hint } = typeApplied(typeToString(f), typeToString(f) + " _".repeat(missing));
@@ -3045,7 +3055,7 @@ export class Interpreter {
     // to T x and from T x: a program's instances first (newest first), then
     // the builtin ones: String (its text, read back as parse does), JSON
     // (JSON text) and List Char (a string's characters). to of any other type
-    // applies it: to Float (Money 1.2) is Float (Money 1.2).
+    // converts as ascription does: to Float (Money 1.2) is (Money 1.2 : Float).
     private convertTo(method: "to" | "from", target: Value, value: Value): Value {
         const own = this.instance(method, [target, value]);
         if (own) return own;
@@ -3061,10 +3071,11 @@ export class Interpreter {
             if (is("String")) return this.callNative("toString", [value]);
             if (is("JSON")) return standardNative(this, "toJson", [value]);
             if (chars) return standardNative(this, "chars", [value]);
-            // A list template ([Char], [Int,String]) converts position by position, as cast does.
+            // A list template ([Char], [Int,String]) converts position by position.
             if (this.isList(type) && this.isTypeValue(type)) return this.templateList(type, value);
             if (type.kind === "record" && this.isTypeValue(type)) return this.buildRecord(type, value);
-            if (this.isTypeValue(type)) return this.apply(type, value);
+            // Any other type converts as ascription does (to Int 1.0 is 1.0 : Int).
+            if (type.kind === "type") return this.typeValue(type, value);
         } else {
             if (is("String")) return this.callNative("parse", [this.demand(value)]);
             if (is("JSON")) return standardNative(this, "fromJson", [value]);
@@ -5419,8 +5430,12 @@ export class Interpreter {
         return result;
     }
     // A value given to a template's slot or item, as ascription gives it.
+    // A slot's value: a type's member (as ascription makes it), a record
+    // schema's record, or a function's result (a template of functions).
     private filled(target: Value, value: Value): Value {
-        return target.kind === "record" ? this.buildRecord(target, value) : this.apply(target, value);
+        if (target.kind === "record") return this.buildRecord(target, value);
+        const type = this.reference(target);
+        return type.kind === "type" ? this.typeValue(type, value) : this.apply(target, value);
     }
     applyTemplateSlot(template: Value, value: Value): Value {
         const forced = this.force(template), target = this.sharedType(forced) ?? forced;
@@ -6193,16 +6208,17 @@ export class Interpreter {
             finally { this.dynamicDepth--; }
         }
         let value = this.demand(arg);
-        // A base type applied to a named value unwraps it: Float (Money 1.2).
+        // A base type's member made from a named value unwraps it: (Money 1.2 : Float).
         if (!f.family && !f.alias && OWN_SCALAR_TYPES.has(f.name)) value = this.baseValue(value);
         if (!f.family && ["Float", "Float32", "Float64"].includes(f.name)) {
             if (!isNumeric(value)) throw new APNError("runtime", `${f.name} expects a number`);
             return castNumeric(f.name, value, true);
         }
-        // Applying a named subtype applies its base, as written:
-        // F .1 with F = Float32 is F (Float32 .1).
+        // A named subtype's member is its base's, as that name: (.1 : F) with
+        // F = Float32 is (.1 : Float32), an F.
         if (f.family?.base && !(value.kind === "variant" && value.family?.base)) {
-            return this.conform(f, this.apply(f.family.base, value));
+            const base = this.reference(f.family.base);
+            return this.conform(f, base.kind === "type" ? this.typeValue(base, value) : this.apply(base, value));
         }
         return this.conform(f, value);
     }
