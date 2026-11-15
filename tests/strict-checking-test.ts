@@ -109,3 +109,24 @@ for (const [source, error] of [
     const issues = checkSource(source, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
     if (error ? !issues.includes(error) : issues) throw new Error(issues || "accepted");
 });
+// Typing a call for its arguments past the step bound is an error; items of
+// one type (List Dynamic) leave them to the run. A recursive call given new
+// types (a list that doubles) takes the function's own type, so typing ends.
+{
+    const body = ["g p = [", ...Array.from({ length: 600 }, () => "    " + Array(4).fill('head p ++ "!"').join(", ")), "]"].join("\n");
+    Deno.test("a typed call past the step bound is an error", () => {
+        const issues = checkSource(`${body}\ng ["a", 1]`, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
+        if (!issues.includes("takes more than 20000 steps")) throw new Error(issues || "accepted");
+    });
+    Deno.test("items of one type leave a costly call to the run", () => {
+        const issues = checkSource(`${body}\ng (["a", 1] : List Dynamic)`, "<test>", { strict: true }).issues;
+        if (issues.length) throw new Error(issues.map(i => i.message).join("; "));
+    });
+}
+for (const [source, error] of [
+    ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\nf ["a", 1] 12', ""],
+    ['f p n = n == 0 ? "k" ++ head p : f (p ++ p) (n - 1)\nf [1, "a"] 12', "cannot append String and Int"],
+] as const) Deno.test(`a recursive typed call ends: ${source}`, () => {
+    const issues = checkSource(source, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
+    if (error ? !issues.includes(error) : issues) throw new Error(issues || "accepted");
+});

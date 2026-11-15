@@ -646,7 +646,7 @@ const DATA_KINDS = new Set(["list", "record", "variant", "map", "atom"]);
 const STATEMENT_BUDGET = 250000;
 // The steps typing one call for its argument may take (see typedCall), and
 // what running out of them says.
-const CALL_BUDGET = 2000, CALL_COST = "typing this call costs too much";
+const CALL_BUDGET = 20000, CALL_COST = "typing this call costs too much";
 function instantiate(entry: Entry): Ty {
     return entry.mono
         ? entry.type
@@ -2312,7 +2312,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // [a, b] is a :: b :: [], with what :: means here.
                 if (p.v.length && !preludeCons(scope)) return bind(listPatternExpansion(p), expected, scope, e, bound);
                 const items = p.v.map(() => variable());
-                const pattern: Ty = { k: "list", element: items.length ? union(items) : variable(), items, length: items.length ? constant(BigInt(items.length)) : undefined };
+                // Each item of a list whose items are not known has its element type.
+                const given = resolve(expected), element = given.k === "list" && !given.items && items.length ? given.element : undefined;
+                if (element) items.forEach(item => unify(item, element, e));
+                const pattern: Ty = { k: "list", element: element ?? (items.length ? union(items) : variable()), items, length: items.length ? constant(BigInt(items.length)) : undefined };
                 unify(pattern, expected, e);
                 const vector = resolve(expected);
                 if (vector.k === "list" && vector.length?.terms.size === 1) {
@@ -2957,8 +2960,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const t = field && resolve(field), value = t?.k === "type" ? resolve(t.value) : undefined;
         return value?.k === "atom" && value.name === "Type";
     }
-    // A call of a function of one clause typed for its arguments: its body's
-    // type with the parameters bound as the call binds them. A name takes its
+    // A call of a function typed for its arguments: its body's type with the
+    // parameters bound as the call binds them. A name takes its
     // argument as it is (what is known of it too); a part of any other pattern
     // has the type the pattern gives ((x : Float) a Float), its value
     // converting to it as an argument does. Given a list whose items are
@@ -2979,8 +2982,39 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (const c of clauses) { const at = c.params.indexOf(f.pattern); if (at >= 0) return at; }
         return -1;
     };
+    // The calls being typed, by function and argument types: a call made again
+    // while its typing is under way (a recursive one, as branch calls limb
+    // calls branch) is the type that typing finds, not typed once more; one
+    // given other types (f (p ++ p) (n - 1)) takes the function's own type,
+    // as a recursive call always has, so typing calls ends.
+    const typingCalls = new WeakMap<Summary, Map<string, Ty>>();
     function typedCall(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
         if (typingCall > 64) return undefined;
+        const calls = typingCalls.get(summary) ?? new Map<string, Ty>(), key = args.map(a => text(resolve(a.type))).join("\u0000");
+        typingCalls.set(summary, calls);
+        const pending = calls.get(key);
+        if (pending) return pending;
+        // (One whose parameters are all names depends on their types alone:
+        // typed once, for each of its calls given them.)
+        const names = summary.clauses.every(c => c.params.slice(0, args.length).every(q => q.p === "var"));
+        const done = names ? typedCalls.get(summary)?.get(key) : undefined;
+        if (done) return copy(done);
+        if (calls.size) return undefined;
+        const result = variable();
+        calls.set(key, result);
+        try {
+            const typed = typedOnce(summary, args, e);
+            if (typed) unify(result, typed, e);
+            if (typed && names) {
+                const finished = typedCalls.get(summary) ?? new Map<string, Ty>();
+                typedCalls.set(summary, finished);
+                finished.set(key, result);
+            }
+            return typed && result;
+        } finally { calls.delete(key); }
+    }
+    const typedCalls = new WeakMap<Summary, Map<string, Ty>>();
+    function typedOnce(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
         if (summary.clauses.length > 1) return typedClauses(summary, args, e);
         const clause = summary.clauses[0];
         const scope: Scope = new Map(summary.scope);
@@ -2995,7 +3029,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         } finally { typingCall--; }
     }
     function bindArgument(param: Pattern, argument: Entry, scope: Scope, e: Expr): void {
-        if (param.p === "var") { scope.set(param.name, { ...argument }); return; }
+        // (A name takes its argument's type: its value, known, would have the
+        // body evaluated for it, f (p ++ p) (n - 1) all the way down, which
+        // typing does not need; a typed part checks a known value itself.)
+        if (param.p === "var") { scope.set(param.name, { type: argument.type }); return; }
         if (param.p === "wildcard") return;
         const a = resolve(argument.type);
         // A list whose items are known: its first and the rest, each its own,
@@ -3052,10 +3089,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (!results.length && failed) throw failed;
         return results.length ? results.reduce((a, b) => choice(a, b, e)) : undefined;
     }
-    // A call typed for its arguments, which fails where its body does. One
-    // that costs more than CALL_BUDGET steps, or leaves something unknown (a
-    // length typing alone cannot find), is no better than the function's own
-    // type: it is given up, undefined, the steps given back.
+    // A call typed for its arguments, which fails where its body does, and
+    // where typing it takes more than CALL_BUDGET steps. One that leaves
+    // something unknown (a length typing alone cannot find) is no better than
+    // the function's own type: it is given up, undefined.
     const costly = (error: unknown) => !!error && typeof error === "object" && "message" in error && error.message === CALL_COST;
     function boundedTypedCall(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
         const saved = requirements.length, before = budget, floor = callFloor, boundaries = dynamicBoundaries, unknown = firstUnknown, length = unknownLength;
@@ -3071,7 +3108,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return dynamicBoundaries > boundaries ? giveUp() : typed;
         } catch (error) {
             if (!costly(error)) throw error;
-            return giveUp();
+            callFloor = floor;
+            return problem(`typing this call for its arguments takes more than ${CALL_BUDGET} steps`, e,
+                "an argument holds items of different types, so the call is typed for them; give it items of one type, as (xs : List Dynamic) does, to check them as they run");
         } finally { callFloor = floor; }
     }
     // Whether a type holds a list whose known items, or a record whose fields,

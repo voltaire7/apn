@@ -56,7 +56,8 @@ fly width height flock boid = {
     neighbor other = {
         [otherX,otherY] = other.position
         [dx, dy] = [x - otherX, y - otherY]
-        [sqrt (dx * dx + dy * dy), [dx,dy], other]
+        # (sqrt of a Float may be complex: a sum of squares' is a Float.)
+        [(sqrt (dx * dx + dy * dy) : Float), [dx,dy], other]
     }
     near = filter ([d,_,_] -> d > 0 && d < 50) (map neighbor flock)
     acceleration = separate boid near * 1.5 + align boid near + cohere boid near

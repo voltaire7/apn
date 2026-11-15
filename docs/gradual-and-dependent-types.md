@@ -530,9 +530,12 @@ rejects `g [300, "x"]`). Where the typed body fails, the call does: in a
 clause that certainly takes the arguments, or in every one that may (one
 the run may pass over, by its guard or a value it decides, is left out where
 it fails), so `f p | length p > 5 = "long"; f p = head p ++ "!"` rejects
-`f [1, "a"]`. A typed call that costs more than a bounded number of steps, or
-leaves something unknown (a length a family's pattern names), takes the
-function's own type instead. Your own
+`f [1, "a"]`. Typing a call past a bound of 20000 steps is an error too:
+giving the argument items of one type (`(xs : List Dynamic)`) leaves them to
+the run. A recursive call given the types its call is being typed for is the
+type that typing finds; given others (`f (p ++ p) (n - 1)`), and a typed call
+that leaves something unknown (a length a family's pattern names), it takes
+the function's own type. Your own
 functions carry lengths through too, including nested ones: a result that is an
 argument, a list literal of such results, or an argument passed through those
 operations (`twice xs = xs * x -> x * 2`, `h a b = [map f a, map f b]`). A
