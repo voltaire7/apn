@@ -52,7 +52,7 @@ type Ty =
     // possibly symbolic in a parameter), so clause ranking can use it later.
     // written: where a call deferred to its enclosing function's calls was written.
     // within: the top-level definition being checked when it was deferred.
-    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known; written?: Expr; within?: object; decided?: Ty; lossless?: boolean[]; ascribed?: true; conversion?: [boolean, boolean] }
+    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known; written?: Expr; within?: object; decided?: Ty; idle?: number; lossless?: boolean[]; ascribed?: true; conversion?: [boolean, boolean] }
     | { k: "dynamic"; explicit?: boolean }
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
@@ -631,6 +631,11 @@ function captured(scope: Scope): Set<Ty> {
     }
     return found;
 }
+// Changes to types (a unification, an operation decided or given a solution,
+// a variable linked): a reading of types taken with none since reads the same
+// again (see evaluateOperation). One count for every check, as types outlive
+// one (a REPL session's earlier inputs).
+let typeChanges = 0;
 // Static evaluation limits: nesting (recursion) depth, and work per root value
 // (apn --check-budget=N sets the work; none lifts both, so checking code that
 // never finishes never finishes either, though it still performs no effect).
@@ -840,7 +845,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.k === "apply") { const made = appliedType(t); return made === t ? t : resolve(made); }
         if (t.k !== "operation") return t;
         if (t.decided) return resolve(t.decided);
-        if (resolving.has(t)) return t.solution ?? t;
+        if (resolving.has(t) || t.idle === idleAt()) return t.solution ?? t;
         spend();
         if (resolving.size > 96) return limit("type checking limit exceeded; recursive operator constraints need an explicit type pattern");
         resolving.add(t);
@@ -849,7 +854,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (result === t) return t.solution ?? t;
             // Decided once: an operation whose operands are known has one value,
             // which later resolves reuse rather than evaluating it again.
-            if (result.k !== "operation") t.decided = result;
+            if (result.k !== "operation") { t.decided = result; typeChanges++; }
             return result;
         }
         finally { resolving.delete(t); }
@@ -1116,8 +1121,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function evaluateOperation(t: Extract<Ty, { k: "operation" }>): Ty {
         // Read when used: resolving an argument may decide a call it holds,
         // so the waiting check below can find more than a first reading did.
+        let raw: Ty[] = [];
         const read = (): Ty[] => {
-            const operands = t.args.map(resolve);
+            raw = t.args.map(resolve);
+            const operands = [...raw];
             // A Mutable cell is read for its contents, as at runtime.
             if (["+", "-", "*", "/", "%", "^", "++", "compare", "negate", "length", "pairs", "keys", "values", "enumerate"].includes(t.op)) {
                 for (let n = 0; n < operands.length; n++) {
@@ -1128,6 +1135,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             return operands;
         };
+        const start = typeChanges;
         let operands = read(), [a, b] = operands;
         // when c action: in the action's monad, whatever c is.
         // enumFrom a and the like are [a..] and the like (see rangeType).
@@ -1137,8 +1145,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return rangeType(a, operands.slice(1).map(type => ({ at: placeholder, type })), t.op.includes("Then"), t.op.endsWith("To"), placeholder);
         }
         if (t.op === "when") return b.k === "var" || b.k === "operation" ? t : monadicType("then", b, pendingTy(list(variable(), constant(0n))));
-        if (t.args.some(x => { const v = resolve(x); return v.k === "var" || v.k === "operation"; })) return t;
-        operands = read(); [a, b] = operands;
+        // (Read again only where reading changed a type: else each reading of
+        // an operation over a parameter (x + 1 + 1 ...) would read its operands
+        // twice, each of theirs twice again.)
+        const undecided = (types: Ty[]) => types.some(v => v.k === "var" || v.k === "operation");
+        if (typeChanges === start ? undecided(raw) : undecided(t.args.map(resolve))) { t.idle = idleAt(); return t; }
+        if (typeChanges !== start) { operands = read(); [a, b] = operands; }
         if (t.op === "run") return runType(a);
         if (["map", "ap", "bind", "then", "bindFlip", "sequence", "mapM"].includes(t.op)) return monadicType(t.op, a, b);
         if (t.op === "merge-record") {
@@ -1255,7 +1267,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (f.pattern?.p === "schema" || f.pattern?.p === "recPat") application(f, { type: a }, activeExpression ?? { t: "placeholder" });
                 // An alternative's [] tests the value, it does not make it empty.
                 else unify(openEmpty(f.input), a);
-                if (!t.solution && f.output.k !== "operation" && f.output.k !== "var") t.solution = f.output;
+                if (!t.solution && f.output.k !== "operation" && f.output.k !== "var") { t.solution = f.output; typeChanges++; }
                 for (const check of f.checks ?? []) resolve(check);
                 outputs.push(resolve(f.output));
             }
@@ -1403,12 +1415,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         return result;
     }
+    // When an operation found its operands undecided: until a type changes
+    // (or what deciding and choosing tell waiting and calls), it finds so again.
+    const idleAt = () => typeChanges * 4 + (deciding ? 2 : 0) + (choosing ? 1 : 0);
     function unify(
         expected: Ty,
         actual: Ty,
         e?: Expr,
         seen = new Map<Ty, Set<Ty>>(),
     ): void {
+        typeChanges++;
         spend(e);
         expected = resolve(expected);
         actual = resolve(actual);
@@ -2720,7 +2736,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A value a call decides later is converted then, as written: an
         // ascription (decodeValue d x : Result T String) takes a Dynamic.
         if (a.k === "operation" && (runtimeProjection || explicitFloat) && t.k !== "var" && t.k !== "operation") {
-            if (!a.solution) a.solution = t.k === "list" ? list(t.element) : t;
+            if (!a.solution) { a.solution = t.k === "list" ? list(t.element) : t; typeChanges++; }
             requirements.push({ k: "operation", op: "convert", args: [target, actual], conversion: [explicitFloat, runtimeProjection] });
             return target;
         }
@@ -7635,6 +7651,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const own: Scope = new Map(scope);
             defineClauses(name, clauses, own, location);
             (forward as Extract<Ty, { k: "var" }>).link = own.get(name)!.type;
+            typeChanges++;
             // return is chosen by its result type: record it for the runtime.
             if (name === "return") {
                 const head = resultHead(own.get(name)!.type, 1);
@@ -8020,7 +8037,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // call may have resolved pending to the call site's function node.
             scope.set(name, { type, nonGeneric, clauses });
         } else {
-            if (pending.k === "var" && !pending.link) pending.link = type;
+            if (pending.k === "var" && !pending.link) { pending.link = type; typeChanges++; }
             // A recursive call has the function's type as a whole, as in a
             // single clause: f rest in x + f rest gives what f [] = 0 gives.
             // Its parameters and result are the whole's; the call keeps its
@@ -8393,9 +8410,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const leftover = requirements.filter(r => { deciding = false; const waits = waiting(r); deciding = true; return !waiting(r) && (waits || carried.has(r)); });
     for (const requirement of leftover) {
         if (requirement.k === "operation" && requirement.op !== "call" && requirement.written) activeExpression = requirement.written;
-        try { resolve(requirement); }
-        catch (error) {
-            if (error && typeof error === "object" && "pos" in error && "message" in error) issues.push(error as TypeIssue);
+        limitIssue = undefined;
+        try {
+            resolve(requirement);
+            if (limitIssue) throw limitIssue;
+        } catch (error) {
+            if (error && typeof error === "object" && "pos" in error && "message" in error) issues.push((limitIssue ?? error) as TypeIssue);
             else throw error;
         }
     }

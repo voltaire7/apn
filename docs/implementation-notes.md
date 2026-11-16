@@ -633,9 +633,14 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   generalizing and compare visited pairs during unification. Do not
   reintroduce an occurs-check rejection for self-application. Inference
   budget/depth exhaustion is a diagnostic, not a `Dynamic` fallback (`limit`
-  keeps the budget's issue for its statement, past any `succeeds`); an
-  evaluation that runs out of budget leaves its value unknown, an error where
-  a type needs it (`budgetCut`, below). `tests/type-level-evaluation-test.ts`.
+  keeps the budget's issue for its statement, past any `succeeds`). An
+  operation found undecided keeps that (`idle`) until `typeChanges` (or
+  `deciding`, `choosing`) moves, and reads its operands again only if reading
+  changed a type, so a chain of them costs linear work: whatever changes a type
+  (a `link`, `decided`, `solution`) must count in `typeChanges`, as `unify`
+  does. An evaluation that runs out of budget leaves its value unknown, an
+  error where a type needs it (`budgetCut`, below).
+  `tests/type-level-evaluation-test.ts`, `tests/strict-checking-test.ts`.
 - The checker's evaluator calls the runtime's text functions
   (`text-natives.ts`: `upper`, `lower`, `chars`, `fromChars`, `parse`, which
   `to`/`from` with `String` or `List Char` run) on known values; never reimplement a native in `evaluateNative`.

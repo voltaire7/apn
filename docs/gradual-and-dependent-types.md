@@ -713,7 +713,11 @@ Analysis budget/depth exhaustion is a diagnostic, never successful checking or
 a silent Dynamic fallback, wherever it happens: a check that tries something (a
 clause, an overload, code a known condition passes over) and reads a type error
 as its not fitting reads running out as none. The inference budget is per
-top-level statement, so a long program or module is not limited by its length. Gradual editor diagnostics remain available separately.
+top-level statement, so a long program or module is not limited by its length.
+Operators over values not known yet (`g x = x + 1 + 1 ...`, `x` a parameter)
+wait on one another, each on the one before it, at most 96 deep: a longer chain
+is that error too, and a type pattern (`g (x : Int) = ...`) decides them. Gradual
+editor diagnostics remain available separately.
 
 ## Recursion and self-application
 
