@@ -697,6 +697,10 @@ function substituteIndex(index: Index, [name, value]: [string, Index]): Index {
     terms.delete(name);
     return indexAdd({ constant: index.constant, terms }, value, coefficient);
 }
+// How deep copy is: 64 deep in a chain of operations each over the one before
+// (compositions of a polymorphic function), the rest of it is copied from its
+// innermost out first, so each copy finds its operand copied and nests no deeper.
+let copying = 0;
 function copy(
     t: Ty,
     vars = new Map<Ty, Ty>(),
@@ -712,6 +716,18 @@ function copy(
         return fresh;
     }
     if (nodes.has(t)) return nodes.get(t)!;
+    if (copying === 64 && t.k === "operation") {
+        const below: Ty[] = [];
+        for (let x: Ty | undefined = t; x?.k === "operation";) {
+            x = x.args.map(resolve).find(y => y.k === "operation" && !nodes.has(y) && !below.includes(y));
+            if (x) below.push(x);
+        }
+        for (const x of below.reverse()) copy(x, vars, subst, nodes, value);
+    }
+    copying++;
+    try { return copied(t, vars, subst, nodes, value); } finally { copying--; }
+}
+function copied(t: Ty, vars: Map<Ty, Ty>, subst: [string, Index] | undefined, nodes: Map<Ty, Ty>, value: [string, Known] | undefined): Ty {
     // Register the shell before traversing children, so recursive edges point
     // into the new graph rather than the original polymorphic instance.
     const result = { ...t } as Ty;
@@ -964,14 +980,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return unique.length === 1 ? unique[0] : { k: "union", choices: unique };
     }
     // Is this (an operation that is) still waiting for an unknown type?
-    function waiting(type: Ty, seen = new Set<Ty>()): boolean {
-        let t = type;
-        while (t.k === "var" && t.link) t = t.link;
-        if (t.k === "var") return true;
-        if (t.k !== "operation" || seen.has(t)) return false;
-        seen.add(t);
-        if (!deciding && t.op === "call" && t.known && symbolic(t.known)) return true;
-        return t.args.some(x => waiting(x, seen));
+    // (With a stack of its own: operations may wait on one another thousands deep.)
+    function waiting(type: Ty): boolean {
+        const seen = new Set<Ty>(), pending = [type];
+        while (pending.length) {
+            let t = pending.pop()!;
+            while (t.k === "var" && t.link) t = t.link;
+            if (t.k === "var") return true;
+            if (t.k !== "operation" || seen.has(t)) continue;
+            seen.add(t);
+            if (!deciding && t.op === "call" && t.known && symbolic(t.known)) return true;
+            for (let n = t.args.length - 1; n >= 0; n--) pending.push(t.args[n]);
+        }
+        return false;
     }
     // Does this value depend on a parameter of an enclosing function?
     function symbolic(k: Known): boolean {
@@ -3824,14 +3845,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 throw error;
             }
             const checks: Ty[] = [...f.checks ?? []];
-            const collect = (type: Ty, seen = new Set<Ty>()): void => {
-                const t = resolve(type);
-                if (seen.has(t)) return;
+            // (In order, with a stack of its own: a type may nest thousands deep.)
+            const seen = new Set<Ty>(), types = [argument.type];
+            while (types.length) {
+                const t = resolve(types.pop()!);
+                if (seen.has(t)) continue;
                 seen.add(t);
                 if (t.k === "fn") checks.push(...t.checks ?? []);
-                for (const child of children(t)) collect(child, seen);
-            };
-            collect(argument.type);
+                types.push(...children(t).reverse());
+            }
             // With this argument's value known, the function's deferred checks
             // (calls on the parameter) see that value instead of its symbol.
             const value: Known = { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, range: argument.range, mutable: argument.mutable, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr, payload: argument.payload, fields: argument.fields };

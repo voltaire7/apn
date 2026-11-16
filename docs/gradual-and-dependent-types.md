@@ -717,7 +717,10 @@ top-level statement, so a long program or module is not limited by its length.
 A chain of operators, however long (`a + b + c ...`, `x :: y :: ... :: []`,
 `f $ g $ ... x`, `inc \ inc \ ...`), is typed from its innermost operator out, so
 it nests no deeper than one; so are operators over values not known yet (`g x =
-x + 1 + 1 ...`, `x` a parameter), which wait on one another. An expression
+x + 1 + 1 ...`, `x` a parameter), which wait on one another. A composition of a
+function over such values (`inc x = x + 1`) waits so at each step, at more than
+linear cost: some hundreds long, it reaches the inference budget, which a typed
+one (`inc (x : Int) = x + 1`) does not. An expression
 nested otherwise more than 256 deep, or deeper than the checker's stack holds,
 is past the depth limit. Gradual editor diagnostics remain available separately.
 

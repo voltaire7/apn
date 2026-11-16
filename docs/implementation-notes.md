@@ -421,8 +421,11 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   it, as nested appends give); a long `$` chain runs in `pipedChain`,
   innermost first, while each function `forcesFirst` (a conservative check:
   one clause of names and no guard, unjoined, its body starting with the
-  argument by `startsWith`), so the order of every evaluation, and so of
-  every error, is the nested one's; the parser joins a right-associative chain from the right in
+  argument by `startsWith`, or its parameter a scalar typed one), so the order
+  of every evaluation, and so of every error, is the nested one's; a long
+  composition applied runs so in `composedChain` (`compositions` keeps each
+  one's parts), and a right-nested chain of strict operators (`\\`, `^`)
+  evaluates its lefts outermost first, then folds from the inside; the parser joins a right-associative chain from the right in
   `parseOperators` (`join`) rather than recursing per operator. Tests:
   `tests/tail-call-test.ts`, `tests/repl-interrupt-pty.py`.
 - Fixity: the parser sees the prelude's declarations and the parsed file's
@@ -655,7 +658,10 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   each node's recorded type slimmed of a list's items and code once the one
   above it is typed), so neither nests with its length; `++` of code types only
   the right's items, after the left's (`codeList` with `joined`, its bindings
-  kept in `Formula.bound`); a `RangeError` in a statement is its
+  kept in `Formula.bound`). Nor does `copy` nest with a chain of operations,
+  copying it from its innermost out from 64 deep, nor `waiting`, nor the
+  checks an argument's type carries, with stacks of their own. A `RangeError`
+  in a statement is its
   depth limit. A walk over a whole program or expression keeps its own stack
   (`walkObjects`, or one of its own as `mentionedNames` and `valueNames`,
   which keep each node's result), never the host's: a chain of thousands of

@@ -1975,6 +1975,26 @@ export class Interpreter {
                 return value;
             }
         }
+        // A right-nested chain of strict ones (f \\ g \\ ..., a ^ b ^ ...): each
+        // left evaluated, outermost first, then the last right, then each
+        // operator innermost first, in a loop, as the nested evaluation would.
+        if (op && !LAZY_OPERATORS.has(op) && e.r.t === "binop") {
+            const spine: [Extract<Expr, { t: "binop" }>, string][] = [[e, op]];
+            for (let x: Expr = e.r; x.t === "binop" && !x.reassociate; x = x.r) {
+                const g = this.env.get(x.op), at = g && this.primitiveOperator(g.kind === "thunk" || g.kind === "deferred" ? this.reference(g) : g);
+                if (!at || LAZY_OPERATORS.has(at)) break;
+                spine.push([x, at]);
+            }
+            if (spine.length > 64) {
+                const lefts = spine.map(([x]) => { checkInterrupt(); return this.eval(x.l); });
+                let value = this.eval(spine[spine.length - 1][0].r);
+                for (let n = spine.length - 1; n >= 0; n--) {
+                    checkInterrupt();
+                    value = this.operate(spine[n][1], lefts[n], value);
+                }
+                return value;
+            }
+        }
         if (op && !LAZY_OPERATORS.has(op)) return this.operate(op, this.eval(e.l), this.eval(e.r));
         const l = this.delay(e.l), r = this.delay(e.r);
         if (op) return this.operate(op, l, r);
@@ -2018,18 +2038,61 @@ export class Interpreter {
         }
         return this.apply(heads[0], value, false, true, tailLoad);
     }
+    // A composition (f \\ g, see operate) and its two functions.
+    private compositions = new WeakMap<Value, [Value, Value]>();
+    // f \\ g \\ ... thousands long applied to x: as f $ g $ ... x (pipedChain),
+    // each function evaluating its argument first having it evaluated first,
+    // innermost first in a loop. Undefined for a short chain.
+    private composedChain(f: Value, x: Value, tail: boolean, tailLoad: boolean): Value | TailCall | undefined {
+        // The functions, outermost first, and what each is composed with.
+        const functions: Value[] = [], rests: Value[] = [];
+        for (let c: Value = f; ;) {
+            const parts = this.compositions.get(c);
+            if (!parts) { functions.push(c); break; }
+            functions.push(parts[0]);
+            rests.push(parts[1]);
+            c = this.force(parts[1]);
+        }
+        if (functions.length <= 64) return undefined;
+        let first = 0;
+        while (first < functions.length && this.forcesFirst(functions[first])) first++;
+        if (first === 0) return undefined;
+        // The innermost argument: x, or the first function that may not
+        // evaluate its own given it lazily, as the composition does.
+        let value = first === functions.length ? this.force(x)
+            : this.force(this.apply(functions[first], first < rests.length ? this.defer(() => this.apply(rests[first], x)) : x));
+        for (let n = first - 1; n > 0; n--) {
+            checkInterrupt();
+            value = this.force(this.apply(functions[n], value));
+        }
+        return tail ? this.apply(functions[0], value, false, true, tailLoad) : this.apply(functions[0], value);
+    }
     // Whether applying f to one argument evaluates it before anything else
     // that could fail or not end: the call it completes, of a lambda or a
     // function of one clause with names for parameters and no guard, whose
-    // body starts by evaluating it (see startsWith).
+    // body starts by evaluating it (see startsWith), or whose parameter there
+    // is typed with a type of single values (Int, String: its conversion
+    // evaluates it at once); a composition of such functions.
     private forcesFirst(f: Value, seen = new Set<Value>()): boolean {
         f = this.force(f);
         if (seen.has(f)) return false;
         seen.add(f);
+        if (this.compositions.has(f)) {
+            for (let c = f; ;) {
+                const parts = this.compositions.get(c);
+                if (!parts) return this.forcesFirst(c, seen);
+                if (!this.forcesFirst(parts[0], seen)) return false;
+                c = this.force(parts[1]);
+            }
+        }
         if (f.kind === "closure") return f.params.length === 1 && this.startsWith(f.body, f.params[0], f.env, new Set([...f.whole ?? [], ...f.params]), seen);
         if (f.kind !== "clauseFn" || f.clauses.length !== 1 || f.applied.length + 1 !== f.arity || this.joins(f)) return false;
-        const [clause] = f.clauses, names = clause.params.map(p => p.p === "var" ? p.name : undefined);
+        const [clause] = f.clauses, at = clause.params[f.applied.length];
+        const scalar = at.p === "constr" && at.typed && at.args.length === 1 && at.args[0].p === "var" && SCALAR_TYPES.has(at.tag) &&
+            this.reference(f.env.get(at.tag) ?? mkList([])).kind === "type";
+        const names = clause.params.map(p => p.p === "var" ? p.name : p === at && scalar ? (at.args[0] as Extract<Pattern, { p: "var" }>).name : undefined);
         if (clause.guard || names.some(n => n === undefined)) return false;
+        if (scalar) return clause.params.every(p => p === at || p.p === "var");
         const name = names[f.applied.length]!;
         return names.filter(n => n === name).length === 1 && this.startsWith(clause.body, name, f.env, new Set(names as string[]), seen);
     }
@@ -2147,11 +2210,13 @@ export class Interpreter {
             const env = new Env(this.env);
             env.setLocal("f", l);
             env.setLocal("g", r);
-            return {
+            const composed: Value = {
                 kind: "closure", params: ["x"], env,
                 body: { t: "app", f: { t: "var", name: "f" },
                     a: { t: "app", f: { t: "var", name: "g" }, a: { t: "var", name: "x" } } },
             };
+            this.compositions.set(composed, [l, r]);
+            return composed;
         }
         if (op === "^") {
             if (!isNumeric(l) || !isNumeric(r)) return bad();
@@ -2434,6 +2499,8 @@ export class Interpreter {
                 return this.typeValue(f, arg);
             }
             case "closure": {
+                const composed = this.compositions.has(f) ? this.composedChain(f, arg, tail, tailLoad) : undefined;
+                if (composed) return composed;
                 if (f.params.length === 0) {
                     // a 0-arg action APPLIED to arguments: run it, then hand the
                     // result the argument — keeps partial application working:
