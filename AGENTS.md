@@ -144,8 +144,8 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
 - **Static checking** evaluates the pure code a type needs, in its own
   step-bounded evaluator, and never performs effects; lint/LSP never evaluate
   user code beyond that checker. What it cannot decide (a parameter, input, a
-  cell's contents out of run order, the budget running out) becomes a runtime
-  check, never a guess. It reads program input only when the interpreter checks
+  cell's contents out of run order) becomes a runtime check, never a guess; a
+  value a type needs whose evaluation runs out of the budget is an error. It reads program input only when the interpreter checks
   right before a run, through the snapshot that run uses (stdin only when it is
   not a terminal).
 - **File mode never auto-prints**; the REPL echoes expression results but

@@ -144,6 +144,8 @@ interface Known {
     actionResult?: string;
     // type: a type value (Int, or one a type-level function chose).
     type?: Ty;
+    // cut: its evaluation ran past the checker's budget (see budgetCut).
+    cut?: boolean;
 }
 // A function's clauses and defining scope, so a direct call by name can
 // evaluate what its result value is from what is known about the arguments.
@@ -177,6 +179,7 @@ interface Entry {
     payload?: Known[];
     fields?: [string, Known][];
     expr?: Known["expr"];
+    cut?: boolean;
     // A value that is an action (a do-block): run by the check that uses it.
     actionBody?: { body: Expr; scope: Scope };
     clauses?: { params: Pattern[]; body: Expr }[];
@@ -1962,7 +1965,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (f.clauses) { runtimeChecks++; return explicitDynamic; }
         const scope = new Map(f.scope);
         f.params.forEach((name, i) => scope.set(name, { ...args[i], mono: true }));
-        return infer(f.body, scope);
+        const made = infer(f.body, scope), chosen = resolve(made);
+        if (chosen.k === "type" && chosen.chosen && args.some(a => a.cut)) budgetCut(e);
+        return made;
     }
     // What a name in X = A | B is bound to here, as the run decides (Interpreter.alternative).
     function alternative(name: string, declared: string, scope: Scope): Alternative {
@@ -2589,7 +2594,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // to the run.
     function refinementFails(t: Ty, known: Known, e: Expr): boolean {
         const r = resolve(t);
-        if (r.k !== "type" || !r.refined?.fn || applyKnown(r.refined.fn, [known], 0)?.boolean !== false) return false;
+        if (r.k !== "type" || !r.refined?.fn) return false;
+        const fn = r.refined.fn, [holds, cut] = finishing(() => budgeted(() => applyKnown(fn, [known], 0)));
+        if (holds?.boolean === undefined && (cut || known.cut)) budgetCut(e);
+        if (holds?.boolean !== false) return false;
         problem(`${renderKnown(known) ?? "the value"} is not in ${r.refined.name ?? "the refinement"}`, e);
         return true;
     }
@@ -3462,6 +3470,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (element.k !== "type" && element.k !== "dynamic") problem(`${f.name} element must be a type`, e);
             // A length evaluation could not decide (it depends on input, or ran
             // past the evaluation budget) is checked at runtime.
+            if (!args[0].index && args[0].cut) budgetCut(e);
             if (!args[0].index) runtimeChecks++;
             const length = args[0].index && indexAdd(indexScale(args[0].index, f.counts.scale), constant(f.counts.offset));
             return { k: "type", value: { k: "list", element: element.k === "type" ? element.value : dynamic, length, contracted: true } };
@@ -4739,8 +4748,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         infer(e.cond, scope);
                         return infer(known.boolean ? e.then : e.els, scope, expected);
                     }
+                    const made = infer(ternaryExpansion(e), scope, expected), chosen = resolve(made);
+                    if (known.boolean === undefined && known.cut && chosen.k === "type" && chosen.chosen) budgetCut(e.cond);
+                    return made;
                 }
-                return infer(ternaryExpansion(e), scope, expected);
             }
             case "binop": {
                 if (e.reassociate) return infer(regrouped(e, scope), scope, expected);
@@ -5137,7 +5148,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function needed(k: Known): Known {
         if (!k.expr || k.expr.env.length) return k;
         const { e, scope } = k.expr;
-        return { ...k, expr: undefined, ...budgeted(() => evaluateKnown(e, new Map(), scope, 0)) };
+        const [facts, cut] = finishing(() => budgeted(() => evaluateKnown(e, new Map(), scope, 0)));
+        return { ...k, expr: undefined, ...facts, ...cut ? { cut } : {} };
     }
     // A function of any value with nothing to check on it (print): what the
     // value is cannot change the call's type.
@@ -5177,7 +5189,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // skipped or uncertain, and no access sat in a lazy position.
             if (outermost && cellRead && (unknownWrite || incomplete || reordered)) return undefined;
             return result;
-        } catch (error) { if (error instanceof RangeError) return undefined; throw error; } finally { budgetDepth--; }
+        } catch (error) {
+            if (!(error instanceof RangeError)) throw error;
+            incomplete = exhausted = deepCut = true;
+            return undefined;
+        } finally { budgetDepth--; }
     }
     // Mutable cells. When no code in the session can write a cell, every cell
     // keeps its first contents. Otherwise a cell's contents are tracked within
@@ -5560,7 +5576,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function spendEvaluation(depth: number): boolean {
         if (depth <= EVALUATION_DEPTH && ++evaluations <= evaluationLimit) return true;
         incomplete = exhausted = true;
+        deepCut = depth > EVALUATION_DEPTH;
         return false;
+    }
+    // A value a type needs (a Vect's length, whether it is in a refinement,
+    // a type a condition chooses) whose evaluation ran past the budget is an
+    // error, as typing a call past its bound is: past it, nothing is known of
+    // whether it ever finishes. (One that depends on a parameter or on input
+    // is checked as the program runs.)
+    let deepCut = false;
+    function budgetCut(e: Expr): never {
+        return problem(deepCut ? "evaluating this for its type nests calls deeper than the checker follows"
+            : `evaluating this for its type takes more than ${EVALUATION_BUDGET} steps`, e,
+            "a type depends on its value; apn --check-budget=N lets the checker evaluate N steps, and --check-budget=none lifts the bound");
     }
     // Apply a known function value to known arguments, as the runtime does:
     // too few arguments give a function value, extra ones apply its result.
@@ -5752,7 +5780,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // A name bound to a known function (a typed call's argument) is it.
             if (entry.fn) return { fn: entry.fn };
             if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope } };
-            return { size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields };
+            // (A value left waiting, computed when a check needs it, too: see needed.)
+            return { size: entry.size, items: entry.items, cell: entry.cell, range: entry.range, mutable: entry.mutable, char: entry.char, float: entry.float, number: entry.number, tag: entry.tag, payload: entry.payload, fields: entry.fields, expr: entry.expr };
         }
         if (e.t === "app") {
             const args: Expr[] = [];
@@ -5898,11 +5927,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Facts plus whatever a pending call evaluates to with its arguments now.
     function resolveKnown(known: Known): Known {
         if (!known.call && !known.expr) return known;
-        const facts = budgeted(() => known.call
+        // (Running out of the budget for a value over parameters is their
+        // being unknown, no cut.)
+        const over = symbolic(known);
+        const [facts, cut] = finishing(() => budgeted(() => known.call
             ? evaluateCall(known.call.summary, known.call.args.map(resolveKnown), 0)
             : evaluateKnown(known.expr!.e, new Map(known.expr!.env.map(([n, v]) => [n, resolveKnown(v)])), known.expr!.scope, 0),
-            symbolic(known) ? SYMBOLIC_BUDGET : EVALUATION_BUDGET);
-        const result: Known = { ...known };
+            over ? SYMBOLIC_BUDGET : EVALUATION_BUDGET));
+        const result: Known = { ...known, ...cut && !over ? { cut } : {} };
         for (const key of ["index", "size", "items", "cell", "range", "mutable", "fn", "boolean", "string", "char", "float", "number", "tag", "payload", "fields"] as const) {
             if (result[key] === undefined && facts?.[key] !== undefined) (result as Record<string, unknown>)[key] = facts[key];
         }

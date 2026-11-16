@@ -288,13 +288,17 @@ cellType 1 "text"                      # String
 ```
 
 What evaluation cannot decide is checked when the program runs, never
-guessed: a value depending on a parameter or on program input, one that
-reads a `Mutable` cell (its contents depend on when it runs), or one that does
-not finish within the step budget. The budget is 300000 steps per value;
-`apn --check-budget=N` sets it, and `--check-budget=none` lifts it, so the
-checker decides what takes longer, and runs forever on what never finishes
-(`loopy n = loopy (n + 1)` in a type), where by default the run would. Either
-way checking performs no effect: the budget bounds work, not what the code may do.
+guessed: a value depending on a parameter or on program input, or one that
+reads a `Mutable` cell (its contents depend on when it runs). A value a type
+needs (a `Vect`'s length, whether a value is in a refinement, the condition an
+alias chooses its type by), through a name as written in place, that does not
+finish within the step budget, or nests calls deeper than the checker follows,
+is an error, as typing a call past its bound is: past it nothing tells whether
+it finishes at all (`loopy n = loopy (n + 1)` in a type never does). The budget
+is 300000 steps per value; `apn --check-budget=N` sets it, and
+`--check-budget=none` lifts it, so the checker decides what takes longer, and
+runs forever on what never finishes. Either way checking performs no effect:
+the budget bounds work, not what the code may do.
 
 - A type chosen by an undecided condition is one of its choices. A value
   must fit at least one (`SelectedType (n > 3) [1]` is a static error); the
@@ -635,7 +639,8 @@ see its latest value and eager ones (`<-`) the value where they stand. Integer
 ranges are cut and indexed arithmetically (`length [1..1000000]`,
 `drop 1000000 [0..]`), and other long lists are walked as far as the work
 budget allows; computations past the budget (such as summing a million
-elements) stay unknown.
+elements) stay unknown where only a value is evaluated to know more of it
+(`print (s + 1)`), and are an error where a type needs them (above).
 
 Effects are never performed while checking, but their results are known:
 `print x`, `echo x` and `emit x` are `x`, `set` and `debug` give `[]`, and `assert c x` gives `x`. A

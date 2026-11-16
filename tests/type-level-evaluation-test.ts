@@ -44,17 +44,35 @@ Deno.test("a type chosen by a parameter is checked at runtime", () => {
     if (!message.includes("Int expects a number")) throw new Error(message);
 });
 
-Deno.test("a length evaluation cannot decide is checked at runtime", () => {
+// A length whose evaluation runs past the checker's budget is an error (the type
+// needs it), one that never finishes too; the run still demands only what it
+// uses, so an unused length is never computed there.
+Deno.test("a length whose evaluation runs past the budget is an error", () => {
     const slow = "fib 0 = 0; fib 1 = 1; fib n = fib (n - 1) + fib (n - 2); xs = [1,2,3] : Vect (fib 27) Int";
-    const result = checkSource(slow, "<test>", { strict: true });
-    if (result.issues.length || !result.runtimeChecks) throw new Error(JSON.stringify(result));
+    if (!issues(slow).some(m => m.includes("takes more than 300000 steps"))) throw new Error(issues(slow).join("; "));
     let message = "";
     try { run(slow + "; xs"); } catch (error) { message = String(error); }
     if (!message.includes("Vect length mismatch")) throw new Error(message);
-    // Laziness: a length that never finishes is never demanded here.
     const endless = "loop n = loop (n + 1); xs = [1] : Vect (loop 0) Int; 1";
-    if (issues(endless).length) throw new Error(issues(endless).join("; "));
+    if (!issues(endless).some(m => m.includes("takes more than 300000 steps"))) throw new Error(issues(endless).join("; "));
     if (run(endless) !== "1") throw new Error("demanded an unused length");
+    // Over a parameter, a length is checked at runtime, as any value is.
+    const over = "count n acc = n == 0 ? acc : count (n - 1) (acc + 1)\nf n = ([1,2] : Vect (count n 0) Int)\n1";
+    if (issues(over).length) throw new Error(issues(over).join("; "));
+});
+// So is a refinement's predicate, a type an alias chooses, and recursion
+// deeper than the checker follows; a name's value is computed as its body's.
+for (const [source, error] of [
+    ["Big = (n : Int) | n > count 1000000 0\nx = (5 : Big)\nx", "takes more than 300000 steps"],
+    ["Pick flag = flag ? Int : String\nx = (5 : Pick (count 1000000 0 > 3))\nx", "takes more than 300000 steps"],
+    ["m = count 1000000 0\nx = ([1,2] : Vect m Int)\nx", "takes more than 300000 steps"],
+    ["m = count 100000 0\nx = ([1,2] : Vect m Int)\nx", "length mismatch: expected 100000, got 2"],
+    ["deep n = n == 0 ? 0 : 1 + deep (n - 1)\nx = ([1,2] : Vect (deep 100000) Int)\nx", "nests calls deeper than the checker follows"],
+    // A value only evaluated to know more of it stays unknown past the budget.
+    ["s = count 1000000 0\nprint (s + 1)", ""],
+]) Deno.test(`past the budget: ${source.split("\n")[0]}`, () => {
+    const found = issues("count n acc = n == 0 ? acc : count (n - 1) (acc + 1)\n" + source).join("; ");
+    if (error ? !found.includes(error) : found) throw new Error(found || "accepted");
 });
 
 Deno.test("the checker runs the runtime's text functions", () => {

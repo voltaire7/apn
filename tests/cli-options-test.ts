@@ -45,13 +45,13 @@ Deno.test("--no-prelude runs and checks without the prelude", () => {
 });
 
 // The checker's budget bounds its work: within it a long computation in a
-// type is decided; past it, the run checks it; none lifts the limit.
+// type is decided; past it, it is an error; none lifts the limit.
 Deno.test("--check-budget sets how far the checker evaluates", () => {
     if (readCliOptions(["--check-budget=none", "a.apn"]).checkBudget !== Infinity) throw new Error("none");
     if (readCliOptions(["--check-budget=1000", "a.apn"]).checkBudget !== 1000) throw new Error("a number");
     const source = "count n acc = n == 0 ? acc : count (n - 1) (acc + 1)\ng (xs : Vect (count 200000 0) Int) = 1\ng [1]";
     const issues = () => checkSource(source, "<test>", { strict: true }).issues.map(i => i.message);
-    if (issues().length) throw new Error(`decided within the default budget: ${issues()}`);
+    if (!issues().some(m => m.includes("takes more than 300000 steps"))) throw new Error(`decided within the default budget: ${issues()}`);
     setCheckBudget(5000000);
     try { if (!issues().some(m => m.includes("length mismatch"))) throw new Error(`not decided: ${issues()}`); }
     finally { setCheckBudget(300000); }

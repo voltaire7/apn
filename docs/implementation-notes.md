@@ -633,8 +633,8 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   generalizing and compare visited pairs during unification. Do not
   reintroduce an occurs-check rejection for self-application. Inference
   budget/depth exhaustion is a diagnostic, not a `Dynamic` fallback; an
-  evaluation that runs out of budget leaves its value unknown, a runtime
-  check. `tests/type-level-evaluation-test.ts`.
+  evaluation that runs out of budget leaves its value unknown, an error where
+  a type needs it (`budgetCut`, below). `tests/type-level-evaluation-test.ts`.
 - The checker's evaluator calls the runtime's text functions
   (`text-natives.ts`: `upper`, `lower`, `chars`, `fromChars`, `parse`, which
   `to`/`from` with `String` or `List Char` run) on known values; never reimplement a native in `evaluateNative`.
@@ -750,7 +750,10 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   continuing in `evaluateKnown`'s loop does not add to) and work
   (`EVALUATION_BUDGET`, per root via `budgeted`) are bounded, and a
   JavaScript stack overflow (`RangeError`) in static evaluation leaves the
-  value unknown. So recursion reaches the runtime's own depth with room to
+  value unknown, as running out does. `needed` and `resolveKnown` mark such a
+  value `cut`; only the checks a type makes of it (`budgetCut`: a factory's
+  length, `refinementFails`, a chosen type in `construct` or a ternary) turn
+  that into an error, and a name's waiting `expr` goes with its value. So recursion reaches the runtime's own depth with room to
   spare, a call whose one possible clause is known leaves its body as a
   `Tail` (`callStep`, `matchStep`, a ternary, a named call without a result
   shape), which `evaluateKnown` evaluates by looping: an evaluated call costs
