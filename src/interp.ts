@@ -5264,7 +5264,7 @@ export class Interpreter {
             case "null":
                 if (a.kind === "hashmap") return mkBool(a.entries.size === 0);
                 if (a.kind === "string") return mkBool(a.v.length === 0);
-                return mkBool(this.cell(a) === null);
+                return mkBool((this.isList(a) || a.kind === "pending") && this.cell(a) === null);
             case "enumerate": {
                 const walk = (xs: Value, index: bigint): Value => this.defer(() => {
                     const cell = this.cell(xs);

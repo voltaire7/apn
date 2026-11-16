@@ -26,7 +26,7 @@ const run = (source: string): string => {
 };
 
 const cases = [
-    "head [1,2]", 'head [1, fail "x"]', "tail [1,2]", "null []", "null [1]", 'null ""', "null ([] : HashMap _ _)",
+    "head [1,2]", 'head [1, fail "x"]', "tail [1,2]", "null []", "null [1]", 'null ""', "null ([] : HashMap _ _)", "null 5", "null (1 / 2)", "null [a = 1]",
     "length [1,2,3]", 'length "abc"', "length ([[\"a\", 1]] : HashMap _ _)",
     "take 2 [1,2,3]", "take 0 [fail 1]", "take 5 [1,2]", "take 2 (map (* 2) [1..])", "drop 1 [1,2,3]", "drop 5 [1,2]",
     "filter (x -> x > 1) [1,2,3]", "filter (x -> 1) [1,2]", "take 2 (filter (> 2) [1..])",
