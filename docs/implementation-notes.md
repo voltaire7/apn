@@ -128,6 +128,11 @@ intentional evaluation change.
 `src/numbers.ts` owns the numeric tower; `src/type-system.ts` defines numeric
 constructors, lossless conversions, and arithmetic promotion.
 
+- A rational is kept in lowest terms with a positive denominator (`rational`
+  reduces it), which `times` relies on: it cancels each factor's numerator
+  against the other's denominator, so a product is in lowest terms without a
+  gcd of it (a long product of fractions grows; its factors stay small).
+  `tests/numeric-tower-test.ts`.
 - `compareNumbers` compares two floats, or a float and an integer a double
   holds exactly (within 2^53), as numbers, and anything else as exact
   fractions; never compare an unsafe integer with a float as a double.

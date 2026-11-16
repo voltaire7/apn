@@ -105,8 +105,19 @@ export function arithmetic(op: string, a: Numeric, b: Numeric): Numeric {
         return floating(op === "+" ? x + y : op === "-" ? x - y : op === "*" ? x * y : x / y);
     }
     const [n, d] = fraction(a), [m, e] = fraction(b);
-    return op === "+" ? rational(n * e + m * d, d * e) : op === "-" ? rational(n * e - m * d, d * e)
-        : op === "*" ? rational(n * m, d * e) : rational(n * e, d * m);
+    if (op === "+" || op === "-") return rational(op === "+" ? n * e + m * d : n * e - m * d, d * e);
+    if (op === "*") return times(n, d, m, e);
+    if (!m) return fail("division by zero");
+    return m < 0n ? times(n, d, -e, -m) : times(n, d, e, m);
+}
+// n/d times m/e, each in lowest terms with a positive denominator: each
+// numerator cancelled against the other's denominator first leaves the
+// product in lowest terms, with no gcd of it taken (a product of many
+// fractions grows long; its factors stay small).
+function times(n: bigint, d: bigint, m: bigint, e: bigint): Real {
+    if (!n || !m) return integer(0n);
+    const g = gcd(n, e), h = gcd(m, d), den = (d / h) * (e / g);
+    return den === 1n ? integer((n / g) * (m / h)) : { kind: "rational", n: (n / g) * (m / h), d: den };
 }
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 export function compareNumbers(a: Numeric, b: Numeric): number {

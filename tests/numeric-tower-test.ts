@@ -87,6 +87,17 @@ for (const source of ["0x", "0b102", "0o8", "0xFG", "1e+", ".1e"]) {
     });
 }
 
+// A product of many fractions stays exact and quick: each factor cancels
+// against the other's denominator first, so no gcd of the long product is
+// taken (n / (n + 1) from 1 to 20000 telescopes to 1/20001).
+Deno.test("a long product of fractions is exact and quick", () => {
+    const i = new Interpreter();
+    const started = performance.now();
+    const shown = i.renderString(i.run(parse('std <- import "std"\nuse std.sequence\n' +
+        "t n = 4 * n^2 / (4 * n^2 - 1)\n[product (map (n -> n / (n + 1)) [1..20000]), numerator (product (map t [1..3]))]")));
+    if (shown !== "[1/20001,256]") throw new Error(shown);
+    if (performance.now() - started > 20000) throw new Error("slow");
+});
 Deno.test("binary64 exact conversion round trips normal and subnormal numbers", () => {
     const bits = new DataView(new ArrayBuffer(8));
     for (let exponent = 0; exponent < 2047; exponent += 13) {
