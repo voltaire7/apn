@@ -52,7 +52,7 @@ for (const [source, expected] of [
         ["$ of calls", chain("g x = x * 2\nf x = g x - x\ny = f", " $ f", 5000, " $ 3\ny"), "3"],
         ["$ of typed functions", chain("f (x : Int) = x + 1\ny = f", " $ f", 5000, " $ 1\ny"), "5002"],
         ["compositions", chain("inc (x : Int) = x + 1\nh = inc", " \\ inc", 20000, "\nh 1"), "20002"],
-        ["compositions of a polymorphic function", chain("inc x = x + 1\nh = inc", " \\ inc", 300, "\nh 1"), "302"],
+        ["compositions of a polymorphic function", chain("inc x = x + 1\nh = inc", " \\ inc", 3000, "\nh 1"), "3002"],
         ["^", chain("y = 2", " ^ 1", 3000, "\ny"), "2"],
         // A function that may not evaluate its argument leaves it lazy.
         ["$ through a lazy call", chain("inc x = x + 1\nk x = 7\nloop n = loop (n + 1)\ny = inc", " $ inc", 3000, " $ k $ loop 0\ny"), "3008"],

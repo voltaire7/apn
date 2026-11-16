@@ -52,7 +52,7 @@ type Ty =
     // possibly symbolic in a parameter), so clause ranking can use it later.
     // written: where a call deferred to its enclosing function's calls was written.
     // within: the top-level definition being checked when it was deferred.
-    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known; written?: Expr; within?: object; decided?: Ty; idle?: number; lossless?: boolean[]; ascribed?: true; conversion?: [boolean, boolean] }
+    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known; written?: Expr; within?: object; decided?: Ty; idle?: number; waits?: { vars: Ty[]; flags: number }; dependents?: Set<Ty>; lossless?: boolean[]; ascribed?: true; conversion?: [boolean, boolean] }
     | { k: "dynamic"; explicit?: boolean }
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
@@ -459,7 +459,17 @@ function typeParameters(type: Ty): number {
         : value.k === "atom" && value.name === "HashMap" || value.k === "map" && t.applied === 1 ? 2 : 0;
 }
 const constant = (n: bigint): Index => ({ constant: n, terms: new Map() });
-const resolve = (t: Ty): Ty => t.k === "var" && t.link ? resolve(t.link) : t.k === "apply" ? appliedType(t) : t;
+// Where a variable's links end, each variable on the way linked there at once
+// (a chain of thousands of aliases, as compositions of a polymorphic function
+// make, is followed once, in a loop).
+function linkEnd(t: Ty): Ty {
+    if (t.k !== "var" || !t.link) return t;
+    let end: Ty = t;
+    while (end.k === "var" && end.link) end = end.link;
+    for (let v: Ty = t; v.k === "var" && v.link && v.link !== end;) { const next: Ty = v.link; v.link = end; v = next; }
+    return end;
+}
+const resolve = (t: Ty): Ty => { t = linkEnd(t); return t.k === "apply" ? appliedType(t) : t; };
 // f a once f is known: the type itself (List a, Result a e); else f a.
 const appliedTypes = new WeakMap<Ty, Ty>();
 function appliedType(t: Extract<Ty, { k: "apply" }>): Ty {
@@ -742,7 +752,14 @@ function copied(t: Ty, vars: Map<Ty, Ty>, subst: [string, Index] | undefined, no
         case "mutable": Object.assign(result, { value: go(t.value) }); break;
         case "map": Object.assign(result, { key: go(t.key), value: go(t.value) }); break;
         case "operation":
-            Object.assign(result, { args: t.args.map(go), solution: t.solution && go(t.solution), decided: t.decided && go(t.decided), known: t.known && substituteKnown(t.known, subst, value) });
+            Object.assign(result, { args: t.args.map(go), solution: t.solution && go(t.solution), decided: t.decided && go(t.decided), known: t.known && substituteKnown(t.known, subst, value), waits: undefined, dependents: undefined });
+            // What the original waits on, the copy waits on in its copies (see
+            // waitsHold), each copied operation it waits through knowing it.
+            if (t.waits && t.waits.vars.every(v => vars.has(v))) {
+                const made = result as Extract<Ty, { k: "operation" }>;
+                made.waits = { vars: t.waits.vars.map(v => vars.get(v)!), flags: t.waits.flags };
+                for (const x of made.args) if (x.k === "operation") (x.dependents ??= new Set()).add(made);
+            }
             break;
         case "fn":
             Object.assign(result, {
@@ -864,11 +881,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let outermost: Definition | undefined;
     const resolving = new Set<Ty>();
     function resolve(t: Ty): Ty {
-        if (t.k === "var" && t.link) return resolve(t.link);
+        t = linkEnd(t);
         if (t.k === "apply") { const made = appliedType(t); return made === t ? t : resolve(made); }
         if (t.k !== "operation") return t;
         if (t.decided) return resolve(t.decided);
-        if (resolving.has(t) || t.idle === idleAt()) return t.solution ?? t;
+        if (resolving.has(t) || t.idle === idleAt() || waitsHold(t)) return t.solution ?? t;
         spend();
         // Deep in a chain of operations each waiting on the one before (x + 1
         // + 1 ..., inc \ inc \ ... of a polymorphic inc), the rest of it is
@@ -878,7 +895,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const below: Ty[] = [];
             const pending = (x: Ty): Ty | undefined => {
                 while (x.k === "var" && x.link) x = x.link;
-                return x.k === "operation" && !x.decided && x.idle !== idleAt() && !resolving.has(x) && !below.includes(x) ? x : undefined;
+                return x.k === "operation" && !x.decided && x.idle !== idleAt() && !waitsHold(x) && !resolving.has(x) && !below.includes(x) ? x : undefined;
             };
             for (let x: Ty | undefined = t; x && x.k === "operation"; ) {
                 const next: Ty | undefined = x.args.map(pending).find(Boolean);
@@ -894,7 +911,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (result === t) return t.solution ?? t;
             // Decided once: an operation whose operands are known has one value,
             // which later resolves reuse rather than evaluating it again.
-            if (result.k !== "operation") { t.decided = result; typeChanges++; }
+            if (result.k !== "operation") { t.decided = result; typeChanges++; settled(t); }
             return result;
         }
         finally { resolving.delete(t); }
@@ -990,6 +1007,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (t.k !== "operation" || seen.has(t)) continue;
             seen.add(t);
             if (!deciding && t.op === "call" && t.known && symbolic(t.known)) return true;
+            // (One known to wait on unlinked variables does: see waitsHold.)
+            if (waitsHold(t) && t.waits!.vars.length) return true;
             for (let n = t.args.length - 1; n >= 0; n--) pending.push(t.args[n]);
         }
         return false;
@@ -1194,7 +1213,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // an operation over a parameter (x + 1 + 1 ...) would read its operands
         // twice, each of theirs twice again.)
         const undecided = (types: Ty[]) => types.some(v => v.k === "var" || v.k === "operation");
-        if (typeChanges === start ? undecided(raw) : undecided(t.args.map(resolve))) { t.idle = idleAt(); return t; }
+        const now = typeChanges === start ? raw : t.args.map(resolve);
+        if (undecided(now)) {
+            t.idle = idleAt();
+            // (An operand decided already stays so: it waits on nothing.)
+            const vars = new Set<Ty>();
+            for (const x of now) {
+                if (x.k === "var") vars.add(x);
+                else if (x.k === "operation" && waitsHold(x)) { x.waits!.vars.forEach(v => vars.add(v)); (x.dependents ??= new Set()).add(t); }
+                else if (x.k === "operation" || x.k === "apply") { vars.clear(); vars.add(dynamic); break; }
+            }
+            t.waits = vars.has(dynamic) || vars.size > 16 ? undefined : { vars: [...vars], flags: flagsNow() };
+            return t;
+        }
         if (typeChanges !== start) { operands = read(); [a, b] = operands; }
         if (t.op === "run") return runType(a);
         if (["map", "ap", "bind", "then", "bindFlip", "sequence", "mapM"].includes(t.op)) return monadicType(t.op, a, b);
@@ -1312,7 +1343,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (f.pattern?.p === "schema" || f.pattern?.p === "recPat") application(f, { type: a }, activeExpression ?? { t: "placeholder" });
                 // An alternative's [] tests the value, it does not make it empty.
                 else unify(openEmpty(f.input), a);
-                if (!t.solution && f.output.k !== "operation" && f.output.k !== "var") { t.solution = f.output; typeChanges++; }
+                if (!t.solution && f.output.k !== "operation" && f.output.k !== "var") { t.solution = f.output; typeChanges++; settled(t); }
                 for (const check of f.checks ?? []) resolve(check);
                 outputs.push(resolve(f.output));
             }
@@ -1463,6 +1494,34 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // When an operation found its operands undecided: until a type changes
     // (or what deciding and choosing tell waiting and calls), it finds so again.
     const idleAt = () => typeChanges * 4 + (deciding ? 2 : 0) + (choosing ? 1 : 0);
+    // An operation found undecided waiting only on unlinked variables (its
+    // operands', through operations waiting so) finds so again while none of
+    // them is linked and none of those operations is decided or given a
+    // solution (settled drops what waited on one), whatever else changes: a
+    // chain of them (x + 1 + 1 ..., compositions of a polymorphic function)
+    // is not read again at each unification.
+    const flagsNow = () => (deciding ? 2 : 0) + (choosing ? 1 : 0);
+    // (A variable linked to another still unlinked is that one: kept so.)
+    const waitsHold = (t: Extract<Ty, { k: "operation" }>): boolean => {
+        if (!t.waits || t.waits.flags !== flagsNow()) return false;
+        const vars = t.waits.vars;
+        for (let n = 0; n < vars.length; n++) {
+            let v = vars[n];
+            while (v.k === "var" && v.link) v = v.link;
+            if (v.k !== "var") return false;
+            vars[n] = v;
+        }
+        return true;
+    };
+    function settled(t: Ty): void {
+        const pending = [t];
+        while (pending.length) {
+            const x = pending.pop()!;
+            if (x.k !== "operation" || !x.dependents) continue;
+            for (const d of x.dependents) if (d.k === "operation" && d.waits) { d.waits = undefined; pending.push(d); }
+            x.dependents = undefined;
+        }
+    }
     function unify(
         expected: Ty,
         actual: Ty,
@@ -1523,8 +1582,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (undecided.k === "union" && undecided.undecided) return ambiguous(undecided, e);
         }
         if (expected.k === "operation" || actual.k === "operation") {
-            if (expected.k === "operation" && actual.k !== "operation") expected.solution = actual.k === "list" ? list(actual.element) : actual;
-            if (actual.k === "operation" && expected.k !== "operation") actual.solution = expected.k === "list" ? list(expected.element) : expected;
+            if (expected.k === "operation" && actual.k !== "operation") { expected.solution = actual.k === "list" ? list(actual.element) : actual; settled(expected); }
+            if (actual.k === "operation" && expected.k !== "operation") { actual.solution = expected.k === "list" ? list(expected.element) : expected; settled(actual); }
             requirements.push({ k: "operation", op: "require", args: [expected, actual] });
             return;
         }
@@ -2809,7 +2868,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A value a call decides later is converted then, as written: an
         // ascription (decodeValue d x : Result T String) takes a Dynamic.
         if (a.k === "operation" && (runtimeProjection || explicitFloat) && t.k !== "var" && t.k !== "operation") {
-            if (!a.solution) { a.solution = t.k === "list" ? list(t.element) : t; typeChanges++; }
+            if (!a.solution) { a.solution = t.k === "list" ? list(t.element) : t; typeChanges++; settled(a); }
             requirements.push({ k: "operation", op: "convert", args: [target, actual], conversion: [explicitFloat, runtimeProjection] });
             return target;
         }

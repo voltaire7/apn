@@ -652,7 +652,12 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   `deciding`, `choosing`) moves, and reads its operands again only if reading
   changed a type, so a chain of them costs linear work: whatever changes a type
   (a `link`, `decided`, `solution`) must count in `typeChanges`, as `unify`
-  does. A chain of them 32 deep in `resolve` is resolved from its innermost
+  does; one waiting only on unlinked variables keeps them (`waits`, followed
+  through aliases) and stays undecided while they stay so, until an operation
+  it waits through is decided or given a solution (`settled` drops its
+  dependents' `waits`; `copy` carries them to the copy's variables), and
+  `linkEnd` follows a variable's aliases in a loop, compressing them. A chain
+  of them 32 deep in `resolve` is resolved from its innermost
   out, and a left- or right-nested `binop` or `pipe` chain longer than 64 is
   typed so (`typedSpine`, its types in `spineTypes` while its top is typed,
   each node's recorded type slimmed of a list's items and code once the one
