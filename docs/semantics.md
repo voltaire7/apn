@@ -1968,6 +1968,10 @@ Floats the guard holds for. Followed by `->` it is that lambda, else the
 refinement. A function's declared result is converted as a value is, so `func :
 (n : Float) | n > 0 -> Float` then `func = sqrt` checks that each result is a
 Float when it runs (`sqrt` gives a `Number`, a `Complex` for a negative).
+A declared type converts the value that crosses it, and never decides how
+that value was computed: `wallis : Int -> Float` converts its body's exact
+product of fractions once, at the end, and `x = 123` stays an exact `Int`,
+received as `123.0` by `half (y : Float)` and halved to `123/2` elsewhere.
 
 Any other refinement (of a list type, `Ordered`, or one a type function gives,
 `Bounded 1 10`) is the set of its base's values for which the condition holds:
