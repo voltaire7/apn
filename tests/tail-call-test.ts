@@ -24,8 +24,9 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 // A long chain of the prelude's operators that take their left operand first
-// runs in a loop, parsed and checked alike without nesting with its length; a
-// chain of nested calls ($) still nests, and overflows as a call stack overflow.
+// runs in a loop, parsed and checked alike without nesting with its length; so
+// does one of calls ($) of functions that evaluate their argument first. One
+// of other calls still nests, and overflows as a call stack overflow.
 {
     const chain = (head: string, piece: string, n: number, tail: string) => {
         const out = [head];
@@ -46,13 +47,17 @@ for (const [source, expected] of [
         // Each list joined sees the bindings of the items before it, as nested.
         ["++ of code", chain("y = [x = 1]", " ++ [x + 1]", 100, "\n[length y, y 100]"), "[101,2]"],
         ["::", chain("y = 1", " :: 1", 20000, " :: []\nlength y"), "20001"],
+        ["$", chain("inc x = x + 1\ny = inc", " $ inc", 20000, " $ 1\ny"), "20002"],
+        ["$ of calls", chain("g x = x * 2\nf x = g x - x\ny = f", " $ f", 5000, " $ 3\ny"), "3"],
+        // A function that may not evaluate its argument leaves it lazy.
+        ["$ through a lazy call", chain("inc x = x + 1\nk x = 7\nloop n = loop (n + 1)\ny = inc", " $ inc", 3000, " $ k $ loop 0\ny"), "3008"],
     ] as const) Deno.test(`a long chain of ${name} runs`, () => {
         const actual = checked(source);
         if (actual !== expected) throw new Error(actual);
     });
     Deno.test("a long chain of nested calls is a call stack overflow", () => {
         let message = "";
-        try { checked(chain("inc x = x + 1\ny = inc", " $ inc", 3000, " $ 1\ny")); } catch (error) { message = String(error); }
+        try { checked(chain("f (x : Int) = x + 1\ny = f", " $ f", 3000, " $ 1\ny")); } catch (error) { message = String(error); }
         if (!message.includes("call stack overflow")) throw new Error(message);
     });
 }

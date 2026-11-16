@@ -1829,6 +1829,8 @@ export class Interpreter {
                             r = this.evalBinop({ t: "binop", op: "$", l: e.f, r: e.x });
                             break;
                         }
+                        const piped = this.pipedChain(e, tailLoad);
+                        if (piped) { if (piped instanceof TailCall) next = piped; else r = piped; break; }
                         const head = this.eval(e.f);
                         this.writtenApplication = true;
                         const result = this.apply(head, { kind: "thunk", body: e.x, env: this.env }, false, true, tailLoad);
@@ -1977,6 +1979,85 @@ export class Interpreter {
         const l = this.delay(e.l), r = this.delay(e.r);
         if (op) return this.operate(op, l, r);
         return this.apply(this.apply(f, l), r);
+    }
+
+    // f $ g $ ... x, thousands long: each call whose function evaluates its
+    // argument before anything else (forcesFirst) has it evaluated first, so
+    // the calls run innermost first in a loop, in the order nesting would run
+    // them, without its stack. From the first function that may not, its
+    // argument stays lazy, as written. Undefined for a short chain.
+    private pipedChain(e: Extract<Expr, { t: "pipe" }>, tailLoad: boolean): Value | TailCall | undefined {
+        let length = 0;
+        for (let x: Expr = e; x.t === "pipe" && length <= 64; x = x.x) length++;
+        if (length <= 64) return undefined;
+        // The functions, outermost first, as each call reaches the next.
+        const heads: Value[] = [];
+        let x: Expr = e;
+        for (; x.t === "pipe"; x = x.x) {
+            checkInterrupt();
+            const head = this.eval(x.f);
+            heads.push(head);
+            if (!this.forcesFirst(head)) break;
+        }
+        // The innermost argument: the last function's, applied as written, or
+        // the chain's own last.
+        let value: Value;
+        if (x.t === "pipe" && heads.length === 1) {
+            this.writtenApplication = true;
+            return this.apply(heads[0], { kind: "thunk", body: x.x, env: this.env }, false, true, tailLoad);
+        }
+        if (x.t === "pipe") {
+            const last = heads.pop()!;
+            this.writtenApplication = true;
+            value = this.force(this.apply(last, { kind: "thunk", body: x.x, env: this.env }));
+        } else value = this.force(this.eval(x));
+        if (!heads.length) return value;
+        for (let n = heads.length - 1; n > 0; n--) {
+            checkInterrupt();
+            value = this.force(this.apply(heads[n], value));
+        }
+        return this.apply(heads[0], value, false, true, tailLoad);
+    }
+    // Whether applying f to one argument evaluates it before anything else
+    // that could fail or not end: the call it completes, of a lambda or a
+    // function of one clause with names for parameters and no guard, whose
+    // body starts by evaluating it (see startsWith).
+    private forcesFirst(f: Value, seen = new Set<Value>()): boolean {
+        f = this.force(f);
+        if (seen.has(f)) return false;
+        seen.add(f);
+        if (f.kind === "closure") return f.params.length === 1 && this.startsWith(f.body, f.params[0], f.env, new Set([...f.whole ?? [], ...f.params]), seen);
+        if (f.kind !== "clauseFn" || f.clauses.length !== 1 || f.applied.length + 1 !== f.arity || this.joins(f)) return false;
+        const [clause] = f.clauses, names = clause.params.map(p => p.p === "var" ? p.name : undefined);
+        if (clause.guard || names.some(n => n === undefined)) return false;
+        const name = names[f.applied.length]!;
+        return names.filter(n => n === name).length === 1 && this.startsWith(clause.body, name, f.env, new Set(names as string[]), seen);
+    }
+    // Whether evaluating e evaluates name before anything that could fail:
+    // name itself; a strict prelude operator's left doing so, as a call or an
+    // operator (which evaluate it there: g x - y), or as the name with a right
+    // whose evaluation cannot fail (x + 1, x * y), or its right with a literal
+    // left (2 * x); a left-first one's left (x ++ "!"); or a call of a
+    // function bound already (not a parameter: params) that does, given an
+    // argument that does (g x, g (x + 1)).
+    private startsWith(e: Expr, name: string, env: Env | undefined, params: Set<string>, seen: Set<Value>): boolean {
+        const starts = (x: Expr) => this.startsWith(x, name, env, params, seen);
+        if (e.t === "var") return e.name === name;
+        if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return starts(e.stmts[0] as Expr);
+        if (!env) return false;
+        if (e.t === "app" && !e.ascribed && !e.types && e.f.t === "var" && !params.has(e.f.name)) {
+            const g = env.get(e.f.name);
+            return !!g && g.kind !== "thunk" && g.kind !== "deferred" && this.forcesFirst(g, seen) && starts(e.a);
+        }
+        if (e.t !== "binop" || e.reassociate || params.has(e.op)) return false;
+        const bound = env.get(e.op), op = bound && this.primitiveOperator(bound.kind === "thunk" || bound.kind === "deferred" ? this.reference(bound) : bound);
+        if (!op) return false;
+        const literal = (x: Expr) => ["int", "float", "numeric", "string", "char", "bool"].includes(x.t);
+        if (LAZY_OPERATORS.has(op)) return LEFT_FIRST_OPERATORS.has(op) && starts(e.l);
+        // (Evaluating a name looks it up, forcing nothing.)
+        const found = (x: Expr) => literal(x) || x.t === "var" && (params.has(x.name) || env.get(x.name) !== undefined);
+        if (starts(e.l)) return e.l.t !== "var" || found(e.r);
+        return literal(e.l) && starts(e.r);
     }
 
     // The primitive a prelude operator bound to its intrinsic is.

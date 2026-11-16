@@ -1718,8 +1718,12 @@ compute an accumulator on each iteration when appropriate.
 A chain of the prelude's operators that take their left operand first (`+`,
 `*`, comparisons, `&&`, `||`, `++`), however long, runs in constant stack, as
 `x :: y :: ... :: []` does, being lazy; `a ++ b ++ c ...` of lists is one list
-of them all, read without nesting. A chain of calls (`f $ g $ ... x`, a
-composition `f \ g \ ...`) nests as the calls do.
+of them all, read without nesting. So does a chain of calls `f $ g $ ... x`
+while each function evaluates its argument before anything else (a lambda or
+one clause of names whose body starts with it: `inc x = x + 1`, `f x = g x -
+x`), its argument then evaluated first, as it would be anyway; from the first
+function that may not, the rest stays lazy, as written, and nests as calls do,
+as a composition `f \ g \ ...` does.
 
 Code a `use` runs may end with another `use` of code, a file loading itself
 (`again <- load "itself"; use again`): that use runs in place of the last

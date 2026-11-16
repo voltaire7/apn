@@ -418,7 +418,11 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   first (`LEFT_FIRST_OPERATORS` and the strict ones) runs in a loop in
   `evalBinop`, a run of `++` over lists as one `appendCodes` of them all
   (each list after another rerun with the bindings of all the items before
-  it, as nested appends give); the parser joins a right-associative chain from the right in
+  it, as nested appends give); a long `$` chain runs in `pipedChain`,
+  innermost first, while each function `forcesFirst` (a conservative check:
+  one clause of names and no guard, unjoined, its body starting with the
+  argument by `startsWith`), so the order of every evaluation, and so of
+  every error, is the nested one's; the parser joins a right-associative chain from the right in
   `parseOperators` (`join`) rather than recursing per operator. Tests:
   `tests/tail-call-test.ts`, `tests/repl-interrupt-pty.py`.
 - Fixity: the parser sees the prelude's declarations and the parsed file's
