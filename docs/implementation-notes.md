@@ -632,7 +632,8 @@ Behavior: `docs/gradual-and-dependent-types.md`.
 - Recursive structural types are finite graphs: keep cycles when copying or
   generalizing and compare visited pairs during unification. Do not
   reintroduce an occurs-check rejection for self-application. Inference
-  budget/depth exhaustion is a diagnostic, not a `Dynamic` fallback; an
+  budget/depth exhaustion is a diagnostic, not a `Dynamic` fallback (`limit`
+  keeps the budget's issue for its statement, past any `succeeds`); an
   evaluation that runs out of budget leaves its value unknown, an error where
   a type needs it (`budgetCut`, below). `tests/type-level-evaluation-test.ts`.
 - The checker's evaluator calls the runtime's text functions

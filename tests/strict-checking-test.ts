@@ -125,6 +125,16 @@ for (const [source, error] of [
         const issues = checkSource(`${body}\ny = False ? g ["a", 1] : []\ny`, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
         if (!issues.includes("takes more than 20000 steps")) throw new Error(issues || "accepted");
     });
+    // The inference budget is the statement's, however a check reads its
+    // running out: here in code a known condition passes over, typed past the
+    // little the long list leaves.
+    const rows = (n: number, indent: string) => Array.from({ length: n }, () => indent + Array(8).fill("1 + 1").join(", "));
+    const long = (dead: number) => ["y = [", ...rows(10000, "    "), "    True ? 1 : [", ...rows(dead, "        "), "    ]", "]", "y"].join("\n");
+    Deno.test("running out of the inference budget in a trial is an error", () => {
+        const issues = (dead: number) => checkSource(long(dead), "<test>", { strict: true }).issues.map(i => i.message).join("; ");
+        if (issues(0)) throw new Error(issues(0));
+        if (!issues(2000).includes("type checking limit exceeded")) throw new Error(issues(2000) || "accepted");
+    });
     Deno.test("items of one type leave a costly call to the run", () => {
         const issues = checkSource(`${body}\ng (["a", 1] : List Dynamic)`, "<test>", { strict: true }).issues;
         if (issues.length) throw new Error(issues.map(i => i.message).join("; "));
@@ -140,8 +150,10 @@ for (const [source, error] of [
     ['f p n = n <= 0 ? head p : f (p ++ p) (n - 1)\nx = True ? "k" : f ["a", 1] 5\nprint x', ""],
     ['g [] = ""\ng (x :: rest) = x ++ g rest\nf p = g p\nf ["a", 1]', "cannot append Int and String"],
     ['g [] = ""\ng (x :: rest) = x ++ g rest\nf p = g p\nf ["a","b"]', ""],
-    ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n == 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 4', ""],
-    ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n == 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 3', "cannot append String and Int"],
+    ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n <= 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 4', ""],
+    ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n <= 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 3', "cannot append String and Int"],
+    // Past n == 0 it never ends, as deep as the checker follows it.
+    ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n == 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 4', "depth limit exceeded"],
     ['g 0 p = head p + 1\ng n p = ""\ng 0 ["a", 1]', "cannot combine"],
     ['g 0 p = head p + 1\ng n p = ""\ng 1 ["a", 1]', ""],
     // A known list's items and a known record's fields decide them too.

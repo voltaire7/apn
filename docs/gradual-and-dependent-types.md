@@ -710,8 +710,10 @@ Successful checking does not prove termination, exhaustive matching, index bound
 or freedom from all runtime errors. Heterogeneous lists remain legal, but using
 an unknown element in a constrained operation may require additional information.
 Analysis budget/depth exhaustion is a diagnostic, never successful checking or
-a silent Dynamic fallback. The inference budget is per top-level statement, so
-a long program or module is not limited by its length. Gradual editor diagnostics remain available separately.
+a silent Dynamic fallback, wherever it happens: a check that tries something (a
+clause, an overload, code a known condition passes over) and reads a type error
+as its not fitting reads running out as none. The inference budget is per
+top-level statement, so a long program or module is not limited by its length. Gradual editor diagnostics remain available separately.
 
 ## Recursion and self-application
 

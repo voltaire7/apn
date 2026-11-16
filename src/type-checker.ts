@@ -815,9 +815,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A call typed for its argument may spend down to callFloor (see typedCall).
     let callFloor = 0;
     function spend(e?: Expr): void {
-        if (--budget < callFloor) {
-            problem(budget < 0 ? "type checking limit exceeded; cannot establish the type" : CALL_COST, e);
-        }
+        if (--budget < 0) limit("type checking limit exceeded; cannot establish the type", e);
+        if (budget < callFloor) problem(CALL_COST, e);
+    }
+    // Running out of the inference budget is the statement's error wherever it
+    // happens: a check that tries something (a clause, an overload, a trial)
+    // and reads a type error as its not fitting reads this one as none, and
+    // the statement reports it.
+    let limitIssue: unknown;
+    function limit(message: string, e?: Expr): never {
+        try { return problem(message, e); }
+        catch (issue) { limitIssue ??= issue; throw issue; }
     }
     let requirements: Ty[] = [];
     // Checks a value's type carried to where it is used (a variant's checks).
@@ -834,7 +842,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.decided) return resolve(t.decided);
         if (resolving.has(t)) return t.solution ?? t;
         spend();
-        if (resolving.size > 96) return problem("type checking limit exceeded; recursive operator constraints need an explicit type pattern");
+        if (resolving.size > 96) return limit("type checking limit exceeded; recursive operator constraints need an explicit type pattern");
         resolving.add(t);
         try {
             const result = evaluateOperation(t);
@@ -4164,10 +4172,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         spend(e);
         if (++inferenceDepth > 256) {
             inferenceDepth--;
-            return problem(
-                "type checking depth limit exceeded; cannot establish the type",
-                e,
-            );
+            return limit("type checking depth limit exceeded; cannot establish the type", e);
         }
         const previousExpression = activeExpression, previousLocated = locatedExpression;
         activeExpression = e;
@@ -8322,6 +8327,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // Each top-level statement gets the same bounded work, so a long module
         // is not limited by its length.
         budget = STATEMENT_BUDGET;
+        limitIssue = undefined;
         // (::) = Cons names a constructor: from here on, x :: xs is Cons x xs.
         if (statement.t === "def" && !/^[A-Za-z_]/.test(statement.name) && statement.clauses.length === 1 && !statement.clauses[0].params.length) {
             const body = statement.clauses[0].body;
@@ -8373,9 +8379,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 try { validate(infer(statement, scope)); }
                 finally { topLevelDefinition = creatingTopLevel = false; }
             }
+            if (limitIssue) throw limitIssue;
         } catch (error) {
             if (error && typeof error === "object" && "pos" in error && "message" in error) {
-                issues.push(error as TypeIssue);
+                issues.push((limitIssue ?? error) as TypeIssue);
             } else throw error;
         }
     }
