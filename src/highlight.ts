@@ -14,8 +14,11 @@ const KEYWORDS = new Set(["import", "load", "use", "do", "return", "else", "loop
 // A name is a function where it is applied: at the head of an application
 // (after what starts an expression, a line's start, ( [ { , ; = or an
 // operator), with an argument after it on its line: map and add in
-// map (add 1) xs, not add1 in map add1 xs, which is a value there.
+// map (add 1) xs, not add1 in map add1 xs, which is a value there. A name a
+// statement or item defines is not applied (wallis n = ..., as wallis : Int
+// -> Float; double in [double x = x * 2, double 3] where it is defined).
 function applied(source: string, start: number, end: number): boolean {
+    if (defined(source, start, end)) return false;
     let before = start - 1;
     while (before >= 0 && (source[before] === " " || source[before] === "\t")) before--;
     const p = before < 0 ? "\n" : source[before];
@@ -25,6 +28,28 @@ function applied(source: string, start: number, end: number): boolean {
     const n = source[after] ?? "";
     const argument = /[A-Za-z0-9_([{"']/.test(n) || n === "." && /[0-9]/.test(source[after + 1] ?? "");
     return heads && argument;
+}
+// Whether the name at start..end begins a statement or an item (its line, or
+// after ( [ { , ;) that defines it: an = follows within it, at its own level,
+// outside strings, not part of another operator (==, <=, >=, !=, =>, :=), as
+// in wallis n = ... and [double x = x * 2, double 3].
+function defined(source: string, start: number, end: number): boolean {
+    let before = start - 1;
+    while (before >= 0 && (source[before] === " " || source[before] === "\t")) before--;
+    if (before >= 0 && !"\n([{,;".includes(source[before])) return false;
+    let depth = 0;
+    for (let i = end; i < source.length && source[i] !== "\n"; i++) {
+        const c = source[i];
+        if (c === '"' || c === "'") {
+            for (i++; i < source.length && source[i] !== c && source[i] !== "\n"; i++) if (source[i] === "\\") i++;
+            continue;
+        }
+        if ("([{".includes(c)) depth++;
+        else if (")]}".includes(c) && --depth < 0) return false;
+        else if (!depth && (c === "," || c === ";" || c === "#" || c === "?")) return false;
+        else if (c === "=" && !depth && !"=<>!:".includes(source[i - 1]) && !"=>".includes(source[i + 1] ?? "")) return true;
+    }
+    return false;
 }
 // ternaries carries open ?: across calls, for text given a line at a time.
 export function highlightTokens(source: string, ternaries = [0]): HighlightToken[] {

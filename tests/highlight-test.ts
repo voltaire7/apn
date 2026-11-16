@@ -28,11 +28,14 @@ Deno.test("editor colors keywords, applied names, constructors, strings and comm
         ['"hello"', "string"], ["# comment", "comment"],
     ]);
     // A name is a function where it is applied, a value where it is passed.
-    equal(colors("double' x = 'a'"), [["double'", "function"], ["=", "punctuation"], ["'a'", "string"]]);
+    // A name a line defines is not applied, at its definition as in its type.
+    equal(colors("double' x = 'a'"), [["=", "punctuation"], ["'a'", "string"]]);
     const applied = (source: string) => colors(source).filter(([, type]) => type === "function").map(([name]) => name);
     equal(applied("map add1 [1,2]"), ["map"]);
     equal(applied("map (add 1) [1,2]"), ["map", "add"]);
     equal(applied("x = 5\nprint (sqrt x)\nfoldr map z xs"), ["print", "sqrt", "foldr"]);
+    equal(applied("wallis : Int -> Float\nwallis n = f n\nprint [a = g 1]\nh 1 == 2"), ["f", "print", "g", "h"]);
+    equal(applied("print [double x = x * 2, double 3]\n{ inc y = y + 1; inc 2 }"), ["print", "double", "inc"]);
     // return colors as import, load and use do.
     equal(colors("load use do return else loop for while"), [["load", "keyword"], ["use", "keyword"], ["do", "keyword"], ["return", "keyword"], ["else", "keyword"], ["loop", "keyword"], ["for", "keyword"], ["while", "keyword"]]);
 });
