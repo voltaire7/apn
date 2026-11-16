@@ -844,6 +844,24 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let requirements: Ty[] = [];
     // Checks a value's type carried to where it is used (a variant's checks).
     const carried = new Set<Ty>();
+    // What a value definition is not generic in: its scope's monomorphic
+    // types. A check its value carried that still waits on what it is generic
+    // in (f = h ~ [Handler g -> g], h holding s -> s ++ "!") goes with each use
+    // of a function or variant, as a function's own checks do, and otherwise
+    // keeps those types one, decided where the value is used.
+    function heldBack(scope: Scope, type: Ty): Set<Ty> {
+        const found = captured(scope), t = resolve(type);
+        // (A module's record is never walked: that would read its modules.)
+        const waits = isModuleType(t) ? [] : [...carried].filter(check => waiting(check));
+        const own = waits.length ? variables(t) : undefined;
+        for (const check of waits) {
+            const on = [...variables(check)];
+            if (!on.some(v => own!.has(v) && !found.has(v))) continue;
+            if (t.k === "fn" || t.k === "variant") { if (!t.checks?.includes(check)) t.checks = [...t.checks ?? [], check]; }
+            else for (const v of on) found.add(v);
+        }
+        return found;
+    }
     // Inside deferred code, and the definition being checked.
     let deferred = 0, defining: Definition | undefined;
     // The top-level definition being checked (see the operation's within).
@@ -4987,7 +5005,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         // An eager binding of a cell (counter <- Mutable 0) keeps the cell.
                         mutable: e.eager && e.value.t !== "setFields" && e.value.t !== "setItem"
                             ? valueEntry(e.value, scope).mutable : undefined,
-                        nonGeneric: captured(scope),
+                        nonGeneric: heldBack(scope, t),
                         bound: e.value,
                         // An eager binding's value is fixed where it runs: never re-derived.
                         definition: e.eager ? undefined : e.value,
@@ -7919,7 +7937,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 type: t,
                 // A name written more than once can change under a closure that captured it.
                 ...lazyTop ? { lazyTop } : facts,
-                nonGeneric: captured(new Map([...scope].filter(([key]) => key !== name))),
+                nonGeneric: heldBack(new Map([...scope].filter(([key]) => key !== name)), t),
                 definition: body,
                 denotes: denotes(body, scope),
             });

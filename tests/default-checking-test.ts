@@ -201,6 +201,8 @@ for (const [source, expected] of [
     ["Pair a b = | Pair a b; first (Pair x _) = x; to String (first (t > 0 ? Pair 1 \"a\" : Pair True 'c'))", '"1"'],
     ['inc (n : Int) = n + 1; dbl (n : Int) = n * 2; (t > 0 ? inc : dbl) 5', '6'],
     ['Handler a = | Handler (a -> String)\napply (Handler f) x = f x\napply (Handler (s -> s ++ "!")) "x"', '"x!"'],
+    // A function taken from one stays as generic as its lambda, checked at each use.
+    ['Handler a = | Handler (a -> String)\nn = Handler (x -> to String (x + 1))\nm = n ~ [Handler g -> g]\n[m 1, m 2.5]', '["2","3.5"]'],
     // The branches do not decide x where its other uses do: x > 0 keeps it a number.
     ['k x = x > 0 ? x : "neg"; [k 1 + 1, k -1]', '[2, "neg"]'],
     // A ternary is a match: a value known to take one alternative checks only it.
@@ -226,6 +228,8 @@ for (const source of [
     // however far the value travels first.
     'Handler a = | Handler (a -> String)\napply (Handler f) x = f x\napply (Handler (s -> s ++ "!")) 5',
     'Handler a = | Handler (a -> String)\nh = Handler (s -> s ++ "!")\nHandler f = h\nf 5',
+    'Handler a = | Handler (a -> String)\nh = Handler (s -> s ++ "!")\nf = h ~ [Handler g -> g]\nf 5',
+    'Handler a = | Handler (a -> String)\nh = Handler (s -> s ++ "!")\nr = [f = h ~ [Handler g -> g]]\nr.f 5',
     // A function matching its parameters is its alternatives as clauses.
     'd = x -> x ~ [0 -> 1]\nd 5',
     'add x y = [x,y] ~ [[0,b] -> b, [a,b] -> a + b]\nadd 0 "a" + 1',

@@ -637,6 +637,11 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   calls `Interpreter.enableChecking()`.
 - Preserve polymorphic instantiation, captured monomorphic variables, open
   record matching, overloads, and bounded affine index substitution.
+  Generalizing never drops a check a value carried that still waits on what
+  the definition is generic in (`f = h ~ [Handler g -> g]`, `h` holding
+  `s -> s ++ "!"`): it goes on the function or variant type, copied with
+  each use, and otherwise keeps those variables monomorphic (`heldBack`;
+  `tests/default-checking-test.ts`).
 - Recursive structural types are finite graphs: keep cycles when copying or
   generalizing and compare visited pairs during unification. Do not
   reintroduce an occurs-check rejection for self-application. Inference
