@@ -42,6 +42,9 @@ for (const [source, expected] of [
         ["+ and *", chain("y = 2", " + 2 * 3 - 1", 5000, "\ny"), "25002"],
         ["&&", chain("y = True", " && True", 20000, "\ny"), "True"],
         ["++ of strings", chain('y = "a"', ' ++ "a"', 5000, "\nlength y"), "5001"],
+        ["++ of lists", chain("y = [1]", " ++ [1,2]", 5000, "\n[length y, y 10000]"), "[10001,2]"],
+        // Each list joined sees the bindings of the items before it, as nested.
+        ["++ of code", chain("y = [x = 1]", " ++ [x + 1]", 100, "\n[length y, y 100]"), "[101,2]"],
         ["::", chain("y = 1", " :: 1", 20000, " :: []\nlength y"), "20001"],
     ] as const) Deno.test(`a long chain of ${name} runs`, () => {
         const actual = checked(source);

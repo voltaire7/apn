@@ -1959,6 +1959,15 @@ export class Interpreter {
                 for (let n = spine.length - 1; n >= 0; n--) {
                     checkInterrupt();
                     const [x, at] = spine[n];
+                    // Lists joined by ++ in a row are one list of them all.
+                    const code = at === "++" ? this.code(this.dataValue(value)) : undefined;
+                    if (code && this.isList(code)) {
+                        const rights: Value[] = [];
+                        for (; n >= 0 && spine[n][1] === "++"; n--) rights.push(this.delay(spine[n][0].r));
+                        n++;
+                        value = this.appendCodes(code, rights, 0, new Map());
+                        continue;
+                    }
                     value = LAZY_OPERATORS.has(at) ? this.operate(at, value, this.delay(x.r)) : this.operate(at, value, this.eval(x.r));
                 }
                 return value;
@@ -2924,15 +2933,26 @@ export class Interpreter {
     // xs ++ ys: xs's items, then ys's, which see the bindings xs's make (see
     // rerun): [x = 1] ++ [x + 1] is the code [x = 1, x + 1].
     private appendCode(xs: Value, ys: Value, before = new Map<string, Value>()): Value {
+        return this.appendCodes(xs, [ys], 0, before);
+    }
+    // xs ++ rest[at] ++ rest[at + 1] ..., grouped to the left as written, as one
+    // list: each list after another sees the bindings of all the items before
+    // it, as the nested appends would give it, without nesting with their
+    // number (a chain of thousands of ++).
+    private appendCodes(xs: Value, rest: Value[], at: number, before: Map<string, Value>): Value {
         return this.defer(() => {
-            const cell = this.cell(xs);
-            if (cell === null) {
-                const right = this.code(this.dataValue(ys));
+            let list = xs;
+            for (;;) {
+                const cell = this.cell(list);
+                if (cell !== null) {
+                    const binds = this.written(cell.head)?.binds;
+                    return { kind: "cons", head: cell.head, tail: this.appendCodes(cell.tail, rest, at, binds ? new Map([...before, ...binds]) : before) };
+                }
+                const right = this.code(this.dataValue(rest[at++]));
                 if (!this.isList(right)) throw new APNError("runtime", "list append expects a list");
-                return this.rerun(right, { before, changed: new Set(before.keys()) });
+                list = this.rerun(right, { before, changed: new Set(before.keys()) });
+                if (at === rest.length) return list;
             }
-            const binds = this.written(cell.head)?.binds;
-            return { kind: "cons", head: cell.head, tail: this.appendCode(cell.tail, ys, binds ? new Map([...before, ...binds]) : before) };
         });
     }
     // A value's code: a list's items as written (an item without, as its

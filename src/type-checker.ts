@@ -225,7 +225,9 @@ type Scope = TypeScope;
 // the scope it was written in, with its type, the names it binds and the open
 // names it reads (an item without an expression is a plain list's value), so
 // ++ and an item update infer again the items whose names change (codeList).
-type Formula = { items: FormulaItem[] };
+// bound: what its items bind, the binding items, whether one runs (x <- m),
+// kept for the code that joins it (see codeList).
+type Formula = { items: FormulaItem[]; bound?: { names: Map<string, Entry>; statements: Expr[]; runs: boolean } };
 type FormulaItem = { expr?: Expr; scope?: Scope; type?: Ty; binds?: Map<string, Entry>; open?: Map<string, { expr: Expr; within?: Expr }>; slot?: Ty };
 export interface CheckOptions {
     strict?: boolean;
@@ -2170,15 +2172,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // inferred again, any other keeps its type. A name bound nowhere is open.
     // A record's code, where code is read: [x = 1] ++ [x + 1] joins code.
     function asCode(t: Ty): Ty { return t.k === "record" && t.code ? resolve(codeList(t.code)) : t; }
-    function codeList(items: FormulaItem[], changed = new Set<string>()): Ty {
+    // After joined, a list's code typed already (the left of ++, whose items
+    // a join leaves as they are), items are its items continued: typed after
+    // its bindings, without typing its own again (a chain of thousands of ++).
+    function codeList(items: FormulaItem[], changed = new Set<string>(), joined?: Extract<Ty, { k: "list" }>): Ty {
         changed = new Set(changed);
-        const before = new Map<string, Entry>();
-        const local = items.some(item => item.expr && binding(item.expr)) || changed.size > 0;
+        const prefix = joined?.formula?.items ?? [], prior = joined?.formula && codeBindings(joined.formula);
+        const before = new Map<string, Entry>(prior?.names);
+        const local = !!prior?.statements.length || items.some(item => item.expr && binding(item.expr)) || changed.size > 0;
         let run: { scope: Scope; local: Scope } | undefined;
         // The bindings so far: an item after an x <- m item yields the block of
         // them ending in it (see Interpreter.yields), checked as one.
-        const statements: Expr[] = [];
-        let runs = false;
+        const statements: Expr[] = [...prior?.statements ?? []];
+        let runs = !!prior?.runs;
         // A list is an unevaluated block: its x <- m items bind as a block's do.
         doBlocks.push({});
         try { return codeItems(); } finally { doBlocks.pop(); }
@@ -2212,12 +2218,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             for (const [name, entry] of binds ?? []) { before.set(name, entry); changed.add(name); }
             return { ...item, type, binds, open: open.size ? open : undefined };
         });
-        const types = out.map(item => item.type ?? variable());
-        const open = new Map(out.flatMap(item => [...item.open ?? []]));
-        return { k: "list", element: types.length ? union(types) : variable(), length: constant(BigInt(types.length)), items: types, formula: { items: out }, open: open.size ? open : undefined };
+        const own = out.map(item => item.type ?? variable()), types = joined?.items ? joined.items.concat(own) : own;
+        const open = new Map(joined?.open);
+        for (const item of out) for (const [name, at] of item.open ?? []) open.set(name, at);
+        const element = !types.length ? variable() : joined?.items?.length ? union([joined.element, ...own]) : union(own);
+        const formula: Formula = { items: prefix.concat(out), bound: { names: before, statements, runs } };
+        return { k: "list", element, length: constant(BigInt(types.length)), items: types, formula, open: open.size ? open : undefined };
         }
     }
     const binding = (e: Expr) => e.t === "stmDef" || e.t === "patDef" || isUse(e);
+    // What a list's code binds (see Formula), found once.
+    function codeBindings(formula: Formula): NonNullable<Formula["bound"]> {
+        return formula.bound ??= {
+            names: new Map(formula.items.flatMap(item => [...item.binds ?? []])),
+            statements: formula.items.flatMap(item => item.expr && binding(item.expr) ? [item.expr] : []),
+            runs: formula.items.some(item => item.expr?.t === "patDef" && !!item.expr.eager),
+        };
+    }
     // The names each use opened (a use item binds them).
     const usedNames = new WeakMap<Expr, string[]>();
     // code n = e: the code with item n replaced by e, written here (see
@@ -2977,7 +2994,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // Code joins code: the right's items see the left's bindings.
             if (x.k === "list" && y.k === "list" && x.formula && (y.formula || y.items)) {
                 const right = y.formula?.items ?? y.items!.map((type): FormulaItem => ({ type }));
-                return codeList([...x.formula.items, ...right], new Set(x.formula.items.flatMap(item => [...item.binds?.keys() ?? []])));
+                return codeList(right, new Set(codeBindings(x.formula).names.keys()), x);
             }
             if (x.k === "list" && y.k === "list") {
                 // The left's code is not known here (a function made it, as
@@ -4230,10 +4247,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const below: Expr[] = [];
         for (let x: Expr | undefined = first; x && next(x) !== undefined; x = next(x)) below.push(x);
         if (below.length <= 64) return undefined;
+        // Each node, once the one above it is typed, keeps its type without the
+        // items and code a list of them holds, which only that one read: kept
+        // whole, a chain of ++ would hold each of its prefixes', as many as
+        // its square.
+        const done = (x: Expr): void => {
+            spineTypes.delete(x);
+            const t = inferred.get(x), r = t && resolve(t);
+            if (r?.k === "list" && (r.items || r.formula)) inferred.set(x, { k: "list", element: r.element, length: r.length });
+        };
+        below.reverse();
         try {
-            for (const x of below.reverse()) spineTypes.set(x, { scope, type: infer(x, scope) });
+            below.forEach((x, n) => {
+                spineTypes.set(x, { scope, type: infer(x, scope) });
+                if (n) done(below[n - 1]);
+            });
             return infer(e, scope, expected);
-        } finally { below.forEach(x => spineTypes.delete(x)); }
+        } finally { below.forEach(done); }
     }
     function infer(e: Expr, scope: Scope, expected?: Ty): Ty {
         const typed = spineTypes.get(e);

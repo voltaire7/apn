@@ -416,7 +416,9 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   (`STACK_LIMIT`), and a host `RangeError` in `evaluate` is the same overflow.
   A left-nested chain of primitive operators that force their left operand
   first (`LEFT_FIRST_OPERATORS` and the strict ones) runs in a loop in
-  `evalBinop`; the parser joins a right-associative chain from the right in
+  `evalBinop`, a run of `++` over lists as one `appendCodes` of them all
+  (each list after another rerun with the bindings of all the items before
+  it, as nested appends give); the parser joins a right-associative chain from the right in
   `parseOperators` (`join`) rather than recursing per operator. Tests:
   `tests/tail-call-test.ts`, `tests/repl-interrupt-pty.py`.
 - Fixity: the parser sees the prelude's declarations and the parsed file's
@@ -645,8 +647,11 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   (a `link`, `decided`, `solution`) must count in `typeChanges`, as `unify`
   does. A chain of them 32 deep in `resolve` is resolved from its innermost
   out, and a left- or right-nested `binop` or `pipe` chain longer than 64 is
-  typed so (`typedSpine`, its types in `spineTypes` while its top is typed),
-  so neither nests with its length; a `RangeError` in a statement is its
+  typed so (`typedSpine`, its types in `spineTypes` while its top is typed,
+  each node's recorded type slimmed of a list's items and code once the one
+  above it is typed), so neither nests with its length; `++` of code types only
+  the right's items, after the left's (`codeList` with `joined`, its bindings
+  kept in `Formula.bound`); a `RangeError` in a statement is its
   depth limit. A walk over a whole program or expression keeps its own stack
   (`walkObjects`, or one of its own as `mentionedNames` and `valueNames`,
   which keep each node's result), never the host's: a chain of thousands of
