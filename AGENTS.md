@@ -71,6 +71,11 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   conflicts with them, is inconsistent, or has a simpler or more general
   alternative, say so plainly and propose the fix instead of silently
   bending the implementation to make it work.
+- Keep it simple, stupid. Make the simplest change that serves the programs
+  people write, and weigh the code a change adds against what it buys. A
+  limit only contrived input reaches (an expression thousands of operators
+  long) stays a clear error, not a reason for new machinery; say so instead
+  of building it, and offer follow-ups only when they are worth their code.
 - Judge a syntax rule by the code it makes people write. Before tightening
   the syntax (an error, a required or forbidden spelling, a printer's output),
   write out the programs it forces and check what each already means in the
