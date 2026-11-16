@@ -37,6 +37,9 @@ Deno.test("editor colors keywords, applied names, constructors, strings and comm
     equal(applied("wallis : Int -> Float\nwallis n = f n\nprint [a = g 1]\nh 1 == 2"), ["f", "print", "g", "h"]);
     equal(applied("print [double x = x * 2, double 3]\n{ inc y = y + 1; inc 2 }"), ["print", "double", "inc"]);
     equal(applied("[f x, g y] = [x, y]\nprint [[h 1, 2], k 3]\nz = map (add 1) xs"), ["print", "h", "k", "map", "add"]);
+    // A field is applied where the chain it ends starts an application.
+    equal(applied("minute = to String (toMinute model.zone model.time)\nintrinsics.add 1 1\nprint (std.text.upper s)"),
+        ["to", "toMinute", "add", "print", "upper"]);
     // return colors as import, load and use do.
     equal(colors("load use do return else loop for while"), [["load", "keyword"], ["use", "keyword"], ["do", "keyword"], ["return", "keyword"], ["else", "keyword"], ["loop", "keyword"], ["for", "keyword"], ["while", "keyword"]]);
 });

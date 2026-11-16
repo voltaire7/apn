@@ -20,9 +20,14 @@ const KEYWORDS = new Set(["import", "load", "use", "do", "return", "else", "loop
 function applied(source: string, start: number, end: number): boolean {
     if (defined(source, start, end)) return false;
     let before = start - 1;
+    // (A field, model.zone, is applied as the chain it ends is: where the chain
+    // starts, intrinsics.add 1 1, not toMinute model.zone model.time.)
+    if (source[before] === ".") {
+        while (before >= 0 && /[A-Za-z0-9_'.]/.test(source[before])) before--;
+    }
     while (before >= 0 && (source[before] === " " || source[before] === "\t")) before--;
     const p = before < 0 ? "\n" : source[before];
-    const heads = p === "\n" || "([{,;=.".includes(p) || "+-*/%^!<>$&|?\\`@~:".includes(p);
+    const heads = p === "\n" || "([{,;=".includes(p) || "+-*/%^!<>$&|?\\`@~:".includes(p);
     let after = end;
     while (after < source.length && (source[after] === " " || source[after] === "\t")) after++;
     const n = source[after] ?? "";
