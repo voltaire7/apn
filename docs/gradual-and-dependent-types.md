@@ -531,9 +531,10 @@ as the run does: the other, which never runs, is typed only where it can be,
 for what it tells (`x ? return [] : Err "no"` is a `Result`), and left out
 where it cannot (`False && head []`, `null xs ? 0 : head xs`, `length (head
 p) == 0 || head (head p) > 1` all pass). Such a trial is typed as anywhere,
-its known values evaluated and its calls typed for their arguments, within a
-bound of steps: a recursive call there that would not end (`f (p ++ p) (n -
-1)` past `n == 0`) runs out of them, and the trial fails. Joining known lists
+its known values evaluated and its calls typed for their arguments, within the
+bound of steps a typed call has (below), past which it is an error. A recursive
+call there is its function's own type, not typed again: the run never makes it
+(`f (p ++ p) (n - 1)` past `n == 0` would never end). Joining known lists
 costs a step for each item, so evaluating a list that doubles stops at the
 evaluation's bound. A condition over
 a function's parameters is known only in a call typed for its arguments; its

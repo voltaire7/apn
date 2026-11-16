@@ -113,11 +113,16 @@ for (const [source, error] of [
 // one type (List Dynamic) leave them to the run. A recursive call given new
 // types is typed for them too: one that takes its list apart ends, exactly
 // typed; one whose list grows (p ++ p) reaches the bound. A length it leaves
-// unknown is rejected as any other.
+// unknown is rejected as any other. Code a known condition passes over is
+// bounded so too, its recursive calls not typed again.
 {
     const body = ["g p = [", ...Array.from({ length: 600 }, () => "    " + Array(4).fill('head p ++ "!"').join(", ")), "]"].join("\n");
     Deno.test("a typed call past the step bound is an error", () => {
         const issues = checkSource(`${body}\ng ["a", 1]`, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
+        if (!issues.includes("takes more than 20000 steps")) throw new Error(issues || "accepted");
+    });
+    Deno.test("a typed call past the step bound in code that never runs is an error", () => {
+        const issues = checkSource(`${body}\ny = False ? g ["a", 1] : []\ny`, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
         if (!issues.includes("takes more than 20000 steps")) throw new Error(issues || "accepted");
     });
     Deno.test("items of one type leave a costly call to the run", () => {
@@ -130,6 +135,7 @@ for (const [source, error] of [
     // list doubles twelve times, then n is 0; with n not known it never ends.
     ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\nf ["a", 1] 12', ""],
     ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\ng n = f ["a", 1] n\ng 3', "takes more than 20000 steps"],
+    ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\nx = True ? "k" : f ["a", 1] 5\nprint x', ""],
     ['g [] = ""\ng (x :: rest) = x ++ g rest\nf p = g p\nf ["a", 1]', "cannot append Int and String"],
     ['g [] = ""\ng (x :: rest) = x ++ g rest\nf p = g p\nf ["a","b"]', ""],
     ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n == 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 4', ""],

@@ -2967,16 +2967,31 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return value?.k === "atom" && value.name === "Type";
     }
     // Whether code that never runs (a branch a known condition passes over)
-    // types, as a trial: what it tells stays, a failure is no error. It is
-    // typed as anywhere, its calls for their arguments and its values
-    // evaluated, but within CALL_BUDGET steps, given back: a recursive call
-    // there that would not end (f (p ++ p) (n - 1) past n == 0) runs out of
-    // them, and the trial fails.
+    // types, as a trial: what it tells stays, a type error is none of the
+    // program's. It is typed as anywhere, its calls for their arguments and
+    // its values evaluated, within CALL_BUDGET steps, given back; running out
+    // of them is an error, as for any typed call.
+    let trials = 0;
     function typesInTrial(e: Expr, scope: Scope): boolean {
         const floor = callFloor, before = budget;
         callFloor = Math.max(floor, budget - CALL_BUDGET);
-        try { return succeeds(() => infer(e, new Map(scope))); }
-        finally { callFloor = floor; budget = before; }
+        trials++;
+        // (Not as succeeds tries a check, choosing: that types no call for its
+        // arguments.)
+        let ranOut: unknown, types = true;
+        const saved = requirements.length;
+        try { infer(e, new Map(scope)); }
+        catch (error) {
+            if (!error || typeof error !== "object" || !("message" in error)) throw error;
+            if (costly(error) || overBound(error)) ranOut = error;
+            types = false;
+            requirements.length = saved;
+        } finally { callFloor = floor; budget = before; trials--; }
+        // Running out of steps is the program's error, as anywhere (see CALL_BUDGET).
+        if (ranOut && costly(ranOut)) return problem(`typing code that never runs, which a known condition passes over, takes more than ${CALL_BUDGET} steps`, e,
+            "it is typed for what it tells the code that runs; give its values items of one type, as (xs : List Dynamic) does, to check them as they run");
+        if (ranOut) throw ranOut;
+        return types;
     }
     // A call of a function typed for its arguments: its body's type with the
     // parameters bound as the call binds them. A name takes its
@@ -3043,6 +3058,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         typingCalls.set(summary, calls);
         const pending = calls.get(types)?.find(fits);
         if (pending) return pending.result;
+        // In code that never runs (see typesInTrial), a recursive call is its
+        // function's own type: the run never makes it, so it is not typed
+        // again (f (p ++ p) (n - 1) past n == 0 would never end).
+        if (trials && calls.size) return undefined;
         // A recursive call given other types (its function's typing under way)
         // costs a step for each part of its arguments' types, so a recursion
         // whose arguments grow (f (p ++ p) (n - 1)) reaches the step bound,
@@ -3171,6 +3190,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // unknown (a length typing alone cannot find) is unknown as anywhere: a
     // boundary, which a checked run rejects.
     const costly = (error: unknown) => !!error && typeof error === "object" && "message" in error && error.message === CALL_COST;
+    // The error a typed call past CALL_BUDGET steps is (see boundedTypedCall).
+    const overBound = (error: unknown) => !!error && typeof error === "object" && "message" in error && String(error.message).startsWith("typing this call for its arguments takes more than");
     function boundedTypedCall(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
         const floor = callFloor;
         callFloor = Math.max(floor, budget - CALL_BUDGET);
