@@ -638,7 +638,12 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   `deciding`, `choosing`) moves, and reads its operands again only if reading
   changed a type, so a chain of them costs linear work: whatever changes a type
   (a `link`, `decided`, `solution`) must count in `typeChanges`, as `unify`
-  does. An evaluation that runs out of budget leaves its value unknown, an
+  does. A chain of them 32 deep in `resolve` is resolved from its innermost
+  out, and a left- or right-nested `binop` or `pipe` chain longer than 64 is
+  typed so (`typedSpine`, its types in `spineTypes` while its top is typed),
+  so neither nests with its length; a `RangeError` in a statement is its
+  depth limit, and AST walks over a whole program (`mentionsAny`) keep their
+  own stack. An evaluation that runs out of budget leaves its value unknown, an
   error where a type needs it (`budgetCut`, below).
   `tests/type-level-evaluation-test.ts`, `tests/strict-checking-test.ts`.
 - The checker's evaluator calls the runtime's text functions

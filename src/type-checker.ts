@@ -285,14 +285,17 @@ export function mayMutate(program: unknown): boolean {
     return mentionsAny(program, MUTATING_NAMES);
 }
 export function mentionsAny(program: unknown, names: ReadonlySet<string>): boolean {
-    const walk = (x: unknown): boolean => {
-        if (!x || typeof x !== "object") return false;
-        if (Array.isArray(x)) return x.some(walk);
+    // (A walk of its own stack: a chain of thousands of operators is that deep.)
+    const pending: unknown[] = [program];
+    while (pending.length) {
+        const x = pending.pop();
+        if (!x || typeof x !== "object") continue;
+        if (Array.isArray(x)) { for (const y of x) pending.push(y); continue; }
         const node = x as Record<string, unknown>;
         if (node.t === "var" && typeof node.name === "string" && names.has(node.name)) return true;
-        return Object.values(node).some(value => value && typeof value === "object" && walk(value));
-    };
-    return walk(program);
+        for (const value of Object.values(node)) if (value && typeof value === "object") pending.push(value);
+    }
+    return false;
 }
 // Each name's types are copied when first read: a module's scope is large and
 // a program uses few of its names. One map of variables and nodes makes names
@@ -847,6 +850,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.decided) return resolve(t.decided);
         if (resolving.has(t) || t.idle === idleAt()) return t.solution ?? t;
         spend();
+        // Deep in a chain of operations each waiting on the one before (x + 1
+        // + 1 ..., inc \ inc \ ... of a polymorphic inc), the rest of it is
+        // resolved from its innermost out first, so each finds its operand
+        // decided, or idle, and resolving it nests no deeper.
+        if (resolving.size === 32) {
+            const below: Ty[] = [];
+            const pending = (x: Ty): Ty | undefined => {
+                while (x.k === "var" && x.link) x = x.link;
+                return x.k === "operation" && !x.decided && x.idle !== idleAt() && !resolving.has(x) && !below.includes(x) ? x : undefined;
+            };
+            for (let x: Ty | undefined = t; x && x.k === "operation"; ) {
+                const next: Ty | undefined = x.args.map(pending).find(Boolean);
+                if (next) below.push(next);
+                x = next;
+            }
+            for (const x of below.reverse()) resolve(x);
+        }
         if (resolving.size > 96) return limit("type checking limit exceeded; recursive operator constraints need an explicit type pattern");
         resolving.add(t);
         try {
@@ -4184,7 +4204,25 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : k.index && !k.index.terms.size ? "Int" : undefined;
         return r.choices.find(choice => { const x = resolve(choice); return x.k === "atom" && x.name === name; }) ?? t;
     }
+    // A left-nested operator chain (a + b + c ..., however long) is typed from
+    // its innermost operator out, each one's left operand typed already, so
+    // typing it nests no deeper than one operator (see the binop case).
+    const spineTypes = new Map<Expr, { scope: Scope; type: Ty }>();
+    // e typed so, when the chain below it (next's steps) is long: else undefined.
+    function typedSpine(e: Expr, scope: Scope, expected: Ty | undefined, next: (x: Expr) => Expr | undefined): Ty | undefined {
+        const first = next(e);
+        if (!first || spineTypes.has(first) || !next(first)) return undefined;
+        const below: Expr[] = [];
+        for (let x: Expr | undefined = first; x && next(x) !== undefined; x = next(x)) below.push(x);
+        if (below.length <= 64) return undefined;
+        try {
+            for (const x of below.reverse()) spineTypes.set(x, { scope, type: infer(x, scope) });
+            return infer(e, scope, expected);
+        } finally { below.forEach(x => spineTypes.delete(x)); }
+    }
     function infer(e: Expr, scope: Scope, expected?: Ty): Ty {
+        const typed = spineTypes.get(e);
+        if (typed && typed.scope === scope && !expected) return typed.type;
         spend(e);
         if (++inferenceDepth > 256) {
             inferenceDepth--;
@@ -4297,6 +4335,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return functionType(e.params, e.body, scope, undefined, e.guard);
             case "app":
             case "pipe": {
+                // A chain of pipes (f $ g $ ... x), from its innermost out (see spineTypes).
+                const piped = e.t === "pipe" ? typedSpine(e, scope, expected, x => x.t === "pipe" ? x.x : undefined) : undefined;
+                if (piped) return piped;
                 const infix = infixSpelling(e, scope);
                 if (infix) return infer(infix, scope, expected);
                 const tagged = e.t === "app" ? taggedType(e, scope) : undefined;
@@ -4776,6 +4817,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "binop": {
                 if (e.reassociate) return infer(regrouped(e, scope), scope, expected);
+                // (A right-nested one, x :: y :: ..., from its innermost too.)
+                for (const side of ["l", "r"] as const) {
+                    const typed = typedSpine(e, scope, expected, x => x.t === "binop" && !x.reassociate ? x[side] : undefined);
+                    if (typed) return typed;
+                }
                 // A && or || its left side's known value decides gives that, the
                 // right side not run (False && head []), as a conditional takes
                 // its branch.
@@ -8398,7 +8444,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             if (limitIssue) throw limitIssue;
         } catch (error) {
-            if (error && typeof error === "object" && "pos" in error && "message" in error) {
+            // Nesting past what the JavaScript stack holds is the depth limit.
+            if (error instanceof RangeError) {
+                try { limit("type checking depth limit exceeded; cannot establish the type", checkingExpression); } catch { /* kept */ }
+            }
+            if (error instanceof RangeError || error && typeof error === "object" && "pos" in error && "message" in error) {
                 issues.push((limitIssue ?? error) as TypeIssue);
             } else throw error;
         }

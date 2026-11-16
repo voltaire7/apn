@@ -135,24 +135,24 @@ for (const [source, error] of [
         if (issues(0)) throw new Error(issues(0));
         if (!issues(2000).includes("type checking limit exceeded")) throw new Error(issues(2000) || "accepted");
     });
-    // Operators over a parameter wait on one another, read once each: a long
-    // chain checks, in code that never runs too; past 96 deep it is the
-    // operator constraint limit, there as anywhere; a type pattern decides it.
-    // An expression nested past 256 deep is the inference depth limit, also in
-    // code that never runs.
-    const chain = (head: string, n: number) => {
+    // A chain of operators types from its innermost out, however long: its
+    // operators over a parameter, waiting on one another, are read once each;
+    // in code that never runs too. (The run itself overflows past some 500.)
+    const chain = (head: string, piece: string, n: number, tail = "\nprint (g 2)") => {
         const out = [head];
-        for (let i = 0; i < n; i++) { if (out[out.length - 1].length > 90) out.push("   "); out[out.length - 1] += " + 1"; }
-        return out.join("\n") + "\nprint (g 2)";
+        for (let i = 0; i < n; i++) { if (out[out.length - 1].length > 85) out.push("   "); out[out.length - 1] += piece; }
+        return out.join("\n") + tail;
     };
-    for (const [head, n, error] of [
-        ["g x = x", 90, ""], ["g x = True ? 0 : x", 90, ""], ["g (x : Int) = x", 120, ""],
-        ["g x = x", 100, "recursive operator constraints"], ["g x = True ? 0 : x", 100, "recursive operator constraints"],
-        ["g (x : Int) = x", 250, ""], ["g (x : Int) = x", 300, "depth limit exceeded"],
-        ["g (x : Int) = True ? 0 : x", 300, "depth limit exceeded"],
-    ] as const) Deno.test(`a chain of ${n} operators: ${head}`, () => {
-        const issues = checkSource(chain(head, n), "<test>", { strict: true }).issues.map(i => i.message).join("; ");
-        if (error ? !issues.includes(error) : issues) throw new Error(issues || "accepted");
+    for (const [name, source] of [
+        ["over a parameter", chain("g x = x", " + 1", 600)],
+        ["in code that never runs", chain("g x = True ? 0 : x", " + 1", 600)],
+        ["over a typed parameter", chain("g (x : Int) = x", " + 1", 3000)],
+        ["of ::", chain("y = 1", " :: 1", 3000, " :: []\nprint (length y)")],
+        ["of $", chain("inc x = x + 1\ny = inc", " $ inc", 3000, " $ 1\nprint y")],
+        ["of compositions", chain("inc x = x + 1\nh = inc", " \\ inc", 300, "\nprint (h 1)")],
+    ] as const) Deno.test(`a long chain of operators ${name} checks`, () => {
+        const issues = checkSource(source, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
+        if (issues) throw new Error(issues);
     });
     Deno.test("items of one type leave a costly call to the run", () => {
         const issues = checkSource(`${body}\ng (["a", 1] : List Dynamic)`, "<test>", { strict: true }).issues;
