@@ -120,7 +120,8 @@ completion offers only the standard natives. Standard output is reserved for LSP
   palette, `src/highlight.ts`): yellow numbers, green strings/chars, blue
   names where they are applied (not where a statement or item defines one:
   `wallis n = ...` is white, as `wallis : Int -> Float` is, and so is the
-  first `double` in `[double x = x * 2, double 3]`), cyan constructors, mauve booleans/import, peach operators and
+  first `double` in `[double x = x * 2, double 3]`, as `f` and `g` in `[f x,
+  g y] = [x, y]`), cyan constructors, mauve booleans/import, peach operators and
   numeric markers, gray punctuation/assignment, and muted comments. Ternary
   colons are peach; record/cons colons are gray. Colors remain available on
   incomplete source, and are scoped to APN so your LazyVim theme is unchanged.

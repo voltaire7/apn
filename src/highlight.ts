@@ -30,14 +30,17 @@ function applied(source: string, start: number, end: number): boolean {
     return heads && argument;
 }
 // Whether the name at start..end begins a statement or an item (its line, or
-// after ( [ { , ;) that defines it: an = follows within it, at its own level,
-// outside strings, not part of another operator (==, <=, >=, !=, =>, :=), as
-// in wallis n = ... and [double x = x * 2, double 3].
+// after ( [ { , ;) that defines it: an = follows within it, at its own level
+// or that of a group holding it, outside strings, not part of another
+// operator (==, <=, >=, !=, =>, :=), as in wallis n = ..., [double x = x * 2,
+// double 3] and [f x, g y] = [x, y].
 function defined(source: string, start: number, end: number): boolean {
     let before = start - 1;
     while (before >= 0 && (source[before] === " " || source[before] === "\t")) before--;
     if (before >= 0 && !"\n([{,;".includes(source[before])) return false;
-    let depth = 0;
+    // (After its item, an = in the same brackets is a later item's; once they
+    // close, one is the group's: [f x, g y] = [x, y] defines f and g.)
+    let depth = 0, later = false;
     for (let i = end; i < source.length && source[i] !== "\n"; i++) {
         const c = source[i];
         if (c === '"' || c === "'") {
@@ -45,9 +48,10 @@ function defined(source: string, start: number, end: number): boolean {
             continue;
         }
         if ("([{".includes(c)) depth++;
-        else if (")]}".includes(c) && --depth < 0) return false;
-        else if (!depth && (c === "," || c === ";" || c === "#" || c === "?")) return false;
-        else if (c === "=" && !depth && !"=<>!:".includes(source[i - 1]) && !"=>".includes(source[i + 1] ?? "")) return true;
+        else if (")]}".includes(c) && --depth < 0) { depth = 0; later = false; }
+        else if (!depth && (c === "#" || c === "?")) return false;
+        else if (!depth && (c === "," || c === ";")) later = true;
+        else if (c === "=" && !depth && !later && !"=<>!:".includes(source[i - 1]) && !"=>".includes(source[i + 1] ?? "")) return true;
     }
     return false;
 }
