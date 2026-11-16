@@ -536,7 +536,7 @@ for what it tells (`x ? return [] : Err "no"` is a `Result`), and left out
 where it cannot (`False && head []`, `null xs ? 0 : head xs`, `length (head
 p) == 0 || head (head p) > 1` all pass). Such a trial is typed as anywhere,
 its known values evaluated and its calls typed for their arguments, within the
-bound of steps a typed call has (below), past which it is an error. A recursive
+bound of steps a typed call has (below), past which it is an error there. A recursive
 call there is its function's own type, not typed again: the run never makes it
 (`f (p ++ p) (n - 1)` past `n == 0` would never end). Joining known lists
 costs a step for each item, so evaluating a list that doubles stops at the
@@ -551,9 +551,11 @@ rejects `g [300, "x"]`). Where the typed body fails, the call does: in a
 clause that certainly takes the arguments, or in every one that may (one
 the run may pass over, by its guard or a value it decides, is left out where
 it fails), so `f p | length p > 5 = "long"; f p = head p ++ "!"` rejects
-`f [1, "a"]`. Typing a call past a bound of 20000 steps is an error too:
-giving the argument items of one type (`(xs : List Dynamic)`) leaves them to
-the run. A recursive call given the types its call is being typed for is the
+`f [1, "a"]`. Past a bound of 20000 steps, the call is typed by the
+function's own type instead, as a call given items of one type is: so `count`
+over hundreds of mixed rows checks as it did, and a function whose own type
+cannot take the items (`head p ++ "!"` over `["a", 1]`) is rejected; giving
+them one type (`(xs : List Dynamic)`) leaves them to the run. A recursive call given the types its call is being typed for is the
 type that typing finds; given others, it is typed for them in turn, each of
 its arguments' items costing a step. What is known of an argument's value
 (a scalar, a list's items, a record's fields, a function, which is applied)
@@ -567,7 +569,7 @@ g rest` rejects `["a", 1]`, whose `1` it would append), one counting a known
 `n` down follows it (`f (step p) (n - 1)`, swapping a pair, takes `["a", 1]`
 for an even `n` and rejects it for an odd one; `f (p ++ p) (n - 1)` given 12
 doubles twelve times), and one whose arguments grow with no known end
-reaches the bound. A length a typed call cannot
+reaches the bound, taking the function's own type. A length a typed call cannot
 find is unknown, as it is anywhere else: a checked run rejects it. Your own
 functions carry lengths through too, including nested ones: a result that is an
 argument, a list literal of such results, or an argument passed through those

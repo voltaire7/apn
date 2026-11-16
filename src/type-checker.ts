@@ -3029,14 +3029,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try { infer(e, new Map(scope)); }
         catch (error) {
             if (!error || typeof error !== "object" || !("message" in error)) throw error;
-            if (costly(error) || overBound(error)) ranOut = error;
+            if (costly(error)) ranOut = error;
             types = false;
             requirements.length = saved;
         } finally { callFloor = floor; budget = before; trials--; }
         // Running out of steps is the program's error, as anywhere (see CALL_BUDGET).
-        if (ranOut && costly(ranOut)) return problem(`typing code that never runs, which a known condition passes over, takes more than ${CALL_BUDGET} steps`, e,
+        if (ranOut) return problem(`typing code that never runs, which a known condition passes over, takes more than ${CALL_BUDGET} steps`, e,
             "it is typed for what it tells the code that runs; give its values items of one type, as (xs : List Dynamic) does, to check them as they run");
-        if (ranOut) throw ranOut;
         return types;
     }
     // A call of a function typed for its arguments: its body's type with the
@@ -3236,17 +3235,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // unknown (a length typing alone cannot find) is unknown as anywhere: a
     // boundary, which a checked run rejects.
     const costly = (error: unknown) => !!error && typeof error === "object" && "message" in error && error.message === CALL_COST;
-    // The error a typed call past CALL_BUDGET steps is (see boundedTypedCall).
-    const overBound = (error: unknown) => !!error && typeof error === "object" && "message" in error && String(error.message).startsWith("typing this call for its arguments takes more than");
+    // Past CALL_BUDGET steps, the call is typed by the function's own type, as
+    // any call given items of one type is (a recursion over hundreds of mixed
+    // rows, count rows, types each call for a list one shorter). What the
+    // given-up typing left pending or unknown is not the call's; its steps stay
+    // spent, the statement's budget bounding them all.
     function boundedTypedCall(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
-        const floor = callFloor;
+        const floor = callFloor, saved = requirements.length, unknown = [dynamicBoundaries, firstUnknown, unknownLength] as const;
         callFloor = Math.max(floor, budget - CALL_BUDGET);
         try { return typedCall(summary, args, e); }
         catch (error) {
             if (!costly(error)) throw error;
-            callFloor = floor;
-            return problem(`typing this call for its arguments takes more than ${CALL_BUDGET} steps`, e,
-                "an argument holds items of different types, so the call is typed for them; give it items of one type, as (xs : List Dynamic) does, to check them as they run");
+            requirements.length = saved;
+            [dynamicBoundaries, firstUnknown, unknownLength] = unknown;
+            return undefined;
         } finally { callFloor = floor; }
     }
     // Whether a type holds a list whose known items, or a record whose fields,

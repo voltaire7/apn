@@ -109,17 +109,25 @@ for (const [source, error] of [
     const issues = checkSource(source, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
     if (error ? !issues.includes(error) : issues) throw new Error(issues || "accepted");
 });
-// Typing a call for its arguments past the step bound is an error; items of
-// one type (List Dynamic) leave them to the run. A recursive call given new
-// types is typed for them too: one that takes its list apart ends, exactly
-// typed; one whose list grows (p ++ p) reaches the bound. A length it leaves
-// unknown is rejected as any other. Code a known condition passes over is
-// bounded so too, its recursive calls not typed again.
+// Past the step bound, a call typed for its arguments takes the function's own
+// type, as one given items of one type (List Dynamic) does. A recursive call
+// given new types is typed for them too: one that takes its list apart ends,
+// exactly typed; one whose list grows (p ++ p), or is long (count over
+// hundreds of rows), reaches the bound. A length it leaves unknown is rejected
+// as any other. Code a known condition passes over is bounded so too, as an
+// error there, its recursive calls not typed again.
 {
     const body = ["g p = [", ...Array.from({ length: 600 }, () => "    " + Array(4).fill('head p ++ "!"').join(", ")), "]"].join("\n");
-    Deno.test("a typed call past the step bound is an error", () => {
+    // (Its own type takes head p for String | Int, and rejects it here.)
+    Deno.test("a typed call past the step bound takes the function's own type", () => {
         const issues = checkSource(`${body}\ng ["a", 1]`, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
-        if (!issues.includes("takes more than 20000 steps")) throw new Error(issues || "accepted");
+        if (!issues.includes("cannot append Int and String")) throw new Error(issues || "accepted");
+    });
+    Deno.test("a recursion over hundreds of mixed rows checks", () => {
+        const rows = Array.from({ length: 300 }, (_, n) => `    ["n${n}", ${n}]`);
+        const source = ["count [] = 0", "count (_ :: rest) = 1 + count rest", "rows = [", ...rows, "]", "print (count rows)"].join("\n");
+        const issues = checkSource(source, "<test>", { strict: true }).issues;
+        if (issues.length) throw new Error(issues.map(i => i.message).join("; "));
     });
     Deno.test("a typed call past the step bound in code that never runs is an error", () => {
         const issues = checkSource(`${body}\ny = False ? g ["a", 1] : []\ny`, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
@@ -161,10 +169,11 @@ for (const [source, error] of [
 }
 for (const [source, error] of [
     // A known value decides a conditional, so the recursion follows it: the
-    // list doubles twelve times, then n is 0; with n not known it never ends.
+    // list doubles twelve times, then n is 0; with n not known it never ends,
+    // and the call takes f's own type.
     // (Past n == 0, in the branch that never runs, it is not followed.)
     ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\nf ["a", 1] 12', ""],
-    ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\ng n = f ["a", 1] n\ng 3', "takes more than 20000 steps"],
+    ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\ng n = f ["a", 1] n\ng 3', ""],
     ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\nx = True ? "k" : f ["a", 1] 5\nprint x', ""],
     ['go xs n = n == 0 ? xs : go (xs ++ [n]) (n - 1)\nprint (length (go ["a", 1] 3))', ""],
     ['g [] = ""\ng (x :: rest) = x ++ g rest\nf p = g p\nf ["a", 1]', "cannot append Int and String"],
