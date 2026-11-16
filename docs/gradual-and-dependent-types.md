@@ -716,8 +716,10 @@ as its not fitting reads running out as none. The inference budget is per
 top-level statement, so a long program or module is not limited by its length.
 Operators over values not known yet (`g x = x + 1 + 1 ...`, `x` a parameter)
 wait on one another, each on the one before it, at most 96 deep: a longer chain
-is that error too, and a type pattern (`g (x : Int) = ...`) decides them. Gradual
-editor diagnostics remain available separately.
+is that error too, and a type pattern (`g (x : Int) = ...`) decides them. An
+expression nested more than 256 deep (a chain of that many operators, whatever
+their operands) is past the depth limit. Gradual editor diagnostics remain
+available separately.
 
 ## Recursion and self-application
 
