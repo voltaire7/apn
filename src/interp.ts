@@ -98,6 +98,8 @@ export class Interpreter {
     private typing?: CheckingSession;
     private get types(): CheckingSession | undefined { return this.checking ?? this.typing; }
     private runDepth = 0;
+    // Modules being run by an import.
+    private moduleDepth = 0;
     private dynamicDepth = 0;
 
     // A checking session that knows this interpreter's natives and names
@@ -325,8 +327,9 @@ export class Interpreter {
 
     importStandard(module: string): Value {
         // The static check follows an import outside Dynamic, so it typed what
-        // the module's bindings replace (its step over the debugger's).
-        const checked = !!this.checking && !this.dynamicDepth;
+        // the module's bindings replace (its step over the debugger's). A
+        // module's own imports are checked where the check uses that module.
+        const checked = !!this.checking && !this.dynamicDepth && !this.moduleDepth;
         if (checked) this.checking!.module(module, this.sourceDir);
         return this.importModule(module, this.sourceDir);
     }
@@ -340,10 +343,10 @@ export class Interpreter {
             this.importing.add(resolved.key);
             try {
                 // A file's exports, or a folder's entries, each a module
-                // imported when it is used.
+                // imported now (once per interpreter, however many import it).
                 const fields = new Map<string, Value>();
                 for (const file of resolved.files) for (const [name, value] of this.runModuleFile(file)) fields.set(name, value);
-                for (const entry of resolved.entries) fields.set(entry.name, this.defer(() => this.importModule(entry.spec, entry.directory)));
+                for (const entry of resolved.entries) fields.set(entry.name, this.importModule(entry.spec, entry.directory));
                 record = { kind: "record", v: [...fields] };
                 this.modules.set(resolved.key, record);
                 this.moduleValues.set(record, { origin: resolved.key });
@@ -368,8 +371,8 @@ export class Interpreter {
             const program = parse(file.source, file.label);
             this.env = scope;
             this.sourceDir = file.directory;
-            this.runDepth++;
-            try { this.run(program); } finally { this.runDepth--; }
+            this.runDepth++; this.moduleDepth++;
+            try { this.run(program); } finally { this.runDepth--; this.moduleDepth--; }
             // A module the file names for itself (std <- import "std", or a
             // load's) is its own: <- bound the record itself, so nothing is forced.
             return [...this.env.bindings().entries()].filter(([, value]) => !this.moduleValues.has(value));

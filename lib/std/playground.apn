@@ -1,8 +1,10 @@
 # Pictures, animations and games from shapes, as in Elm's Playground: an
 # element program drawing SVG that fills the window. The origin is the
 # screen's center, y grows upward, and angles are in degrees, counterclockwise.
-std <- import "std"
-use std.[number,html,time]
+numbers <- import "std/number"
+_html <- import "std/html"
+_time <- import "std/time"
+use [numbers,_html,_time]
 strings <- import "std/text"
 svg <- import "std/svg"
 browser <- import "std/browser"

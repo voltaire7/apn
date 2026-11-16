@@ -1,5 +1,5 @@
-std <- import "std"
-use std.text
+_text <- import "std/text"
+use _text
 parser <- (load "meta/parser" : Dynamic)
 use parser
 primitives <- (load "meta/primitives" : Dynamic)

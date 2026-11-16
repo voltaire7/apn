@@ -22,7 +22,8 @@ and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
 (`apn --no-prelude` runs a file without it, from the intrinsics up). See [operators](semantics.md#defining-and-overloading-operators).
 
 The standard library is the folder `lib/std/`, imported as `std`: a record of
-its modules, each checked and run the first time it is used. `use std.[a,b]`
+its modules, all run when it is imported (each module is checked where a
+program uses it). `use std.[a,b]`
 opens several modules' names and `use std.name` one module's; `[a,b] = std`
 binds modules without opening them, and `name <- import "std/name"` binds one
 without importing `std`. Imports, their lookup and what a module's record holds

@@ -23,6 +23,22 @@ for (const checked of [false, true]) {
         if (result(i, 'sh <- import "shapes"; sh.square.square 4') !== "16") throw new Error("namespaced");
         if (result(interpreter(checked), 'sh <- import "shapes"; map head (pairs sh)') !== '["cube","solid","square"]') throw new Error("entries");
     });
+    // A folder's modules run when it is imported, each once: reading a field runs nothing.
+    Deno.test(`importing a folder runs its modules (checked=${checked})`, () => {
+        const output: string[] = [], log = console.log;
+        console.log = (...args: unknown[]) => output.push(args.map(String).join(" "));
+        try {
+            const i = interpreter(checked);
+            if (result(i, 'noisy <- import "noisy"\nprint "imported"\nnoisy.quiet.quietness') !== "0") throw new Error("value");
+            if (result(i, 'again <- import "noisy"\nagain.loud.loudness') !== "11") throw new Error("cached");
+        } finally { console.log = log; }
+        if (output.join("|") !== "loud ran|imported") throw new Error(output.join("|"));
+        try { result(interpreter(checked), 'm <- import "loop"'); } catch (error) {
+            if (String(error).includes("cyclic import 'loop'")) return;
+            throw error;
+        }
+        throw new Error("a module importing its own folder imported");
+    });
     Deno.test(`a file wins over a folder of the same name (checked=${checked})`, () => {
         const i = interpreter(checked);
         if (result(i, 'both <- import "both"; [both.fromFile, length (pairs both)]') !== "[1,1]") throw new Error("file");

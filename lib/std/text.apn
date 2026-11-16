@@ -1,5 +1,5 @@
-std <- import "std"
-use std.sequence
+_sequence <- import "std/sequence"
+use _sequence
 # Unicode code-point operations; to (List Char) and from (List Char) preserve astral characters.
 textLength text = length (to (List Char) text)
 textTake n text = from (List Char) (take n (to (List Char) text))

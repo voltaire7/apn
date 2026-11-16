@@ -459,11 +459,11 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   both `Interpreter.importStandard` and `CheckingSession.module`; both cache by
   the resolved path (`key`), so a module and its checked types always come from
   the same files. A module runs (and is checked) in its own builtins scope with
-  `sourceDir` set to its directory; a folder's record holds its entries
-  deferred (`Interpreter.defer`, the checker's `moduleType`), each resolved,
-  run and checked when first read. A module's record leaves out the module
-  records it imported for itself, so `std <- import "std"` in a library module
-  makes no cycle through `std`. The parent-folder
+  `sourceDir` set to its directory; importing a folder imports its entries
+  then (`importModule`, each once per interpreter), while the checker types
+  each entry only where it is read (its `moduleType`), and the run checks only
+  the imports the program itself writes (`moduleDepth`), not a module's own.
+  A module's record leaves out the module records it imported for itself. The parent-folder
   search stops at the program's folder: `Interpreter.moduleRoot` (the outermost
   run's `sourceDir`) and `CheckingSession.prepare`'s directory, passed as
   `resolveModule`'s `root`. With `moduleSources`

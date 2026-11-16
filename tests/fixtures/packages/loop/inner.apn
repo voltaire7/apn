@@ -1,0 +1,3 @@
+# Importing the folder that holds this file is a cycle.
+outer <- import "loop"
+value = 1

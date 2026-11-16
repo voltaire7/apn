@@ -4,8 +4,8 @@
 # fromType reads it, so one stands wherever a decoder goes (field "year" Int,
 # list Quote). int, float and list are also random's names: a program using
 # both imports one qualified (decode <- import "std/decode").
-std <- import "std"
-use std.option
+_option <- import "std/option"
+use _option
 Decoder a = | Decoder (value -> Result a String)
 expecting what test = Decoder (value -> test value ? Ok value : Err ("Expecting " ++ what))
 string = expecting "a STRING" (isType String)

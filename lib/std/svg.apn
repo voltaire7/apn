@@ -1,7 +1,7 @@
 # SVG elements and attributes, as in Elm's Svg and Svg.Attributes. An svg
 # element and everything inside it is SVG. Attribute values are strings.
-std <- import "std"
-use std.html
+_html <- import "std/html"
+use _html
 svg = node "svg"
 circle = node "circle"
 ellipse = node "ellipse"

@@ -1,8 +1,8 @@
 # Packages: run with  apn examples/packages/main.apn
 # import "name" reads name.apn, else a name/ folder, next to this file (then in
 # parent folders up to the program's): an action yielding its record. A
-# folder's record holds its entries, each imported when it is used. use r
-# opens a record's fields, and use [r, s] several.
+# folder's record holds its entries, all imported with it. use r opens a
+# record's fields, and use [r, s] several.
 greetings <- import "greetings"
 units <- import "units"
 reporting <- import "report"

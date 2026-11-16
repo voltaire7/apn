@@ -4,8 +4,9 @@
 # by lowercase name: response.headers "content-type"). Its options are a
 # FetchOptions, each field optional ([] for none), the zero value of one (no
 # body, a timeout of 0) none: [method = "POST", headers = [["Accept","*/*"]]].
-std <- import "std"
-use std.[option,text]
+_option <- import "std/option"
+_text <- import "std/text"
+use [_option,_text]
 FetchOptions = [method : String = "GET", headers : List [String,String], body : String, timeout : Int]
 _options = pairs ([] : FetchOptions)
 # Ascribed, options keep the fields FetchOptions does not have, after its own.

@@ -1,5 +1,5 @@
-std <- import "std"
-use std.sequence
+_sequence <- import "std/sequence"
+use _sequence
 # Persistent map transformations. Input maps are never modified.
 getOption key m = has key m ? Some (lookup key m) : None
 getOr fallback key m = has key m ? lookup key m : fallback

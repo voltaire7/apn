@@ -1,6 +1,6 @@
 # Array algorithms are APN functions; arithmetic lifts numeric operators lazily.
-std <- import "std"
-use std.sequence
+_sequence <- import "std/sequence"
+use _sequence
 dot xs ys = sum (xs * ys)
 transpose rows = null rows ? [] : (all null rows ? []
     : (any null rows ? fail "transpose requires equal row lengths"

@@ -1622,10 +1622,13 @@ option <- import "std/option"  # one module: option.withDefault, option.Some
 is looked up next to the importing file (the current directory in the REPL)
 as `name.apn`, else as a `name/` folder, then the same way in each parent
 folder up to the program's folder (the nearest match wins). A folder is a
-record of its entries, each `.apn` file or subfolder a module of its own read
-when first used (`shapes.solid.box`); a file wins over a folder of the same
-name, whose folder is then reached by path (`import "report/lines"`). Inside the
-library, a bare name is a module beside the file. A module is evaluated in a
+record of its entries, each `.apn` file or subfolder a module of its own
+(`shapes.solid.box`), all imported when the folder is: reading a field never
+runs a module. A file wins over a folder of the same name, whose folder is
+then reached by path (`import "report/lines"`). A module importing a folder
+that holds it is a cycle, an error like any other import cycle: a library
+module imports the modules beside it (`import "std/option"`), not `std`.
+Inside the library, a bare name is a module beside the file. A module is evaluated in a
 scope of its own, with the prelude and what it imports; the caller's bindings
 do not reach it. Clauses it defines for its own types join their functions
 from the moment it runs, opened or not (see [functions travel with

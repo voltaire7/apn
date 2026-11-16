@@ -1,5 +1,6 @@
 # A subfolder is a folder of its own: shapes/solid's record holds box.
-# Its import "shapes" finds the folder two levels up.
-shapes <- import "shapes"
-use shapes.rectangle
+# Its import "shapes/rectangle" finds the module two levels up (importing
+# "shapes" itself would be a cycle: that folder holds this file).
+rectangle <- import "shapes/rectangle"
+use rectangle
 boxVolume width height depth = rectangleArea width height * depth

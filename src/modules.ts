@@ -1,7 +1,7 @@
 // Where `import "name"` finds its code. Next to the importing file (the
 // current directory in the REPL): name.apn, else a name/ folder, whose
-// entries (its .apn files and subfolders) are the module's fields, each
-// imported when used (beside name.apn, name/ is reached by path: name/sub).
+// entries (its .apn files and subfolders) are the module's fields, all
+// imported with it (beside name.apn, name/ is reached by path: name/sub).
 // Then the same in each parent folder up to the program's root (the main
 // program's folder), so a module in a subfolder can import its siblings'
 // packages; the nearest wins. "std" is the standard library, the folder
