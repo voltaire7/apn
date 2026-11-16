@@ -413,7 +413,12 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   unchecked; `parse` keeps whether the text it reads was (`sourcePaths`), as
   `verifyLoad` checks. The checker types the prelude's `load` by its rule
   (`PRELUDE_TYPINGS`). Non-tail calls keep the depth guard
-  (`STACK_LIMIT`). Tests: `tests/tail-call-test.ts`, `tests/repl-interrupt-pty.py`.
+  (`STACK_LIMIT`), and a host `RangeError` in `evaluate` is the same overflow.
+  A left-nested chain of primitive operators that force their left operand
+  first (`LEFT_FIRST_OPERATORS` and the strict ones) runs in a loop in
+  `evalBinop`; the parser joins a right-associative chain from the right in
+  `parseOperators` (`join`) rather than recursing per operator. Tests:
+  `tests/tail-call-test.ts`, `tests/repl-interrupt-pty.py`.
 - Fixity: the parser sees the prelude's declarations and the parsed file's
   (`fileFixities`, one table per `parse`, `fixitiesOf(program)`); a chain
   holding another operator is marked `reassociate` (its parentheses are kept
@@ -642,8 +647,10 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   out, and a left- or right-nested `binop` or `pipe` chain longer than 64 is
   typed so (`typedSpine`, its types in `spineTypes` while its top is typed),
   so neither nests with its length; a `RangeError` in a statement is its
-  depth limit, and AST walks over a whole program (`mentionsAny`) keep their
-  own stack. An evaluation that runs out of budget leaves its value unknown, an
+  depth limit. A walk over a whole program or expression keeps its own stack
+  (`walkObjects`, or one of its own as `mentionedNames` and `valueNames`,
+  which keep each node's result), never the host's: a chain of thousands of
+  operators is a tree that deep. An evaluation that runs out of budget leaves its value unknown, an
   error where a type needs it (`budgetCut`, below).
   `tests/type-level-evaluation-test.ts`, `tests/strict-checking-test.ts`.
 - The checker's evaluator calls the runtime's text functions

@@ -66,6 +66,11 @@ class TailLoad {
 
 // Operators whose builtin meaning does not demand both operands first.
 const LAZY_OPERATORS = new Set(["::", "++", "&&", "||", "$"]);
+// The lazy operators that still take their left operand first, whatever the right.
+const LEFT_FIRST_OPERATORS = new Set(["++", "&&", "||"]);
+const stackOverflow = () => new APNError("runtime", "call stack overflow", {
+    hint: "unbounded strict recursion? Use a lazy cons tail to produce lists incrementally.",
+});
 // The values application calls; any other applies as get gives it.
 const CALLABLE_KINDS = new Set(["functionType", "contract", "mutable", "type", "closure", "native", "clauseFn"]);
 
@@ -1537,11 +1542,7 @@ export class Interpreter {
         let decided: Value | undefined;
         this.stack++;
         try {
-            if (this.stack > STACK_LIMIT) {
-                throw new APNError("runtime", "call stack overflow", {
-                    hint: "unbounded strict recursion? Use a lazy cons tail to produce lists incrementally.",
-                });
-            }
+            if (this.stack > STACK_LIMIT) throw stackOverflow();
             for (;;) {
                 checkInterrupt();
                 let r: Value = { kind: "list", v: [] };
@@ -1917,6 +1918,11 @@ export class Interpreter {
                 }
                 return forceResult ? this.force(r) : r;
             }
+        } catch (error) {
+            // The host's stack, filled before STACK_LIMIT (by frames that
+            // nest more per level), is the same overflow.
+            if (error instanceof RangeError && error.message.includes("call stack")) throw stackOverflow();
+            throw error;
         } finally {
             this.env = caller;
             this.stack--;
@@ -1937,11 +1943,36 @@ export class Interpreter {
         const f = bound.kind === "thunk" || bound.kind === "deferred" ? this.reference(bound) : bound;
         // A prelude operator bound to its intrinsic runs it directly; strict
         // ones evaluate their operands in place.
-        const op = f.kind === "native" && !f.applied.length && !this.joins(f) ? PRIMITIVE_OPERATORS.get(f.name) : undefined;
+        const op = this.primitiveOperator(f);
+        // A left-nested chain of them, each taking its left operand first (a +
+        // b + c ..., however long), runs from its innermost operator out in a
+        // loop: in the order the nested evaluation would, without its stack.
+        if (op && (!LAZY_OPERATORS.has(op) || LEFT_FIRST_OPERATORS.has(op)) && e.l.t === "binop") {
+            const spine: [Extract<Expr, { t: "binop" }>, string][] = [[e, op]];
+            for (let x: Expr = e.l; x.t === "binop" && !x.reassociate; x = x.l) {
+                const g = this.env.get(x.op), at = g && this.primitiveOperator(g.kind === "thunk" || g.kind === "deferred" ? this.reference(g) : g);
+                if (!at || LAZY_OPERATORS.has(at) && !LEFT_FIRST_OPERATORS.has(at)) break;
+                spine.push([x, at]);
+            }
+            if (spine.length > 64) {
+                let value = this.eval(spine[spine.length - 1][0].l);
+                for (let n = spine.length - 1; n >= 0; n--) {
+                    checkInterrupt();
+                    const [x, at] = spine[n];
+                    value = LAZY_OPERATORS.has(at) ? this.operate(at, value, this.delay(x.r)) : this.operate(at, value, this.eval(x.r));
+                }
+                return value;
+            }
+        }
         if (op && !LAZY_OPERATORS.has(op)) return this.operate(op, this.eval(e.l), this.eval(e.r));
         const l = this.delay(e.l), r = this.delay(e.r);
         if (op) return this.operate(op, l, r);
         return this.apply(this.apply(f, l), r);
+    }
+
+    // The primitive a prelude operator bound to its intrinsic is.
+    private primitiveOperator(f: Value): string | undefined {
+        return f.kind === "native" && !f.applied.length && !this.joins(f) ? PRIMITIVE_OPERATORS.get(f.name) : undefined;
     }
 
     // The builtin meaning of an operator, over lazy operands.

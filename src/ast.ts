@@ -83,17 +83,39 @@ export const TYPE_RANGE = "a range of a type repeats it, without a step or bound
 // Whether an expression holds _ as a value (a constructor's logic does), not
 // as the any a type is given (List _).
 // (A type's _, in an ascription (x : Int -> _), is any type, not the value.)
-export function holdsPlaceholder(e: unknown): boolean {
-    if (!e || typeof e !== "object") return false;
-    const node = e as { t?: string; f?: Expr; a?: Expr; name?: string; ascribed?: boolean };
-    if (node.t === "placeholder") return true;
-    if (node.t === "app" && node.ascribed) return holdsPlaceholder(node.a);
-    if (node.t === "app") {
-        let head = e as Expr;
-        while (head.t === "app") head = head.f;
-        if (head.t === "var" && /^[A-Z]/.test(head.name)) return false;
+// Every object below node, arrays walked through, in order: before(n) as it
+// is reached (false skips what is below it), after(n) once all below it is
+// done. A walk of its own stack: a chain of thousands of operators is a tree
+// that deep, more than the host's stack holds.
+export function walkObjects(node: unknown, before?: (n: Record<string, unknown>) => boolean | void, after?: (n: Record<string, unknown>) => void): void {
+    const stack: Array<[unknown, boolean]> = [[node, false]];
+    while (stack.length) {
+        const [x, done] = stack.pop()!;
+        if (!x || typeof x !== "object") continue;
+        const n = x as Record<string, unknown>;
+        if (done) { after!(n); continue; }
+        const children = Array.isArray(x) ? x : before?.(n) === false ? undefined : Object.values(n);
+        if (!children) continue;
+        if (!Array.isArray(x) && after) stack.push([n, true]);
+        for (let i = children.length - 1; i >= 0; i--) if (children[i] && typeof children[i] === "object") stack.push([children[i], false]);
     }
-    return Object.values(e).some(holdsPlaceholder);
+}
+export function holdsPlaceholder(e: unknown): boolean {
+    const pending = [e];
+    while (pending.length) {
+        const x = pending.pop();
+        if (!x || typeof x !== "object") continue;
+        const node = x as { t?: string; f?: Expr; a?: Expr; name?: string; ascribed?: boolean };
+        if (node.t === "placeholder") return true;
+        if (node.t === "app" && node.ascribed) { pending.push(node.a); continue; }
+        if (node.t === "app") {
+            let head = x as Expr;
+            while (head.t === "app") head = head.f;
+            if (head.t === "var" && /^[A-Z]/.test(head.name)) continue;
+        }
+        for (const value of Object.values(x)) pending.push(value);
+    }
+    return false;
 }
 // The expression with each _ replaced by the given one, in place (so its
 // nodes keep their source locations).
@@ -374,10 +396,9 @@ export function mentions(e: unknown, names: Set<string>): boolean {
 // Rewrite every infix pattern whose operator names a constructor ((::) = Cons)
 // to that constructor's pattern (x :: xs is Cons x xs), in place.
 export function rewriteInfixConstructors(node: unknown, tagOf: (op: string) => string | undefined): void {
-    if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) { node.forEach(x => rewriteInfixConstructors(x, tagOf)); return; }
-    const n = node as Record<string, unknown>;
-    for (const value of Object.values(n)) if (value && typeof value === "object") rewriteInfixConstructors(value, tagOf);
+    walkObjects(node, undefined, n => rewriteInfixConstructor(n, tagOf));
+}
+function rewriteInfixConstructor(n: Record<string, unknown>, tagOf: (op: string) => string | undefined): void {
     // [a, b] is a :: b :: [] in a pattern too.
     if (n.p === "list" && (n.v as Pattern[]).length && tagOf("::")) {
         const expanded = listPatternExpansion(n as Extract<Pattern, { p: "list" }>);
@@ -404,14 +425,15 @@ export function declaresNames(e: unknown): boolean {
 export function withinScope(node: unknown, passes: () => void): void {
     const hidden: Array<[{ stmts: Expr[] }, Expr[]]> = [];
     const seen = new Set<object>();
-    const hide = (x: unknown): void => {
-        if (!x || typeof x !== "object" || seen.has(x)) return;
+    walkObjects(node, x => {
+        if (seen.has(x)) return false;
         seen.add(x);
-        if (Array.isArray(x)) { x.forEach(hide); return; }
-        if (declaresNames(x)) { const b = x as { stmts: Expr[] }; hidden.push([b, b.stmts]); b.stmts = []; return; }
-        Object.values(x).forEach(hide);
-    };
-    hide(node);
+        if (!declaresNames(x)) return;
+        const b = x as { stmts: Expr[] };
+        hidden.push([b, b.stmts]);
+        b.stmts = [];
+        return false;
+    });
     try { passes(); } finally { for (const [block, stmts] of hidden) block.stmts = stmts; }
 }
 // A head no value matches: a pattern calling a function.
@@ -428,10 +450,9 @@ export type HeadKind = { data: string } | "free" | "type" | "other";
 // (x : t), an error); bound to anything else it stays a head, which no value
 // matches (an index where the definition assigns an item: xs (pos 0) = 9).
 export function resolveHeads(node: unknown, kind: (name: string) => HeadKind): void {
-    if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) { node.forEach(x => resolveHeads(x, kind)); return; }
-    const n = node as Record<string, unknown>;
-    for (const value of Object.values(n)) if (value && typeof value === "object") resolveHeads(value, kind);
+    walkObjects(node, undefined, n => resolveHead(n, kind));
+}
+function resolveHead(n: Record<string, unknown>, kind: (name: string) => HeadKind): void {
     // (x : t) binds t to x's type, unless t names a type: then it is (x : T)
     // for the type it names.
     if (n.p === "typeBind" && n.name !== "_" && kind(n.name as string) === "type") {
@@ -572,10 +593,9 @@ function patternHead(b: Binding): PatternHead | undefined {
     }
 }
 export function rewriteTypedPatterns(node: unknown, head: (tag: string) => PatternHead | undefined): void {
-    if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) { node.forEach(x => rewriteTypedPatterns(x, head)); return; }
-    const n = node as Record<string, unknown>;
-    for (const value of Object.values(n)) if (value && typeof value === "object") rewriteTypedPatterns(value, head);
+    walkObjects(node, undefined, n => rewriteTypedPattern(n, head));
+}
+function rewriteTypedPattern(n: Record<string, unknown>, head: (tag: string) => PatternHead | undefined): void {
     if (n.p !== "constr" || !n.typed) return;
     const tag = n.tag as string, args = n.args as Pattern[], kind = head(tag);
     if (!kind || !args.length) return;
@@ -636,17 +656,14 @@ function typeOfArguments(tag: string, args: Pattern[]): Expr | undefined {
 // the type they compute; one with an argument to bind reads it back from the
 // value ((xs : Pairs n a)). Each parameter list, left to right, in place.
 export function knownTypeArguments(node: unknown, computed: (tag: string) => boolean): void {
-    if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) { node.forEach(x => knownTypeArguments(x, computed)); return; }
-    const record = node as Record<string, unknown>;
-    if (Array.isArray(record.params) && record.params.every(p => p && typeof p === "object" && "p" in p)) {
+    walkObjects(node, record => {
+        if (!Array.isArray(record.params) || !record.params.every(p => p && typeof p === "object" && "p" in p)) return;
         const bound = new Set<string>();
         for (const p of record.params as Pattern[]) {
             knownArguments(p, bound, computed);
             for (const name of patternNames(p)) bound.add(name);
         }
-    }
-    for (const value of Object.values(record)) knownTypeArguments(value, computed);
+    });
 }
 function knownArguments(p: Pattern, bound: Set<string>, computed: (tag: string) => boolean): void {
     const n = p as Record<string, unknown>;
@@ -675,14 +692,12 @@ export function constructorPattern(name: string, args: Pattern[], cons: boolean)
 // Cons, by what the name is bound to: isCons) is that list cell, as h :: t
 // is; it keeps the name it was written with (see patternSource).
 export function rewriteListConstructors(node: unknown, isCons: (tag: string) => boolean): void {
-    if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) { node.forEach(x => rewriteListConstructors(x, isCons)); return; }
-    const n = node as Record<string, unknown>;
-    for (const value of Object.values(n)) if (value && typeof value === "object") rewriteListConstructors(value, isCons);
-    if (n.p !== "constr" || (n.args as Pattern[]).length !== 2 || !isCons(n.tag as string)) return;
-    const [head, tail] = n.args as Pattern[], op = n.tag;
-    for (const key of Object.keys(n)) delete n[key];
-    Object.assign(n, { p: "cons", head, tail, op });
+    walkObjects(node, undefined, n => {
+        if (n.p !== "constr" || (n.args as Pattern[]).length !== 2 || !isCons(n.tag as string)) return;
+        const [head, tail] = n.args as Pattern[], op = n.tag;
+        for (const key of Object.keys(n)) delete n[key];
+        Object.assign(n, { p: "cons", head, tail, op });
+    });
 }
 // A pattern with every flat typed pattern in it read as its typed form,
 // copied where that changes it: the pattern as written stays as it is.

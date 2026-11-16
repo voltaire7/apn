@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, type Binding, clausePlaces, type Contains, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, type Binding, clausePlaces, walkObjects, type Contains, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { EVALUATED_NATIVES, nativeArity, READS_CODE, RETIRED_NATIVES, SHOWS, STANDARD_NATIVES, STRICT_NATIVES } from "./natives.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -780,14 +780,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // body to run where it is used (see LazyTop).
     const writes = new Map<string, number>();
     const note = (name: string) => writes.set(name, (writes.get(name) ?? 0) + 1);
-    const scan = (node: unknown): void => {
-        if (!node || typeof node !== "object") return;
+    walkObjects(program, node => {
         const value = node as Record<string, any>;
         if ((value.t === "def" || value.t === "stmDef") && value.clauses?.[0]?.params.length === 0) note(value.name);
         if (value.t === "patDef" && value.pattern?.p === "var") note(value.pattern.name);
-        for (const child of Object.values(value)) scan(child);
-    };
-    scan(program);
+    });
     let dynamicBoundaries = 0, runtimeChecks = 0, serial = 0, budget = STATEMENT_BUDGET;
     let activeExpression: Expr | undefined, checkingExpression: Expr | undefined;
     // The innermost expression being inferred that has a source location.
@@ -831,6 +828,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // and reads a type error as its not fitting reads this one as none, and
     // the statement reports it.
     let limitIssue: unknown;
+    // Nesting past what the JavaScript stack holds is the depth limit.
+    const depthIssue = (): TypeIssue => {
+        try { return problem("type checking depth limit exceeded; cannot establish the type", checkingExpression); }
+        catch (issue) { return issue as TypeIssue; }
+    };
     function limit(message: string, e?: Expr): never {
         try { return problem(message, e); }
         catch (issue) { limitIssue ??= issue; throw issue; }
@@ -1709,6 +1711,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (op === "/") return x.name === y.name && ["Float", "Float32", "Float64"].includes(x.name) ? x : atom("Number");
         return x.name === y.name ? x : integerResult(x, y) ?? atom("Number");
     }
+    // The operators an index is made with.
+    const ARITHMETIC = new Set(["+", "-", "*"]);
     function index(e: Expr, scope: Scope): Index | undefined {
         if (e.t === "int") return constant(e.v);
         if (e.t === "numeric" && e.v.kind === "int") return constant(e.v.v);
@@ -1724,12 +1728,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const a = index(e.e, scope);
             return a && indexScale(a, -1n);
         }
-        if (e.t === "binop" && builtinAt(e, scope)) {
-            const a = index(e.l, scope), b = index(e.r, scope);
-            if (!a || !b) return;
-            if (e.op === "+" || e.op === "-") return indexAdd(a, b, e.op === "+" ? 1n : -1n);
-            if (e.op === "*" && !a.terms.size) return indexScale(b, a.constant);
-            if (e.op === "*" && !b.terms.size) return indexScale(a, b.constant);
+        if (e.t === "binop" && ARITHMETIC.has(e.op) && builtinAt(e, scope)) {
+            // (A chain, a + b + c ..., from its innermost operator out: it may
+            // be thousands long; one being typed keeps each node's, which
+            // the operator above it asks for.)
+            const kept = (x: Expr) => { const typed = spineTypes.get(x); return typed?.scope === scope ? typed.index : undefined; };
+            if (kept(e)) return kept(e)!.of;
+            const spine: Extract<Expr, { t: "binop" }>[] = [e];
+            for (let x = e.l; x.t === "binop" && ARITHMETIC.has(x.op) && builtinAt(x, scope) && !kept(x); x = x.l) spine.push(x);
+            let a = index(spine[spine.length - 1].l, scope);
+            for (let n = spine.length - 1; n >= 0; n--) {
+                const { op, r } = spine[n], b = a && index(r, scope);
+                a = !a || !b ? undefined : op === "+" || op === "-" ? indexAdd(a, b, op === "+" ? 1n : -1n)
+                    : !a.terms.size ? indexScale(b, a.constant) : !b.terms.size ? indexScale(a, b.constant) : undefined;
+                const typed = spineTypes.get(spine[n]);
+                if (typed?.scope === scope) typed.index = { of: a };
+            }
+            return a;
         }
     }
     function schemaValue(type: Ty, e: Expr, seen = new Map<Ty, Ty>()): Ty {
@@ -4207,7 +4222,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A left-nested operator chain (a + b + c ..., however long) is typed from
     // its innermost operator out, each one's left operand typed already, so
     // typing it nests no deeper than one operator (see the binop case).
-    const spineTypes = new Map<Expr, { scope: Scope; type: Ty }>();
+    const spineTypes = new Map<Expr, { scope: Scope; type: Ty; index?: { of: Index | undefined } }>();
     // e typed so, when the chain below it (next's steps) is long: else undefined.
     function typedSpine(e: Expr, scope: Scope, expected: Ty | undefined, next: (x: Expr) => Expr | undefined): Ty | undefined {
         const first = next(e);
@@ -5950,25 +5965,30 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const readingCalls = new WeakSet<Expr>();
     // Calls of a widened constructor no rule takes (see infer's app).
     const ownCalls = new WeakSet<Expr>();
+    // The names a value's evaluation may read (the parameters it is over,
+    // among them), each expression's kept: found children first, with a
+    // stack of its own, as each node of a chain thousands long asks for its own.
+    const valueNamesOf = new WeakMap<Expr, string[]>();
+    function valueNames(e: Expr): string[] {
+        const parts = (x: Expr): (Expr | null | undefined)[] =>
+            x.t === "binop" ? [x.l, x.r] : x.t === "unop" ? [x.e] : x.t === "ternary" ? [x.cond, x.then, x.els]
+            : x.t === "app" ? [x.f, x.a] : x.t === "list" ? x.v : x.t === "record" ? x.v.map(([, y]) => y)
+            : x.t === "range" ? [x.lo, x.second, x.hi] : x.t === "lambda" ? [x.body]
+            : x.t === "block" ? x.stmts.flatMap(st => st.t === "patDef" ? [st.value] : st.t === "stmDef" ? st.clauses.map(c => c.body) : [st as Expr]) : [];
+        const stack: [Expr, boolean][] = [[e, false]];
+        while (stack.length) {
+            const [x, done] = stack.pop()!;
+            if (valueNamesOf.has(x)) continue;
+            const below = parts(x).filter((y): y is Expr => !!y);
+            if (!done) { stack.push([x, true]); for (const y of below) if (!valueNamesOf.has(y)) stack.push([y, false]); continue; }
+            const found = new Set<string>(x.t === "var" ? [x.name] : []);
+            for (const y of below) for (const name of valueNamesOf.get(y) ?? []) found.add(name);
+            valueNamesOf.set(x, [...found]);
+        }
+        return valueNamesOf.get(e)!;
+    }
     function computed(e: Expr, scope: Scope): Known {
-        const names = new Set<string>();
-        const collect = (x: Expr): void => {
-            if (x.t === "var" && scope.get(x.name)?.ref) names.add(x.name);
-            else if (x.t === "binop") { collect(x.l); collect(x.r); }
-            else if (x.t === "unop") collect(x.e);
-            else if (x.t === "ternary") { collect(x.cond); collect(x.then); collect(x.els); }
-            else if (x.t === "app") { collect(x.f); collect(x.a); }
-            else if (x.t === "list") x.v.forEach(collect);
-            else if (x.t === "record") x.v.forEach(([, y]) => collect(y));
-            else if (x.t === "range") [x.lo, x.second, x.hi].forEach(y => y && collect(y));
-            else if (x.t === "lambda") collect(x.body);
-            else if (x.t === "block") for (const st of x.stmts) {
-                if (st.t === "patDef") collect(st.value);
-                else if (st.t === "stmDef") st.clauses.forEach(c => collect(c.body));
-                else collect(st);
-            }
-        };
-        collect(e);
+        const names = new Set(valueNames(e).filter(name => scope.get(name)?.ref));
         // Over parameters, the value is decided again at each call; evaluating it
         // now (with the parameters unknown) rarely tells more, so spend little.
         // Over none, a quick value is known now; a longer one waits until a check
@@ -6344,21 +6364,31 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Every variable name an expression mentions (shadowing ignored: more is safe).
     const mentioned = new WeakMap<Expr, string[]>();
+    // (Each expression's below it kept too, found children first, with a stack
+    // of its own: each node of a chain thousands long asks for its own.)
     function mentionedNames(e: Expr): string[] {
-        let names = mentioned.get(e);
-        if (!names) {
-            const found = new Set<string>();
-            const walk = (x: unknown): void => {
-                if (!x || typeof x !== "object") return;
-                if (Array.isArray(x)) { x.forEach(walk); return; }
-                const node = x as Record<string, unknown>;
-                if (node.t === "var" && typeof node.name === "string") found.add(node.name);
-                for (const value of Object.values(node)) if (value && typeof value === "object") walk(value);
-            };
-            walk(e);
-            mentioned.set(e, names = [...found]);
+        const known = mentioned.get(e);
+        if (known) return known;
+        const sets = new Map<object, Set<string>>();
+        const below = (x: object) => (Array.isArray(x) ? x : Object.values(x)).filter(v => v && typeof v === "object") as object[];
+        const stack: [object, boolean][] = [[e, false]];
+        while (stack.length) {
+            const [x, done] = stack.pop()!;
+            if (!done) {
+                if (sets.has(x)) continue;
+                const memo = mentioned.get(x as Expr);
+                if (memo) { sets.set(x, new Set(memo)); continue; }
+                stack.push([x, true]);
+                for (const child of below(x)) if (!sets.has(child)) stack.push([child, false]);
+                continue;
+            }
+            const node = x as Record<string, unknown>, found = new Set<string>();
+            if (node.t === "var" && typeof node.name === "string") found.add(node.name);
+            for (const child of below(x)) for (const name of sets.get(child) ?? []) found.add(name);
+            sets.set(x, found);
+            if (!Array.isArray(x) && typeof node.t === "string") mentioned.set(x as Expr, [...found]);
         }
-        return names;
+        return mentioned.get(e)!;
     }
     // What e evaluates to, given known values of the names in env.
     // Kept small, as each nested call is one of its frames: recursion in the
@@ -8399,9 +8429,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (t?.k === "variant" && body.t === "var") constructorOperators.set(statement.name, body.name);
             else constructorOperators.delete(statement.name);
         }
-        readPatterns(statement, scope);
-        rewriteInfixConstructors(statement, op => constructorOperators.get(op));
         checkingExpression = statement.t === "expr" || statement.t === "patDef" ? statement.value : statement.t === "def" ? statement.clauses[0].body : undefined;
+        try {
+            readPatterns(statement, scope);
+            rewriteInfixConstructors(statement, op => constructorOperators.get(op));
+        } catch (error) {
+            if (!(error instanceof RangeError)) throw error;
+            issues.push(depthIssue());
+            continue;
+        }
         try {
             statementWrote = false;
             if (statement.t === "def") {
@@ -8444,11 +8480,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             if (limitIssue) throw limitIssue;
         } catch (error) {
-            // Nesting past what the JavaScript stack holds is the depth limit.
-            if (error instanceof RangeError) {
-                try { limit("type checking depth limit exceeded; cannot establish the type", checkingExpression); } catch { /* kept */ }
-            }
-            if (error instanceof RangeError || error && typeof error === "object" && "pos" in error && "message" in error) {
+            if (error instanceof RangeError) issues.push(limitIssue as TypeIssue ?? depthIssue());
+            else if (error && typeof error === "object" && "pos" in error && "message" in error) {
                 issues.push((limitIssue ?? error) as TypeIssue);
             } else throw error;
         }

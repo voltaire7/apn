@@ -1715,6 +1715,11 @@ Arguments remain lazy: an unused argument is not evaluated by this optimization.
 Calls with work remaining (such as `1 + recurse n`) still consume stack, and a
 large deferred accumulator can still overflow when finally forced. Use `<-` to
 compute an accumulator on each iteration when appropriate.
+A chain of the prelude's operators that take their left operand first (`+`,
+`*`, comparisons, `&&`, `||`, `++`), however long, runs in constant stack, as
+`x :: y :: ... :: []` does, being lazy. A chain of calls (`f $ g $ ... x`, a
+composition `f \ g \ ...`) nests as the calls do, and `a ++ b ++ c ...` of
+lists makes appends nested as deep as the chain, which reading the list follows.
 
 Code a `use` runs may end with another `use` of code, a file loading itself
 (`again <- load "itself"; use again`): that use runs in place of the last

@@ -23,6 +23,36 @@ for (const [source, expected] of [
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
+// A long chain of the prelude's operators that take their left operand first
+// runs in a loop, parsed and checked alike without nesting with its length; a
+// chain of nested calls ($) still nests, and overflows as a call stack overflow.
+{
+    const chain = (head: string, piece: string, n: number, tail: string) => {
+        const out = [head];
+        for (let i = 0; i < n; i++) { if (out[out.length - 1].length > 85) out.push("   "); out[out.length - 1] += piece; }
+        return out.join("\n") + tail;
+    };
+    const checked = (source: string) => {
+        const i = new Interpreter();
+        i.enableChecking();
+        return i.renderString(i.run(parseDocument(source)));
+    };
+    for (const [name, source, expected] of [
+        ["+", chain("y = 2", " + 1", 20000, "\ny"), "20002"],
+        ["+ and *", chain("y = 2", " + 2 * 3 - 1", 5000, "\ny"), "25002"],
+        ["&&", chain("y = True", " && True", 20000, "\ny"), "True"],
+        ["++ of strings", chain('y = "a"', ' ++ "a"', 5000, "\nlength y"), "5001"],
+        ["::", chain("y = 1", " :: 1", 20000, " :: []\nlength y"), "20001"],
+    ] as const) Deno.test(`a long chain of ${name} runs`, () => {
+        const actual = checked(source);
+        if (actual !== expected) throw new Error(actual);
+    });
+    Deno.test("a long chain of nested calls is a call stack overflow", () => {
+        let message = "";
+        try { checked(chain("inc x = x + 1\ny = inc", " $ inc", 3000, " $ 1\ny")); } catch (error) { message = String(error); }
+        if (!message.includes("call stack overflow")) throw new Error(message);
+    });
+}
 // A file's last statement using code runs it in place, as a tail call: what
 // each file binds joins the first's, and each file's paths are beside it.
 for (const [file, expected] of [['repeat', '[0,42]'], ['outer', '[0,10,20]']] as const) {
