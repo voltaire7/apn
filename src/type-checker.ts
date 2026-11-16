@@ -2971,11 +2971,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // program's. It is typed as anywhere, its calls for their arguments and
     // its values evaluated, within CALL_BUDGET steps, given back; running out
     // of them is an error, as for any typed call.
-    let trials = 0;
     function typesInTrial(e: Expr, scope: Scope): boolean {
         const floor = callFloor, before = budget;
         callFloor = Math.max(floor, budget - CALL_BUDGET);
-        trials++;
         // (Not as succeeds tries a check, choosing: that types no call for its
         // arguments.)
         let ranOut: unknown, types = true;
@@ -2986,11 +2984,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (costly(error) || overBound(error)) ranOut = error;
             types = false;
             requirements.length = saved;
-        } finally { callFloor = floor; budget = before; trials--; }
+        } finally { callFloor = floor; budget = before; }
         // Running out of steps is the program's error, as anywhere (see CALL_BUDGET).
-        if (ranOut && costly(ranOut)) return problem(`typing code that never runs, which a known condition passes over, takes more than ${CALL_BUDGET} steps`, e,
-            "it is typed for what it tells the code that runs; give its values items of one type, as (xs : List Dynamic) does, to check them as they run");
-        if (ranOut) throw ranOut;
+        if (ranOut) return problem(`typing code that never runs, which a known condition passes over, takes more than ${CALL_BUDGET} steps`, e,
+            "it is typed as anywhere, for what it tells the code that runs: a recursion there that would not end (n == 0 passed by n - 1) needs a base case that ends it (n <= 0); or give its values items of one type, as (xs : List Dynamic) does, to check them as they run");
         return types;
     }
     // A call of a function typed for its arguments: its body's type with the
@@ -3058,10 +3055,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         typingCalls.set(summary, calls);
         const pending = calls.get(types)?.find(fits);
         if (pending) return pending.result;
-        // In code that never runs (see typesInTrial), a recursive call is its
-        // function's own type: the run never makes it, so it is not typed
-        // again (f (p ++ p) (n - 1) past n == 0 would never end).
-        if (trials && calls.size) return undefined;
         // A recursive call given other types (its function's typing under way)
         // costs a step for each part of its arguments' types, so a recursion
         // whose arguments grow (f (p ++ p) (n - 1)) reaches the step bound,

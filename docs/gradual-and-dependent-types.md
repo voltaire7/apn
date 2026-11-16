@@ -532,12 +532,12 @@ for what it tells (`x ? return [] : Err "no"` is a `Result`), and left out
 where it cannot (`False && head []`, `null xs ? 0 : head xs`, `length (head
 p) == 0 || head (head p) > 1` all pass). Such a trial is typed as anywhere,
 its known values evaluated and its calls typed for their arguments, within the
-bound of steps a typed call has (below), past which it is an error. A recursive
-call there is its function's own type, not typed again: the run never makes it
-(`f (p ++ p) (n - 1)` past `n == 0` would never end). Joining known lists
-costs a step for each item, so evaluating a list that doubles stops at the
-evaluation's bound. A condition over
-a function's parameters is known only in a call typed for its arguments; its
+bound of steps a typed call has (below), past which it is an error. A
+recursion there that would not end (`f (p ++ p) (n - 1)` past `n == 0`) is
+rejected though the run never makes it, as it is given any arguments it would
+not end on; a base case that ends it (`n <= 0`) ends its typing too. Joining
+known lists costs a step for each item, so evaluating a list that doubles stops
+at the evaluation's bound. A condition over a function's parameters is known only in a call typed for its arguments; its
 own definition types both branches. A function of several clauses is typed so as
 the run dispatches it: each clause that may take the arguments, up to one
 that certainly does (`f [] = ""; f (x :: _) = "k" ++ x` takes `["a", 1]`),
@@ -561,8 +561,8 @@ variable bound to a known function is that function (`mkv = mk`).
 So a recursion taking its list apart is typed exactly (`g (x :: rest) = x ++
 g rest` rejects `["a", 1]`, whose `1` it would append), one counting a known
 `n` down follows it (`f (step p) (n - 1)`, swapping a pair, takes `["a", 1]`
-for an even `n` and rejects it for an odd one; `f (p ++ p) (n - 1)` given 12
-doubles twelve times), and one whose arguments grow with no known end
+for an even `n` and rejects it for an odd one; `f (p ++ p) (n - 1)` given 11
+doubles eleven times), and one whose arguments grow with no known end
 reaches the bound. A length a typed call cannot
 find is unknown, as it is anywhere else: a checked run rejects it. Your own
 functions carry lengths through too, including nested ones: a result that is an
