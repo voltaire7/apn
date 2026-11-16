@@ -2,11 +2,7 @@
 # Load data from a JSON file, and save it to one.
 std <- import "std"
 use std.[html,io,option,p5]
-browser <- import "std/browser"
-decode <- import "std/decode"
-file <- import "std/file"
-http <- import "std/http"
-task <- import "std/task"
+[browser,decode,file,http,task] = std
 
 # Bubbles, each a circle with a name; and the press a new one starts from,
 # while one is being made.

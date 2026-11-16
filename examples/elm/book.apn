@@ -2,8 +2,7 @@
 # Make a GET request to load a book called "Public Opinion".
 std <- import "std"
 use std.[html,option]
-browser <- import "std/browser"
-http <- import "std/http"
+[browser,http] = std
 
 Model = Failure | Loading | Success String
 Msg = | GotText (Result String http.HttpError)

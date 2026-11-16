@@ -2,7 +2,7 @@
 # Create a form and respond to the results.
 std <- import "std"
 use std.[html,p5]
-browser <- import "std/browser"
+[browser] = std
 
 # The name typed, the food chosen (its color) and the form's font.
 Model = [name : String, food : String, font : String]

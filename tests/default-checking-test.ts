@@ -141,6 +141,10 @@ for (const [source, expected] of [
     ['std <- import "std"\nrandom = std.number\nrandom.sq 4', '16'],
     ['numbers <- import "std/number"\nf _ = numbers\nuse (f [])\nsq 3', '9'],
     ['f _ = {\n    print "f"\n    import "std/number"\n}\nm <- f []\nuse m\nsq 3', '9'],
+    // A record pattern binds a module's names as use opens them: generic.
+    ['std <- import "std"\n[sequence] = std\n[sequence.sum [1,2], sequence.sum [0.5]]', '[3,0.5]'],
+    ['[sum] <- import "std/sequence"\n[sum [1,2], sum [0.5]]', '[3,0.5]'],
+    ['[sum = total] <- import "std/sequence"\n[total [1,2], total [0.5]]', '[3,0.5]'],
 ] as const) Deno.test(`default checking session: ${source}`, () => {
     const actual = run(session(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);

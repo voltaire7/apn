@@ -2,8 +2,7 @@
 # Press a button to send a GET request for random quotes.
 std <- import "std"
 use std.[html,option,decode]
-browser <- import "std/browser"
-http <- import "std/http"
+[browser,http] = std
 
 Quote = [quote : String, source : String, author : String, year : Int]
 Model = Failure | Loading | Success Quote

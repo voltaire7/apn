@@ -23,9 +23,10 @@ and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
 
 The standard library is the folder `lib/std/`, imported as `std`: a record of
 its modules, each checked and run the first time it is used. `use std.[a,b]`
-opens several modules' names, `use std.name` one module's, and
-`name <- import "std/name"` binds one module without opening it. Imports, their
-lookup and what a module's record holds are described in
+opens several modules' names and `use std.name` one module's; `[a,b] = std`
+binds modules without opening them, and `name <- import "std/name"` binds one
+without importing `std`. Imports, their lookup and what a module's record holds
+are described in
 [module imports](semantics.md#module-imports); imports require Deno read
 permission (the `apn` launcher provides it).
 
@@ -59,7 +60,8 @@ first + second                         # 30
 An APN wrapper function opens the record in its own scope, not its caller's.
 A record pattern takes some names of a module and leaves the rest:
 `[halt] <- import "std/system"` binds `halt`, and `[halt = stop] <- import
-"std/system"` binds only `stop`.
+"std/system"` binds only `stop`. Each name it binds is the module's, as `use`
+opens it: `[sum] <- import "std/sequence"` sums Ints and Floats alike.
 
 `load "file"` reads `file.apn` beside the running file as code, again each time
 it runs; `use` of that code runs the file there, in the caller's scope, while

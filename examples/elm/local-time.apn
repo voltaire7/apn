@@ -2,8 +2,7 @@
 # Show the current time in your time zone.
 std <- import "std"
 use std.[html,time]
-browser <- import "std/browser"
-task <- import "std/task"
+[browser,task] = std
 
 Msg = Tick Posix | AdjustTimeZone Zone
 

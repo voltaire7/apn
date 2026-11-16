@@ -4,8 +4,7 @@
 # another site, so this crate's wood is drawn once into a p5 graphic.
 std <- import "std"
 use std.html
-browser <- import "std/browser"
-p5 <- import "std/p5"
+[browser,p5] = std
 
 Msg = | TimeDelta Number
 

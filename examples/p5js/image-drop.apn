@@ -2,8 +2,7 @@
 # Display an image that the page visitor dragged and dropped.
 std <- import "std"
 use std.[html,text,p5]
-browser <- import "std/browser"
-file <- import "std/file"
+[browser,file] = std
 
 # The canvas shows a message, or the image dropped on it (by its URL).
 Shown = Message String | Dropped String

@@ -3,7 +3,7 @@
 # Here are some common SVG shapes.
 std <- import "std"
 use std.html
-svg <- import "std/svg"
+[svg] = std
 
 main = svg.svg [svg.viewBox "0 0 400 400", svg.width "400", svg.height "400"] [
     svg.circle [

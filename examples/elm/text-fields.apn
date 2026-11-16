@@ -2,7 +2,7 @@
 # A text input for reversing text. Very useful!
 std <- import "std"
 use std.[html,text]
-browser <- import "std/browser"
+[browser] = std
 
 Msg = | Change String
 

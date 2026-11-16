@@ -2,7 +2,7 @@
 # Use text input from the page visitor.
 std <- import "std"
 use std.[html,p5]
-browser <- import "std/browser"
+[browser] = std
 
 # The name being typed, and the one submitted last.
 Model = [typing : String, name : String]

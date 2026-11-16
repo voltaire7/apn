@@ -4,8 +4,7 @@
 # another site, so this crate's wood is drawn into a p5 graphic (as in Crate).
 std <- import "std"
 use std.html
-browser <- import "std/browser"
-p5 <- import "std/p5"
+[browser,p5] = std
 
 eyeLevel = 2
 noKeys = [up = False, left = False, down = False, right = False, space = False]

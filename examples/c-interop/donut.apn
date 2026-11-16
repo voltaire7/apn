@@ -1,7 +1,7 @@
 # Run ./examples/c-interop/run-donut [frame-count]. Ctrl+C ends the animation.
 std <- import "std"
 use std.[function,sequence,text,io]
-ffi <- import "std/ffi"
+[ffi] = std
 args <- getArgs
 path = head args
 frames = null (tail args) ? [0..] : take (parseInt (head (tail args))) [0..]

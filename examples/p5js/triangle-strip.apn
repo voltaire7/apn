@@ -2,7 +2,7 @@
 # Split a ring into triangles.
 std <- import "std"
 use std.[html,number,p5]
-browser <- import "std/browser"
+[browser] = std
 
 Msg = | Counted Int
 

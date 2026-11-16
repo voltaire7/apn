@@ -2,8 +2,7 @@
 # Image upload with a drag and drop zone.
 std <- import "std"
 use std.html
-browser <- import "std/browser"
-file <- import "std/file"
+[browser,file] = std
 
 Msg = Pick | DragEnter | DragLeave | GotFiles file.File (List file.File)
 

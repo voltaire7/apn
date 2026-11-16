@@ -2,7 +2,7 @@
 # Set the look of a model's surface with a material.
 std <- import "std"
 use std.[html,sequence,p5]
-browser <- import "std/browser"
+[browser] = std
 
 astronaut = loadModel "assets/astronaut.obj"
 venus = loadImage "assets/venus.jpg"

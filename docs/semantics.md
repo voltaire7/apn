@@ -1614,6 +1614,7 @@ std <- import "std"            # the standard library, a record of its modules
 use std.[function,option]      # opens both modules' names
 use std.text                   # opens one module's names
 option <- import "std/option"  # one module: option.withDefault, option.Some
+[browser,task] = std           # modules of std, by a record pattern
 [halt] <- import "std/system"  # one name, by a record pattern
 ```
 

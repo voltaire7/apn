@@ -4,8 +4,7 @@
 # with the camera the model's time puts it at.
 std <- import "std"
 use std.html
-browser <- import "std/browser"
-p5 <- import "std/p5"
+[browser,p5] = std
 
 Msg = | TimeDelta Number
 

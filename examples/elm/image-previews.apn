@@ -2,9 +2,7 @@
 # Image upload with a drag and drop zone. See image previews!
 std <- import "std"
 use std.html
-browser <- import "std/browser"
-file <- import "std/file"
-task <- import "std/task"
+[browser,file,task] = std
 
 Msg =
     | Pick

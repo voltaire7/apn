@@ -2,9 +2,7 @@
 # Show an analog clock for your time zone.
 std <- import "std"
 use std.[html,time,number]
-browser <- import "std/browser"
-task <- import "std/task"
-svg <- import "std/svg"
+[browser,task,svg] = std
 
 Msg = Tick Posix | AdjustTimeZone Zone
 

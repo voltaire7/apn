@@ -4,8 +4,7 @@
 # stone block's face and sides are drawn into p5 graphics.
 std <- import "std"
 use std.[html,number]
-browser <- import "std/browser"
-p5 <- import "std/p5"
+[browser,p5] = std
 
 Msg = GotViewport browser.Viewport | Resized Number Number | MouseMoved Number Number
 

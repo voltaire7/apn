@@ -2,8 +2,7 @@
 # File upload with the <input type="file"> node.
 std <- import "std"
 use std.html
-browser <- import "std/browser"
-file <- import "std/file"
+[browser,file] = std
 
 Msg = | GotFiles (List file.File)
 

@@ -3,7 +3,7 @@
 # with an editor for each example.
 std <- import "std"
 use std.[html,text]
-gallery <- import "std/gallery"
+[gallery] = std
 
 main = gallery.page "p5.js Examples" [
     text "The "

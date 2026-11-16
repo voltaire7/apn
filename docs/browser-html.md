@@ -38,7 +38,7 @@ this way, and `examples/p5js` [p5.js's](https://p5js.org/examples/) (see
 ```apn
 std <- import "std"
 use std.html
-browser <- import "std/browser"
+[browser] = std
 
 Msg = Increment | Decrement
 
@@ -72,8 +72,7 @@ the program listens to:
 ```apn
 std <- import "std"
 use std.[html,time]
-browser <- import "std/browser"
-task <- import "std/task"
+[browser,task] = std
 
 Msg = Tick Posix | AdjustTimeZone Zone
 

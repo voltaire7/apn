@@ -2,8 +2,7 @@
 # Press a button to generate a random number between 1 and 6.
 std <- import "std"
 use std.html
-browser <- import "std/browser"
-random <- import "std/random"
+[browser,random] = std
 
 Msg = Roll | NewFace Int
 

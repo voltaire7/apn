@@ -80,7 +80,7 @@ print (to (List Char) "hi")              # => ['h','i']
 # the same way; load "file" reads a file as code, which use runs where it stands.
 std <- import "std"
 use std.[option,number,syntax]
-parser <- import "std/parser"
+[parser] = std
 print (sq 12)                            # => 144
 print (parser.parse parser.number "12")  # => Ok 12
 {

@@ -1,6 +1,6 @@
 std <- import "std"
 use std.html
-browser <- import "std/browser"
+[browser] = std
 
 Msg = Increment | Decrement
 

@@ -5006,7 +5006,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     castPattern(e.pattern, known, e.value, scope);
                     for (const name of patternNames(e.pattern)) { const entry = scope.get(name); if (entry) entry.bound = e.value; }
                 } else {
-                    bind(e.pattern, recordSelection(e.pattern, t, e.value), scope, e);
+                    const module = moduleOf(t), p = e.pattern;
+                    // A module's names bind as use opens them ([sum] <- import "std/sequence").
+                    const picks = p.p === "recPat" ? p.v : p.p === "list" && p.v.every(x => x.p === "var")
+                        ? patternNames(p).map(name => [name, name]) : undefined;
+                    if (module && picks) {
+                        const entries = copyTypeScope(module);
+                        for (const [field, name] of picks) {
+                            const entry = entries.get(field);
+                            if (!entry) { problem(`missing field '${field}'`, e); continue; }
+                            if (!isModuleType(resolve(entry.type))) validate(entry.type);
+                            scope.set(name, entry);
+                        }
+                    } else bind(p, recordSelection(p, t, e.value), scope, e);
                     for (const name of patternNames(e.pattern)) { const entry = scope.get(name); if (entry) entry.bound = e.value; }
                 }
                 return list(dynamic, constant(0n));

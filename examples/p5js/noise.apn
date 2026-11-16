@@ -2,7 +2,7 @@
 # Generate naturalistic textures using Perlin noise.
 std <- import "std"
 use std.[html,text,p5]
-browser <- import "std/browser"
+[browser] = std
 
 # The dots' spacing and the noise's offset, from the sliders.
 Model = [gap : Int, offset : Int]
