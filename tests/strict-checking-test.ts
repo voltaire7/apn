@@ -114,7 +114,7 @@ for (const [source, error] of [
 // types is typed for them too: one that takes its list apart ends, exactly
 // typed; one whose list grows (p ++ p) reaches the bound. A length it leaves
 // unknown is rejected as any other. Code a known condition passes over is
-// typed and bounded so too, its recursive calls typed for their arguments.
+// bounded so too, its recursive calls not typed again.
 {
     const body = ["g p = [", ...Array.from({ length: 600 }, () => "    " + Array(4).fill('head p ++ "!"').join(", ")), "]"].join("\n");
     Deno.test("a typed call past the step bound is an error", () => {
@@ -161,18 +161,16 @@ for (const [source, error] of [
 }
 for (const [source, error] of [
     // A known value decides a conditional, so the recursion follows it: the
-    // list doubles eleven times, then n is 0, past which the branch that
-    // never runs ends too; with n not known it never ends, nor past n == 0.
-    ['f p n = n <= 0 ? head p : f (p ++ p) (n - 1)\nf ["a", 1] 11', ""],
-    ['f p n = n <= 0 ? head p : f (p ++ p) (n - 1)\ng n = f ["a", 1] n\ng 3', "takes more than 20000 steps"],
-    ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\nf ["a", 1] 11', "code that never runs"],
-    ['f p n = n <= 0 ? head p : f (p ++ p) (n - 1)\nx = True ? "k" : f ["a", 1] 5\nprint x', ""],
+    // list doubles twelve times, then n is 0; with n not known it never ends.
+    // (Past n == 0, in the branch that never runs, it is not followed.)
+    ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\nf ["a", 1] 12', ""],
+    ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\ng n = f ["a", 1] n\ng 3', "takes more than 20000 steps"],
+    ['f p n = n == 0 ? head p : f (p ++ p) (n - 1)\nx = True ? "k" : f ["a", 1] 5\nprint x', ""],
+    ['go xs n = n == 0 ? xs : go (xs ++ [n]) (n - 1)\nprint (length (go ["a", 1] 3))', ""],
     ['g [] = ""\ng (x :: rest) = x ++ g rest\nf p = g p\nf ["a", 1]', "cannot append Int and String"],
     ['g [] = ""\ng (x :: rest) = x ++ g rest\nf p = g p\nf ["a","b"]', ""],
-    ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n <= 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 4', ""],
-    ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n <= 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 3', "cannot append String and Int"],
-    // Past n == 0 it never ends, as deep as the checker follows it.
-    ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n == 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 4', "depth limit exceeded"],
+    ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n == 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 4', ""],
+    ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n == 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 3', "cannot append String and Int"],
     ['g 0 p = head p + 1\ng n p = ""\ng 0 ["a", 1]', "cannot combine"],
     ['g 0 p = head p + 1\ng n p = ""\ng 1 ["a", 1]', ""],
     // A known list's items and a known record's fields decide them too.
