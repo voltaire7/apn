@@ -792,33 +792,11 @@ class Parser {
         this.judge(left, e => level(e) >= minPrec && this.fitsBefore(e) &&
             !(isLambda(e) && (this.noLambda || this.listedParams(left))) && !(e.t === "unop" && this.afterPrefix(left)) &&
             !(e.t === "ternary" && this.branches.has(at)));
-        // A right-associative chain (x :: y :: ..., f $ g $ ...): its operands,
-        // each parsed at the level above it, joined from the right once it
-        // ends, as parsing each right operand at its own level would (that
-        // nests once per operator; a chain may be thousands long). (Not at
-        // level 1, where a ternary is a right operand's.)
-        let chain: { prec: number; parts: { op: Extract<Token, { k: "sym" }>; start: number; left: Expr; rightStart: number }[] } | undefined;
-        const join = (): void => {
-            if (!chain) return;
-            const end = this.peek().pos;
-            let right = left;
-            for (let n = chain.parts.length - 1; n >= 0; n--) {
-                const { op, start: from, left: operand, rightStart } = chain.parts[n];
-                if (!sourceLocations.has(right) || op.v === "$") sourceLocations.set(right, { source: this.source, file: this.file, start: rightStart, end });
-                if (op.v === "$") sourceLocations.set(operand, { source: this.source, file: this.file, start: from, end: op.pos });
-                right = op.v === "$" ? { t: "pipe", f: operand, x: right } : { t: "binop", op: op.v, l: operand, r: right };
-            }
-            left = right;
-            chain = undefined;
-            operandStart = start;
-        };
-        let operandStart = start;
         for (;;) {
             // A deeper line starting with an operator (or a ternary's ?)
             // continues the expression, as a trailing one does.
             if (this.continueLine(x => x.k === "sym" && (x.v === "?" || isOperatorName(x.v)))) continue;
             const t = this.peek();
-            if (chain && !(t.k === "sym" && isOperatorName(t.v) && fixityOf(t.v).prec === chain.prec && fixityOf(t.v).assoc === "right")) join();
             if (t.k !== "sym") break;
             if (t.v === "?") {
                 if (minPrec > 1) break;
@@ -845,15 +823,6 @@ class Parser {
             this.next();
             this.skipContinuation();
             const rightStart = this.peek().pos;
-            if (fixity.assoc === "right" && fixity.prec !== 1) {
-                chain ??= { prec: fixity.prec, parts: [] };
-                chain.parts.push({ op: t, start: operandStart, left, rightStart });
-                left = this.parseOperators(fixity.prec + 1, { op: t.v, fixity });
-                operandStart = rightStart;
-                const following = this.peek();
-                if (following.k === "sym" && isOperatorName(following.v)) mixable({ op: t.v, fixity }, following);
-                continue;
-            }
             const right = this.parseOperators(fixity.assoc === "right" ? fixity.prec : fixity.prec + 1, { op: t.v, fixity });
             if (t.v === "$") {
                 sourceLocations.set(left, { source: this.source, file: this.file, start, end: t.pos });
@@ -870,7 +839,6 @@ class Parser {
             }
             if (following.k === "sym" && isOperatorName(following.v)) mixable({ op: t.v, fixity }, following);
         }
-        join();
         // A whole chain holding an operator of unknown fixity is regrouped where it runs.
         if (!outer && this.unknownOperators > unknownBefore && left.t === "binop") left.reassociate = true;
         return left;

@@ -1714,18 +1714,9 @@ expression of a block, and pipes.
 Arguments remain lazy: an unused argument is not evaluated by this optimization.
 Calls with work remaining (such as `1 + recurse n`) still consume stack, and a
 large deferred accumulator can still overflow when finally forced. Use `<-` to
-compute an accumulator on each iteration when appropriate.
-A chain of the prelude's operators that take their left operand first (`+`,
-`*`, comparisons, `&&`, `||`, `++`), however long, runs in constant stack, as
-`x :: y :: ... :: []` does, being lazy; `a ++ b ++ c ...` of lists is one list
-of them all, read without nesting, and `a ^ b ^ ...` and a composition `f \ g
-\ ...` are made so. A chain of calls, `f $ g $ ... x` or a composition applied,
-runs so too while each function evaluates its argument before anything else (a
-lambda or one clause of names whose body starts with it, `inc x = x + 1`, `f x
-= g x - x`, or whose parameter is typed with a type of single values, `inc (x :
-Int)`), its argument then evaluated first, as it would be anyway; from the
-first function that may not, the rest stays lazy, as written, and nests as
-calls do.
+compute an accumulator on each iteration when appropriate. So does an
+expression nested deeply, as a chain of hundreds of operators is: past what the
+stack holds it is a call stack overflow (a parse error for parsing it).
 
 Code a `use` runs may end with another `use` of code, a file loading itself
 (`again <- load "itself"; use again`): that use runs in place of the last

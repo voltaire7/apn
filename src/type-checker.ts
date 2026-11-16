@@ -52,7 +52,7 @@ type Ty =
     // possibly symbolic in a parameter), so clause ranking can use it later.
     // written: where a call deferred to its enclosing function's calls was written.
     // within: the top-level definition being checked when it was deferred.
-    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known; written?: Expr; within?: object; decided?: Ty; idle?: number; waits?: { vars: Ty[]; flags: number }; dependents?: Set<Ty>; lossless?: boolean[]; ascribed?: true; conversion?: [boolean, boolean] }
+    | { k: "operation"; op: string; args: Ty[]; solution?: Ty; known?: Known; written?: Expr; within?: object; decided?: Ty; idle?: number; lossless?: boolean[]; ascribed?: true; conversion?: [boolean, boolean] }
     | { k: "dynamic"; explicit?: boolean }
     | { k: "var"; link?: Ty }
     | { k: "atom"; name: string }
@@ -225,9 +225,7 @@ type Scope = TypeScope;
 // the scope it was written in, with its type, the names it binds and the open
 // names it reads (an item without an expression is a plain list's value), so
 // ++ and an item update infer again the items whose names change (codeList).
-// bound: what its items bind, the binding items, whether one runs (x <- m),
-// kept for the code that joins it (see codeList).
-type Formula = { items: FormulaItem[]; bound?: { names: Map<string, Entry>; statements: Expr[]; runs: boolean } };
+type Formula = { items: FormulaItem[] };
 type FormulaItem = { expr?: Expr; scope?: Scope; type?: Ty; binds?: Map<string, Entry>; open?: Map<string, { expr: Expr; within?: Expr }>; slot?: Ty };
 export interface CheckOptions {
     strict?: boolean;
@@ -287,17 +285,12 @@ export function mayMutate(program: unknown): boolean {
     return mentionsAny(program, MUTATING_NAMES);
 }
 export function mentionsAny(program: unknown, names: ReadonlySet<string>): boolean {
-    // (A walk of its own stack: a chain of thousands of operators is that deep.)
-    const pending: unknown[] = [program];
-    while (pending.length) {
-        const x = pending.pop();
-        if (!x || typeof x !== "object") continue;
-        if (Array.isArray(x)) { for (const y of x) pending.push(y); continue; }
-        const node = x as Record<string, unknown>;
-        if (node.t === "var" && typeof node.name === "string" && names.has(node.name)) return true;
-        for (const value of Object.values(node)) if (value && typeof value === "object") pending.push(value);
-    }
-    return false;
+    let found = false;
+    walkObjects(program, node => {
+        if (found) return false;
+        if (node.t === "var" && typeof node.name === "string" && names.has(node.name)) found = true;
+    });
+    return found;
 }
 // Each name's types are copied when first read: a module's scope is large and
 // a program uses few of its names. One map of variables and nodes makes names
@@ -460,8 +453,7 @@ function typeParameters(type: Ty): number {
 }
 const constant = (n: bigint): Index => ({ constant: n, terms: new Map() });
 // Where a variable's links end, each variable on the way linked there at once
-// (a chain of thousands of aliases, as compositions of a polymorphic function
-// make, is followed once, in a loop).
+// (followed in a loop, however long the chain of aliases).
 function linkEnd(t: Ty): Ty {
     if (t.k !== "var" || !t.link) return t;
     let end: Ty = t;
@@ -707,10 +699,6 @@ function substituteIndex(index: Index, [name, value]: [string, Index]): Index {
     terms.delete(name);
     return indexAdd({ constant: index.constant, terms }, value, coefficient);
 }
-// How deep copy is: 64 deep in a chain of operations each over the one before
-// (compositions of a polymorphic function), the rest of it is copied from its
-// innermost out first, so each copy finds its operand copied and nests no deeper.
-let copying = 0;
 function copy(
     t: Ty,
     vars = new Map<Ty, Ty>(),
@@ -726,18 +714,6 @@ function copy(
         return fresh;
     }
     if (nodes.has(t)) return nodes.get(t)!;
-    if (copying === 64 && t.k === "operation") {
-        const below: Ty[] = [];
-        for (let x: Ty | undefined = t; x?.k === "operation";) {
-            x = x.args.map(resolve).find(y => y.k === "operation" && !nodes.has(y) && !below.includes(y));
-            if (x) below.push(x);
-        }
-        for (const x of below.reverse()) copy(x, vars, subst, nodes, value);
-    }
-    copying++;
-    try { return copied(t, vars, subst, nodes, value); } finally { copying--; }
-}
-function copied(t: Ty, vars: Map<Ty, Ty>, subst: [string, Index] | undefined, nodes: Map<Ty, Ty>, value: [string, Known] | undefined): Ty {
     // Register the shell before traversing children, so recursive edges point
     // into the new graph rather than the original polymorphic instance.
     const result = { ...t } as Ty;
@@ -752,14 +728,7 @@ function copied(t: Ty, vars: Map<Ty, Ty>, subst: [string, Index] | undefined, no
         case "mutable": Object.assign(result, { value: go(t.value) }); break;
         case "map": Object.assign(result, { key: go(t.key), value: go(t.value) }); break;
         case "operation":
-            Object.assign(result, { args: t.args.map(go), solution: t.solution && go(t.solution), decided: t.decided && go(t.decided), known: t.known && substituteKnown(t.known, subst, value), waits: undefined, dependents: undefined });
-            // What the original waits on, the copy waits on in its copies (see
-            // waitsHold), each copied operation it waits through knowing it.
-            if (t.waits && t.waits.vars.every(v => vars.has(v))) {
-                const made = result as Extract<Ty, { k: "operation" }>;
-                made.waits = { vars: t.waits.vars.map(v => vars.get(v)!), flags: t.waits.flags };
-                for (const x of made.args) if (x.k === "operation") (x.dependents ??= new Set()).add(made);
-            }
+            Object.assign(result, { args: t.args.map(go), solution: t.solution && go(t.solution), decided: t.decided && go(t.decided), known: t.known && substituteKnown(t.known, subst, value) });
             break;
         case "fn":
             Object.assign(result, {
@@ -885,25 +854,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (t.k === "apply") { const made = appliedType(t); return made === t ? t : resolve(made); }
         if (t.k !== "operation") return t;
         if (t.decided) return resolve(t.decided);
-        if (resolving.has(t) || t.idle === idleAt() || waitsHold(t)) return t.solution ?? t;
+        if (resolving.has(t) || t.idle === idleAt()) return t.solution ?? t;
         spend();
-        // Deep in a chain of operations each waiting on the one before (x + 1
-        // + 1 ..., inc \ inc \ ... of a polymorphic inc), the rest of it is
-        // resolved from its innermost out first, so each finds its operand
-        // decided, or idle, and resolving it nests no deeper.
-        if (resolving.size === 32) {
-            const below: Ty[] = [];
-            const pending = (x: Ty): Ty | undefined => {
-                while (x.k === "var" && x.link) x = x.link;
-                return x.k === "operation" && !x.decided && x.idle !== idleAt() && !waitsHold(x) && !resolving.has(x) && !below.includes(x) ? x : undefined;
-            };
-            for (let x: Ty | undefined = t; x && x.k === "operation"; ) {
-                const next: Ty | undefined = x.args.map(pending).find(Boolean);
-                if (next) below.push(next);
-                x = next;
-            }
-            for (const x of below.reverse()) resolve(x);
-        }
         if (resolving.size > 96) return limit("type checking limit exceeded; recursive operator constraints need an explicit type pattern");
         resolving.add(t);
         try {
@@ -911,7 +863,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (result === t) return t.solution ?? t;
             // Decided once: an operation whose operands are known has one value,
             // which later resolves reuse rather than evaluating it again.
-            if (result.k !== "operation") { t.decided = result; typeChanges++; settled(t); }
+            if (result.k !== "operation") { t.decided = result; typeChanges++; }
             return result;
         }
         finally { resolving.delete(t); }
@@ -997,7 +949,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return unique.length === 1 ? unique[0] : { k: "union", choices: unique };
     }
     // Is this (an operation that is) still waiting for an unknown type?
-    // (With a stack of its own: operations may wait on one another thousands deep.)
+    // (With a stack of its own: operations may wait on one another deeply.)
     function waiting(type: Ty): boolean {
         const seen = new Set<Ty>(), pending = [type];
         while (pending.length) {
@@ -1007,8 +959,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (t.k !== "operation" || seen.has(t)) continue;
             seen.add(t);
             if (!deciding && t.op === "call" && t.known && symbolic(t.known)) return true;
-            // (One known to wait on unlinked variables does: see waitsHold.)
-            if (waitsHold(t) && t.waits!.vars.length) return true;
             for (let n = t.args.length - 1; n >= 0; n--) pending.push(t.args[n]);
         }
         return false;
@@ -1213,19 +1163,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // an operation over a parameter (x + 1 + 1 ...) would read its operands
         // twice, each of theirs twice again.)
         const undecided = (types: Ty[]) => types.some(v => v.k === "var" || v.k === "operation");
-        const now = typeChanges === start ? raw : t.args.map(resolve);
-        if (undecided(now)) {
-            t.idle = idleAt();
-            // (An operand decided already stays so: it waits on nothing.)
-            const vars = new Set<Ty>();
-            for (const x of now) {
-                if (x.k === "var") vars.add(x);
-                else if (x.k === "operation" && waitsHold(x)) { x.waits!.vars.forEach(v => vars.add(v)); (x.dependents ??= new Set()).add(t); }
-                else if (x.k === "operation" || x.k === "apply") { vars.clear(); vars.add(dynamic); break; }
-            }
-            t.waits = vars.has(dynamic) || vars.size > 16 ? undefined : { vars: [...vars], flags: flagsNow() };
-            return t;
-        }
+        if (typeChanges === start ? undecided(raw) : undecided(t.args.map(resolve))) { t.idle = idleAt(); return t; }
         if (typeChanges !== start) { operands = read(); [a, b] = operands; }
         if (t.op === "run") return runType(a);
         if (["map", "ap", "bind", "then", "bindFlip", "sequence", "mapM"].includes(t.op)) return monadicType(t.op, a, b);
@@ -1343,7 +1281,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (f.pattern?.p === "schema" || f.pattern?.p === "recPat") application(f, { type: a }, activeExpression ?? { t: "placeholder" });
                 // An alternative's [] tests the value, it does not make it empty.
                 else unify(openEmpty(f.input), a);
-                if (!t.solution && f.output.k !== "operation" && f.output.k !== "var") { t.solution = f.output; typeChanges++; settled(t); }
+                if (!t.solution && f.output.k !== "operation" && f.output.k !== "var") { t.solution = f.output; typeChanges++; }
                 for (const check of f.checks ?? []) resolve(check);
                 outputs.push(resolve(f.output));
             }
@@ -1494,34 +1432,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // When an operation found its operands undecided: until a type changes
     // (or what deciding and choosing tell waiting and calls), it finds so again.
     const idleAt = () => typeChanges * 4 + (deciding ? 2 : 0) + (choosing ? 1 : 0);
-    // An operation found undecided waiting only on unlinked variables (its
-    // operands', through operations waiting so) finds so again while none of
-    // them is linked and none of those operations is decided or given a
-    // solution (settled drops what waited on one), whatever else changes: a
-    // chain of them (x + 1 + 1 ..., compositions of a polymorphic function)
-    // is not read again at each unification.
-    const flagsNow = () => (deciding ? 2 : 0) + (choosing ? 1 : 0);
-    // (A variable linked to another still unlinked is that one: kept so.)
-    const waitsHold = (t: Extract<Ty, { k: "operation" }>): boolean => {
-        if (!t.waits || t.waits.flags !== flagsNow()) return false;
-        const vars = t.waits.vars;
-        for (let n = 0; n < vars.length; n++) {
-            let v = vars[n];
-            while (v.k === "var" && v.link) v = v.link;
-            if (v.k !== "var") return false;
-            vars[n] = v;
-        }
-        return true;
-    };
-    function settled(t: Ty): void {
-        const pending = [t];
-        while (pending.length) {
-            const x = pending.pop()!;
-            if (x.k !== "operation" || !x.dependents) continue;
-            for (const d of x.dependents) if (d.k === "operation" && d.waits) { d.waits = undefined; pending.push(d); }
-            x.dependents = undefined;
-        }
-    }
     function unify(
         expected: Ty,
         actual: Ty,
@@ -1582,8 +1492,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (undecided.k === "union" && undecided.undecided) return ambiguous(undecided, e);
         }
         if (expected.k === "operation" || actual.k === "operation") {
-            if (expected.k === "operation" && actual.k !== "operation") { expected.solution = actual.k === "list" ? list(actual.element) : actual; settled(expected); }
-            if (actual.k === "operation" && expected.k !== "operation") { actual.solution = expected.k === "list" ? list(expected.element) : expected; settled(actual); }
+            if (expected.k === "operation" && actual.k !== "operation") expected.solution = actual.k === "list" ? list(actual.element) : actual;
+            if (actual.k === "operation" && expected.k !== "operation") actual.solution = expected.k === "list" ? list(expected.element) : expected;
             requirements.push({ k: "operation", op: "require", args: [expected, actual] });
             return;
         }
@@ -1793,8 +1703,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (op === "/") return x.name === y.name && ["Float", "Float32", "Float64"].includes(x.name) ? x : atom("Number");
         return x.name === y.name ? x : integerResult(x, y) ?? atom("Number");
     }
-    // The operators an index is made with.
-    const ARITHMETIC = new Set(["+", "-", "*"]);
     function index(e: Expr, scope: Scope): Index | undefined {
         if (e.t === "int") return constant(e.v);
         if (e.t === "numeric" && e.v.kind === "int") return constant(e.v.v);
@@ -1810,23 +1718,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const a = index(e.e, scope);
             return a && indexScale(a, -1n);
         }
-        if (e.t === "binop" && ARITHMETIC.has(e.op) && builtinAt(e, scope)) {
-            // (A chain, a + b + c ..., from its innermost operator out: it may
-            // be thousands long; one being typed keeps each node's, which
-            // the operator above it asks for.)
-            const kept = (x: Expr) => { const typed = spineTypes.get(x); return typed?.scope === scope ? typed.index : undefined; };
-            if (kept(e)) return kept(e)!.of;
-            const spine: Extract<Expr, { t: "binop" }>[] = [e];
-            for (let x = e.l; x.t === "binop" && ARITHMETIC.has(x.op) && builtinAt(x, scope) && !kept(x); x = x.l) spine.push(x);
-            let a = index(spine[spine.length - 1].l, scope);
-            for (let n = spine.length - 1; n >= 0; n--) {
-                const { op, r } = spine[n], b = a && index(r, scope);
-                a = !a || !b ? undefined : op === "+" || op === "-" ? indexAdd(a, b, op === "+" ? 1n : -1n)
-                    : !a.terms.size ? indexScale(b, a.constant) : !b.terms.size ? indexScale(a, b.constant) : undefined;
-                const typed = spineTypes.get(spine[n]);
-                if (typed?.scope === scope) typed.index = { of: a };
-            }
-            return a;
+        if (e.t === "binop" && builtinAt(e, scope)) {
+            const a = index(e.l, scope), b = index(e.r, scope);
+            if (!a || !b) return;
+            if (e.op === "+" || e.op === "-") return indexAdd(a, b, e.op === "+" ? 1n : -1n);
+            if (e.op === "*" && !a.terms.size) return indexScale(b, a.constant);
+            if (e.op === "*" && !b.terms.size) return indexScale(a, b.constant);
         }
     }
     function schemaValue(type: Ty, e: Expr, seen = new Map<Ty, Ty>()): Ty {
@@ -2252,19 +2149,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // inferred again, any other keeps its type. A name bound nowhere is open.
     // A record's code, where code is read: [x = 1] ++ [x + 1] joins code.
     function asCode(t: Ty): Ty { return t.k === "record" && t.code ? resolve(codeList(t.code)) : t; }
-    // After joined, a list's code typed already (the left of ++, whose items
-    // a join leaves as they are), items are its items continued: typed after
-    // its bindings, without typing its own again (a chain of thousands of ++).
-    function codeList(items: FormulaItem[], changed = new Set<string>(), joined?: Extract<Ty, { k: "list" }>): Ty {
+    function codeList(items: FormulaItem[], changed = new Set<string>()): Ty {
         changed = new Set(changed);
-        const prefix = joined?.formula?.items ?? [], prior = joined?.formula && codeBindings(joined.formula);
-        const before = new Map<string, Entry>(prior?.names);
-        const local = !!prior?.statements.length || items.some(item => item.expr && binding(item.expr)) || changed.size > 0;
+        const before = new Map<string, Entry>();
+        const local = items.some(item => item.expr && binding(item.expr)) || changed.size > 0;
         let run: { scope: Scope; local: Scope } | undefined;
         // The bindings so far: an item after an x <- m item yields the block of
         // them ending in it (see Interpreter.yields), checked as one.
-        const statements: Expr[] = [...prior?.statements ?? []];
-        let runs = !!prior?.runs;
+        const statements: Expr[] = [];
+        let runs = false;
         // A list is an unevaluated block: its x <- m items bind as a block's do.
         doBlocks.push({});
         try { return codeItems(); } finally { doBlocks.pop(); }
@@ -2298,23 +2191,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             for (const [name, entry] of binds ?? []) { before.set(name, entry); changed.add(name); }
             return { ...item, type, binds, open: open.size ? open : undefined };
         });
-        const own = out.map(item => item.type ?? variable()), types = joined?.items ? joined.items.concat(own) : own;
-        const open = new Map(joined?.open);
-        for (const item of out) for (const [name, at] of item.open ?? []) open.set(name, at);
-        const element = !types.length ? variable() : joined?.items?.length ? union([joined.element, ...own]) : union(own);
-        const formula: Formula = { items: prefix.concat(out), bound: { names: before, statements, runs } };
-        return { k: "list", element, length: constant(BigInt(types.length)), items: types, formula, open: open.size ? open : undefined };
+        const types = out.map(item => item.type ?? variable());
+        const open = new Map(out.flatMap(item => [...item.open ?? []]));
+        return { k: "list", element: types.length ? union(types) : variable(), length: constant(BigInt(types.length)), items: types, formula: { items: out }, open: open.size ? open : undefined };
         }
     }
     const binding = (e: Expr) => e.t === "stmDef" || e.t === "patDef" || isUse(e);
-    // What a list's code binds (see Formula), found once.
-    function codeBindings(formula: Formula): NonNullable<Formula["bound"]> {
-        return formula.bound ??= {
-            names: new Map(formula.items.flatMap(item => [...item.binds ?? []])),
-            statements: formula.items.flatMap(item => item.expr && binding(item.expr) ? [item.expr] : []),
-            runs: formula.items.some(item => item.expr?.t === "patDef" && !!item.expr.eager),
-        };
-    }
     // The names each use opened (a use item binds them).
     const usedNames = new WeakMap<Expr, string[]>();
     // code n = e: the code with item n replaced by e, written here (see
@@ -2868,7 +2750,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A value a call decides later is converted then, as written: an
         // ascription (decodeValue d x : Result T String) takes a Dynamic.
         if (a.k === "operation" && (runtimeProjection || explicitFloat) && t.k !== "var" && t.k !== "operation") {
-            if (!a.solution) { a.solution = t.k === "list" ? list(t.element) : t; typeChanges++; settled(a); }
+            if (!a.solution) { a.solution = t.k === "list" ? list(t.element) : t; typeChanges++; }
             requirements.push({ k: "operation", op: "convert", args: [target, actual], conversion: [explicitFloat, runtimeProjection] });
             return target;
         }
@@ -3074,7 +2956,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // Code joins code: the right's items see the left's bindings.
             if (x.k === "list" && y.k === "list" && x.formula && (y.formula || y.items)) {
                 const right = y.formula?.items ?? y.items!.map((type): FormulaItem => ({ type }));
-                return codeList(right, new Set(codeBindings(x.formula).names.keys()), x);
+                return codeList([...x.formula.items, ...right], new Set(x.formula.items.flatMap(item => [...item.binds?.keys() ?? []])));
             }
             if (x.k === "list" && y.k === "list") {
                 // The left's code is not known here (a function made it, as
@@ -3904,7 +3786,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 throw error;
             }
             const checks: Ty[] = [...f.checks ?? []];
-            // (In order, with a stack of its own: a type may nest thousands deep.)
+            // (In order, with a stack of its own: a type may nest deeply.)
             const seen = new Set<Ty>(), types = [argument.type];
             while (types.length) {
                 const t = resolve(types.pop()!);
@@ -4317,38 +4199,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : k.index && !k.index.terms.size ? "Int" : undefined;
         return r.choices.find(choice => { const x = resolve(choice); return x.k === "atom" && x.name === name; }) ?? t;
     }
-    // A left-nested operator chain (a + b + c ..., however long) is typed from
-    // its innermost operator out, each one's left operand typed already, so
-    // typing it nests no deeper than one operator (see the binop case).
-    const spineTypes = new Map<Expr, { scope: Scope; type: Ty; index?: { of: Index | undefined } }>();
-    // e typed so, when the chain below it (next's steps) is long: else undefined.
-    function typedSpine(e: Expr, scope: Scope, expected: Ty | undefined, next: (x: Expr) => Expr | undefined): Ty | undefined {
-        const first = next(e);
-        if (!first || spineTypes.has(first) || !next(first)) return undefined;
-        const below: Expr[] = [];
-        for (let x: Expr | undefined = first; x && next(x) !== undefined; x = next(x)) below.push(x);
-        if (below.length <= 64) return undefined;
-        // Each node, once the one above it is typed, keeps its type without the
-        // items and code a list of them holds, which only that one read: kept
-        // whole, a chain of ++ would hold each of its prefixes', as many as
-        // its square.
-        const done = (x: Expr): void => {
-            spineTypes.delete(x);
-            const t = inferred.get(x), r = t && resolve(t);
-            if (r?.k === "list" && (r.items || r.formula)) inferred.set(x, { k: "list", element: r.element, length: r.length });
-        };
-        below.reverse();
-        try {
-            below.forEach((x, n) => {
-                spineTypes.set(x, { scope, type: infer(x, scope) });
-                if (n) done(below[n - 1]);
-            });
-            return infer(e, scope, expected);
-        } finally { below.forEach(done); }
-    }
     function infer(e: Expr, scope: Scope, expected?: Ty): Ty {
-        const typed = spineTypes.get(e);
-        if (typed && typed.scope === scope && !expected) return typed.type;
         spend(e);
         if (++inferenceDepth > 256) {
             inferenceDepth--;
@@ -4461,9 +4312,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return functionType(e.params, e.body, scope, undefined, e.guard);
             case "app":
             case "pipe": {
-                // A chain of pipes (f $ g $ ... x), from its innermost out (see spineTypes).
-                const piped = e.t === "pipe" ? typedSpine(e, scope, expected, x => x.t === "pipe" ? x.x : undefined) : undefined;
-                if (piped) return piped;
                 const infix = infixSpelling(e, scope);
                 if (infix) return infer(infix, scope, expected);
                 const tagged = e.t === "app" ? taggedType(e, scope) : undefined;
@@ -4943,11 +4791,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "binop": {
                 if (e.reassociate) return infer(regrouped(e, scope), scope, expected);
-                // (A right-nested one, x :: y :: ..., from its innermost too.)
-                for (const side of ["l", "r"] as const) {
-                    const typed = typedSpine(e, scope, expected, x => x.t === "binop" && !x.reassociate ? x[side] : undefined);
-                    if (typed) return typed;
-                }
                 // A && or || its left side's known value decides gives that, the
                 // right side not run (False && head []), as a conditional takes
                 // its branch.
@@ -6076,30 +5919,28 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const readingCalls = new WeakSet<Expr>();
     // Calls of a widened constructor no rule takes (see infer's app).
     const ownCalls = new WeakSet<Expr>();
-    // The names a value's evaluation may read (the parameters it is over,
-    // among them), each expression's kept: found children first, with a
-    // stack of its own, as each node of a chain thousands long asks for its own.
-    const valueNamesOf = new WeakMap<Expr, string[]>();
-    function valueNames(e: Expr): string[] {
-        const parts = (x: Expr): (Expr | null | undefined)[] =>
-            x.t === "binop" ? [x.l, x.r] : x.t === "unop" ? [x.e] : x.t === "ternary" ? [x.cond, x.then, x.els]
-            : x.t === "app" ? [x.f, x.a] : x.t === "list" ? x.v : x.t === "record" ? x.v.map(([, y]) => y)
-            : x.t === "range" ? [x.lo, x.second, x.hi] : x.t === "lambda" ? [x.body]
-            : x.t === "block" ? x.stmts.flatMap(st => st.t === "patDef" ? [st.value] : st.t === "stmDef" ? st.clauses.map(c => c.body) : [st as Expr]) : [];
-        const stack: [Expr, boolean][] = [[e, false]];
-        while (stack.length) {
-            const [x, done] = stack.pop()!;
-            if (valueNamesOf.has(x)) continue;
-            const below = parts(x).filter((y): y is Expr => !!y);
-            if (!done) { stack.push([x, true]); for (const y of below) if (!valueNamesOf.has(y)) stack.push([y, false]); continue; }
-            const found = new Set<string>(x.t === "var" ? [x.name] : []);
-            for (const y of below) for (const name of valueNamesOf.get(y) ?? []) found.add(name);
-            valueNamesOf.set(x, [...found]);
-        }
-        return valueNamesOf.get(e)!;
-    }
     function computed(e: Expr, scope: Scope): Known {
-        const names = new Set(valueNames(e).filter(name => scope.get(name)?.ref));
+        const names = new Set<string>();
+        // (With a stack of its own: an expression may nest deeply.)
+        const pending: Expr[] = [e];
+        const collect = (x: Expr | null | undefined): void => { if (x) pending.push(x); };
+        while (pending.length) {
+            const x = pending.pop()!;
+            if (x.t === "var" && scope.get(x.name)?.ref) names.add(x.name);
+            else if (x.t === "binop") { collect(x.l); collect(x.r); }
+            else if (x.t === "unop") collect(x.e);
+            else if (x.t === "ternary") { collect(x.cond); collect(x.then); collect(x.els); }
+            else if (x.t === "app") { collect(x.f); collect(x.a); }
+            else if (x.t === "list") x.v.forEach(collect);
+            else if (x.t === "record") x.v.forEach(([, y]) => collect(y));
+            else if (x.t === "range") [x.lo, x.second, x.hi].forEach(collect);
+            else if (x.t === "lambda") collect(x.body);
+            else if (x.t === "block") for (const st of x.stmts) {
+                if (st.t === "patDef") collect(st.value);
+                else if (st.t === "stmDef") st.clauses.forEach(c => collect(c.body));
+                else collect(st as Expr);
+            }
+        }
         // Over parameters, the value is decided again at each call; evaluating it
         // now (with the parameters unknown) rarely tells more, so spend little.
         // Over none, a quick value is known now; a longer one waits until a check
@@ -6475,31 +6316,21 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Every variable name an expression mentions (shadowing ignored: more is safe).
     const mentioned = new WeakMap<Expr, string[]>();
-    // (Each expression's below it kept too, found children first, with a stack
-    // of its own: each node of a chain thousands long asks for its own.)
     function mentionedNames(e: Expr): string[] {
-        const known = mentioned.get(e);
-        if (known) return known;
-        const sets = new Map<object, Set<string>>();
-        const below = (x: object) => (Array.isArray(x) ? x : Object.values(x)).filter(v => v && typeof v === "object") as object[];
-        const stack: [object, boolean][] = [[e, false]];
-        while (stack.length) {
-            const [x, done] = stack.pop()!;
-            if (!done) {
-                if (sets.has(x)) continue;
-                const memo = mentioned.get(x as Expr);
-                if (memo) { sets.set(x, new Set(memo)); continue; }
-                stack.push([x, true]);
-                for (const child of below(x)) if (!sets.has(child)) stack.push([child, false]);
-                continue;
-            }
-            const node = x as Record<string, unknown>, found = new Set<string>();
-            if (node.t === "var" && typeof node.name === "string") found.add(node.name);
-            for (const child of below(x)) for (const name of sets.get(child) ?? []) found.add(name);
-            sets.set(x, found);
-            if (!Array.isArray(x) && typeof node.t === "string") mentioned.set(x as Expr, [...found]);
+        let names = mentioned.get(e);
+        if (!names) {
+            const found = new Set<string>();
+            const walk = (x: unknown): void => {
+                if (!x || typeof x !== "object") return;
+                if (Array.isArray(x)) { x.forEach(walk); return; }
+                const node = x as Record<string, unknown>;
+                if (node.t === "var" && typeof node.name === "string") found.add(node.name);
+                for (const value of Object.values(node)) if (value && typeof value === "object") walk(value);
+            };
+            walk(e);
+            mentioned.set(e, names = [...found]);
         }
-        return mentioned.get(e)!;
+        return names;
     }
     // What e evaluates to, given known values of the names in env.
     // Kept small, as each nested call is one of its frames: recursion in the

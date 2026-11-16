@@ -23,49 +23,24 @@ for (const [source, expected] of [
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
-// A long chain of the prelude's operators that take their left operand first
-// runs in a loop, parsed and checked alike without nesting with its length; so
-// does one of calls ($, or a composition applied) of functions that evaluate
-// their argument first. One of other calls (a pattern parameter's) still
-// nests, and overflows as a call stack overflow.
-{
+// An expression nested past what the host's stack holds (a chain of
+// thousands of operators) is an error of its own, never a host crash: the
+// run's call stack overflow, the checker's depth limit, the parser's nesting.
+Deno.test("an expression nested too deeply is an error, not a crash", () => {
     const chain = (head: string, piece: string, n: number, tail: string) => {
         const out = [head];
         for (let i = 0; i < n; i++) { if (out[out.length - 1].length > 85) out.push("   "); out[out.length - 1] += piece; }
         return out.join("\n") + tail;
     };
-    const checked = (source: string) => {
-        const i = new Interpreter();
-        i.enableChecking();
-        return i.renderString(i.run(parseDocument(source)));
-    };
-    for (const [name, source, expected] of [
-        ["+", chain("y = 2", " + 1", 20000, "\ny"), "20002"],
-        ["+ and *", chain("y = 2", " + 2 * 3 - 1", 5000, "\ny"), "25002"],
-        ["&&", chain("y = True", " && True", 20000, "\ny"), "True"],
-        ["++ of strings", chain('y = "a"', ' ++ "a"', 5000, "\nlength y"), "5001"],
-        ["++ of lists", chain("y = [1]", " ++ [1,2]", 5000, "\n[length y, y 10000]"), "[10001,2]"],
-        // Each list joined sees the bindings of the items before it, as nested.
-        ["++ of code", chain("y = [x = 1]", " ++ [x + 1]", 100, "\n[length y, y 100]"), "[101,2]"],
-        ["::", chain("y = 1", " :: 1", 20000, " :: []\nlength y"), "20001"],
-        ["$", chain("inc x = x + 1\ny = inc", " $ inc", 20000, " $ 1\ny"), "20002"],
-        ["$ of calls", chain("g x = x * 2\nf x = g x - x\ny = f", " $ f", 5000, " $ 3\ny"), "3"],
-        ["$ of typed functions", chain("f (x : Int) = x + 1\ny = f", " $ f", 5000, " $ 1\ny"), "5002"],
-        ["compositions", chain("inc (x : Int) = x + 1\nh = inc", " \\ inc", 20000, "\nh 1"), "20002"],
-        ["compositions of a polymorphic function", chain("inc x = x + 1\nh = inc", " \\ inc", 3000, "\nh 1"), "3002"],
-        ["^", chain("y = 2", " ^ 1", 3000, "\ny"), "2"],
-        // A function that may not evaluate its argument leaves it lazy.
-        ["$ through a lazy call", chain("inc x = x + 1\nk x = 7\nloop n = loop (n + 1)\ny = inc", " $ inc", 3000, " $ k $ loop 0\ny"), "3008"],
-    ] as const) Deno.test(`a long chain of ${name} runs`, () => {
-        const actual = checked(source);
-        if (actual !== expected) throw new Error(actual);
-    });
-    Deno.test("a long chain of nested calls is a call stack overflow", () => {
-        let message = "";
-        try { checked(chain("f [x] = [x + 1]\ny = f", " $ f", 3000, " $ [1]\ny")); } catch (error) { message = String(error); }
-        if (!message.includes("call stack overflow")) throw new Error(message);
-    });
-}
+    const failure = (run: () => unknown) => { try { run(); return "ran"; } catch (error) { return String(error); } };
+    const sum = chain("y = 2", " + 1", 3000, "\ny");
+    const unchecked = failure(() => result(sum));
+    if (!unchecked.includes("call stack overflow")) throw new Error(unchecked);
+    const checked = failure(() => { const i = new Interpreter(); i.enableChecking(); i.run(parseDocument(sum)); });
+    if (!checked.includes("depth limit exceeded")) throw new Error(checked);
+    const parsed = failure(() => parseDocument(chain("y = 1", " :: 1", 6000, " :: []\ny")));
+    if (!parsed.includes("nests too deeply to parse")) throw new Error(parsed);
+});
 // A file's last statement using code runs it in place, as a tail call: what
 // each file binds joins the first's, and each file's paths are beside it.
 for (const [file, expected] of [['repeat', '[0,42]'], ['outer', '[0,10,20]']] as const) {

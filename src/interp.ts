@@ -66,8 +66,6 @@ class TailLoad {
 
 // Operators whose builtin meaning does not demand both operands first.
 const LAZY_OPERATORS = new Set(["::", "++", "&&", "||", "$"]);
-// The lazy operators that still take their left operand first, whatever the right.
-const LEFT_FIRST_OPERATORS = new Set(["++", "&&", "||"]);
 const stackOverflow = () => new APNError("runtime", "call stack overflow", {
     hint: "unbounded strict recursion? Use a lazy cons tail to produce lists incrementally.",
 });
@@ -1829,8 +1827,6 @@ export class Interpreter {
                             r = this.evalBinop({ t: "binop", op: "$", l: e.f, r: e.x });
                             break;
                         }
-                        const piped = this.pipedChain(e, tailLoad);
-                        if (piped) { if (piped instanceof TailCall) next = piped; else r = piped; break; }
                         const head = this.eval(e.f);
                         this.writtenApplication = true;
                         const result = this.apply(head, { kind: "thunk", body: e.x, env: this.env }, false, true, tailLoad);
@@ -1945,187 +1941,11 @@ export class Interpreter {
         const f = bound.kind === "thunk" || bound.kind === "deferred" ? this.reference(bound) : bound;
         // A prelude operator bound to its intrinsic runs it directly; strict
         // ones evaluate their operands in place.
-        const op = this.primitiveOperator(f);
-        // A left-nested chain of them, each taking its left operand first (a +
-        // b + c ..., however long), runs from its innermost operator out in a
-        // loop: in the order the nested evaluation would, without its stack.
-        if (op && (!LAZY_OPERATORS.has(op) || LEFT_FIRST_OPERATORS.has(op)) && e.l.t === "binop") {
-            const spine: [Extract<Expr, { t: "binop" }>, string][] = [[e, op]];
-            for (let x: Expr = e.l; x.t === "binop" && !x.reassociate; x = x.l) {
-                const g = this.env.get(x.op), at = g && this.primitiveOperator(g.kind === "thunk" || g.kind === "deferred" ? this.reference(g) : g);
-                if (!at || LAZY_OPERATORS.has(at) && !LEFT_FIRST_OPERATORS.has(at)) break;
-                spine.push([x, at]);
-            }
-            if (spine.length > 64) {
-                let value = this.eval(spine[spine.length - 1][0].l);
-                for (let n = spine.length - 1; n >= 0; n--) {
-                    checkInterrupt();
-                    const [x, at] = spine[n];
-                    // Lists joined by ++ in a row are one list of them all.
-                    const code = at === "++" ? this.code(this.dataValue(value)) : undefined;
-                    if (code && this.isList(code)) {
-                        const rights: Value[] = [];
-                        for (; n >= 0 && spine[n][1] === "++"; n--) rights.push(this.delay(spine[n][0].r));
-                        n++;
-                        value = this.appendCodes(code, rights, 0, new Map());
-                        continue;
-                    }
-                    value = LAZY_OPERATORS.has(at) ? this.operate(at, value, this.delay(x.r)) : this.operate(at, value, this.eval(x.r));
-                }
-                return value;
-            }
-        }
-        // A right-nested chain of strict ones (f \\ g \\ ..., a ^ b ^ ...): each
-        // left evaluated, outermost first, then the last right, then each
-        // operator innermost first, in a loop, as the nested evaluation would.
-        if (op && !LAZY_OPERATORS.has(op) && e.r.t === "binop") {
-            const spine: [Extract<Expr, { t: "binop" }>, string][] = [[e, op]];
-            for (let x: Expr = e.r; x.t === "binop" && !x.reassociate; x = x.r) {
-                const g = this.env.get(x.op), at = g && this.primitiveOperator(g.kind === "thunk" || g.kind === "deferred" ? this.reference(g) : g);
-                if (!at || LAZY_OPERATORS.has(at)) break;
-                spine.push([x, at]);
-            }
-            if (spine.length > 64) {
-                const lefts = spine.map(([x]) => { checkInterrupt(); return this.eval(x.l); });
-                let value = this.eval(spine[spine.length - 1][0].r);
-                for (let n = spine.length - 1; n >= 0; n--) {
-                    checkInterrupt();
-                    value = this.operate(spine[n][1], lefts[n], value);
-                }
-                return value;
-            }
-        }
+        const op = f.kind === "native" && !f.applied.length && !this.joins(f) ? PRIMITIVE_OPERATORS.get(f.name) : undefined;
         if (op && !LAZY_OPERATORS.has(op)) return this.operate(op, this.eval(e.l), this.eval(e.r));
         const l = this.delay(e.l), r = this.delay(e.r);
         if (op) return this.operate(op, l, r);
         return this.apply(this.apply(f, l), r);
-    }
-
-    // f $ g $ ... x, thousands long: each call whose function evaluates its
-    // argument before anything else (forcesFirst) has it evaluated first, so
-    // the calls run innermost first in a loop, in the order nesting would run
-    // them, without its stack. From the first function that may not, its
-    // argument stays lazy, as written. Undefined for a short chain.
-    private pipedChain(e: Extract<Expr, { t: "pipe" }>, tailLoad: boolean): Value | TailCall | undefined {
-        let length = 0;
-        for (let x: Expr = e; x.t === "pipe" && length <= 64; x = x.x) length++;
-        if (length <= 64) return undefined;
-        // The functions, outermost first, as each call reaches the next.
-        const heads: Value[] = [];
-        let x: Expr = e;
-        for (; x.t === "pipe"; x = x.x) {
-            checkInterrupt();
-            const head = this.eval(x.f);
-            heads.push(head);
-            if (!this.forcesFirst(head)) break;
-        }
-        // The innermost argument: the last function's, applied as written, or
-        // the chain's own last.
-        let value: Value;
-        if (x.t === "pipe" && heads.length === 1) {
-            this.writtenApplication = true;
-            return this.apply(heads[0], { kind: "thunk", body: x.x, env: this.env }, false, true, tailLoad);
-        }
-        if (x.t === "pipe") {
-            const last = heads.pop()!;
-            this.writtenApplication = true;
-            value = this.force(this.apply(last, { kind: "thunk", body: x.x, env: this.env }));
-        } else value = this.force(this.eval(x));
-        if (!heads.length) return value;
-        for (let n = heads.length - 1; n > 0; n--) {
-            checkInterrupt();
-            value = this.force(this.apply(heads[n], value));
-        }
-        return this.apply(heads[0], value, false, true, tailLoad);
-    }
-    // A composition (f \\ g, see operate) and its two functions.
-    private compositions = new WeakMap<Value, [Value, Value]>();
-    // f \\ g \\ ... thousands long applied to x: as f $ g $ ... x (pipedChain),
-    // each function evaluating its argument first having it evaluated first,
-    // innermost first in a loop. Undefined for a short chain.
-    private composedChain(f: Value, x: Value, tail: boolean, tailLoad: boolean): Value | TailCall | undefined {
-        // The functions, outermost first, and what each is composed with.
-        const functions: Value[] = [], rests: Value[] = [];
-        for (let c: Value = f; ;) {
-            const parts = this.compositions.get(c);
-            if (!parts) { functions.push(c); break; }
-            functions.push(parts[0]);
-            rests.push(parts[1]);
-            c = this.force(parts[1]);
-        }
-        if (functions.length <= 64) return undefined;
-        let first = 0;
-        while (first < functions.length && this.forcesFirst(functions[first])) first++;
-        if (first === 0) return undefined;
-        // The innermost argument: x, or the first function that may not
-        // evaluate its own given it lazily, as the composition does.
-        let value = first === functions.length ? this.force(x)
-            : this.force(this.apply(functions[first], first < rests.length ? this.defer(() => this.apply(rests[first], x)) : x));
-        for (let n = first - 1; n > 0; n--) {
-            checkInterrupt();
-            value = this.force(this.apply(functions[n], value));
-        }
-        return tail ? this.apply(functions[0], value, false, true, tailLoad) : this.apply(functions[0], value);
-    }
-    // Whether applying f to one argument evaluates it before anything else
-    // that could fail or not end: the call it completes, of a lambda or a
-    // function of one clause with names for parameters and no guard, whose
-    // body starts by evaluating it (see startsWith), or whose parameter there
-    // is typed with a type of single values (Int, String: its conversion
-    // evaluates it at once); a composition of such functions.
-    private forcesFirst(f: Value, seen = new Set<Value>()): boolean {
-        f = this.force(f);
-        if (seen.has(f)) return false;
-        seen.add(f);
-        if (this.compositions.has(f)) {
-            for (let c = f; ;) {
-                const parts = this.compositions.get(c);
-                if (!parts) return this.forcesFirst(c, seen);
-                if (!this.forcesFirst(parts[0], seen)) return false;
-                c = this.force(parts[1]);
-            }
-        }
-        if (f.kind === "closure") return f.params.length === 1 && this.startsWith(f.body, f.params[0], f.env, new Set([...f.whole ?? [], ...f.params]), seen);
-        if (f.kind !== "clauseFn" || f.clauses.length !== 1 || f.applied.length + 1 !== f.arity || this.joins(f)) return false;
-        const [clause] = f.clauses, at = clause.params[f.applied.length];
-        const scalar = at.p === "constr" && at.typed && at.args.length === 1 && at.args[0].p === "var" && SCALAR_TYPES.has(at.tag) &&
-            this.reference(f.env.get(at.tag) ?? mkList([])).kind === "type";
-        const names = clause.params.map(p => p.p === "var" ? p.name : p === at && scalar ? (at.args[0] as Extract<Pattern, { p: "var" }>).name : undefined);
-        if (clause.guard || names.some(n => n === undefined)) return false;
-        if (scalar) return clause.params.every(p => p === at || p.p === "var");
-        const name = names[f.applied.length]!;
-        return names.filter(n => n === name).length === 1 && this.startsWith(clause.body, name, f.env, new Set(names as string[]), seen);
-    }
-    // Whether evaluating e evaluates name before anything that could fail:
-    // name itself; a strict prelude operator's left doing so, as a call or an
-    // operator (which evaluate it there: g x - y), or as the name with a right
-    // whose evaluation cannot fail (x + 1, x * y), or its right with a literal
-    // left (2 * x); a left-first one's left (x ++ "!"); or a call of a
-    // function bound already (not a parameter: params) that does, given an
-    // argument that does (g x, g (x + 1)).
-    private startsWith(e: Expr, name: string, env: Env | undefined, params: Set<string>, seen: Set<Value>): boolean {
-        const starts = (x: Expr) => this.startsWith(x, name, env, params, seen);
-        if (e.t === "var") return e.name === name;
-        if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return starts(e.stmts[0] as Expr);
-        if (!env) return false;
-        if (e.t === "app" && !e.ascribed && !e.types && e.f.t === "var" && !params.has(e.f.name)) {
-            const g = env.get(e.f.name);
-            return !!g && g.kind !== "thunk" && g.kind !== "deferred" && this.forcesFirst(g, seen) && starts(e.a);
-        }
-        if (e.t !== "binop" || e.reassociate || params.has(e.op)) return false;
-        const bound = env.get(e.op), op = bound && this.primitiveOperator(bound.kind === "thunk" || bound.kind === "deferred" ? this.reference(bound) : bound);
-        if (!op) return false;
-        const literal = (x: Expr) => ["int", "float", "numeric", "string", "char", "bool"].includes(x.t);
-        if (LAZY_OPERATORS.has(op)) return LEFT_FIRST_OPERATORS.has(op) && starts(e.l);
-        // (Evaluating a name looks it up, forcing nothing.)
-        const found = (x: Expr) => literal(x) || x.t === "var" && (params.has(x.name) || env.get(x.name) !== undefined);
-        if (starts(e.l)) return e.l.t !== "var" || found(e.r);
-        return literal(e.l) && starts(e.r);
-    }
-
-    // The primitive a prelude operator bound to its intrinsic is.
-    private primitiveOperator(f: Value): string | undefined {
-        return f.kind === "native" && !f.applied.length && !this.joins(f) ? PRIMITIVE_OPERATORS.get(f.name) : undefined;
     }
 
     // The builtin meaning of an operator, over lazy operands.
@@ -2210,13 +2030,11 @@ export class Interpreter {
             const env = new Env(this.env);
             env.setLocal("f", l);
             env.setLocal("g", r);
-            const composed: Value = {
+            return {
                 kind: "closure", params: ["x"], env,
                 body: { t: "app", f: { t: "var", name: "f" },
                     a: { t: "app", f: { t: "var", name: "g" }, a: { t: "var", name: "x" } } },
             };
-            this.compositions.set(composed, [l, r]);
-            return composed;
         }
         if (op === "^") {
             if (!isNumeric(l) || !isNumeric(r)) return bad();
@@ -2499,8 +2317,6 @@ export class Interpreter {
                 return this.typeValue(f, arg);
             }
             case "closure": {
-                const composed = this.compositions.has(f) ? this.composedChain(f, arg, tail, tailLoad) : undefined;
-                if (composed) return composed;
                 if (f.params.length === 0) {
                     // a 0-arg action APPLIED to arguments: run it, then hand the
                     // result the argument — keeps partial application working:
@@ -3081,26 +2897,15 @@ export class Interpreter {
     // xs ++ ys: xs's items, then ys's, which see the bindings xs's make (see
     // rerun): [x = 1] ++ [x + 1] is the code [x = 1, x + 1].
     private appendCode(xs: Value, ys: Value, before = new Map<string, Value>()): Value {
-        return this.appendCodes(xs, [ys], 0, before);
-    }
-    // xs ++ rest[at] ++ rest[at + 1] ..., grouped to the left as written, as one
-    // list: each list after another sees the bindings of all the items before
-    // it, as the nested appends would give it, without nesting with their
-    // number (a chain of thousands of ++).
-    private appendCodes(xs: Value, rest: Value[], at: number, before: Map<string, Value>): Value {
         return this.defer(() => {
-            let list = xs;
-            for (;;) {
-                const cell = this.cell(list);
-                if (cell !== null) {
-                    const binds = this.written(cell.head)?.binds;
-                    return { kind: "cons", head: cell.head, tail: this.appendCodes(cell.tail, rest, at, binds ? new Map([...before, ...binds]) : before) };
-                }
-                const right = this.code(this.dataValue(rest[at++]));
+            const cell = this.cell(xs);
+            if (cell === null) {
+                const right = this.code(this.dataValue(ys));
                 if (!this.isList(right)) throw new APNError("runtime", "list append expects a list");
-                list = this.rerun(right, { before, changed: new Set(before.keys()) });
-                if (at === rest.length) return list;
+                return this.rerun(right, { before, changed: new Set(before.keys()) });
             }
+            const binds = this.written(cell.head)?.binds;
+            return { kind: "cons", head: cell.head, tail: this.appendCode(cell.tail, ys, binds ? new Map([...before, ...binds]) : before) };
         });
     }
     // A value's code: a list's items as written (an item without, as its

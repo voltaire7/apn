@@ -413,21 +413,10 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   unchecked; `parse` keeps whether the text it reads was (`sourcePaths`), as
   `verifyLoad` checks. The checker types the prelude's `load` by its rule
   (`PRELUDE_TYPINGS`). Non-tail calls keep the depth guard
-  (`STACK_LIMIT`), and a host `RangeError` in `evaluate` is the same overflow.
-  A left-nested chain of primitive operators that force their left operand
-  first (`LEFT_FIRST_OPERATORS` and the strict ones) runs in a loop in
-  `evalBinop`, a run of `++` over lists as one `appendCodes` of them all
-  (each list after another rerun with the bindings of all the items before
-  it, as nested appends give); a long `$` chain runs in `pipedChain`,
-  innermost first, while each function `forcesFirst` (a conservative check:
-  one clause of names and no guard, unjoined, its body starting with the
-  argument by `startsWith`, or its parameter a scalar typed one), so the order
-  of every evaluation, and so of every error, is the nested one's; a long
-  composition applied runs so in `composedChain` (`compositions` keeps each
-  one's parts), and a right-nested chain of strict operators (`\\`, `^`)
-  evaluates its lefts outermost first, then folds from the inside; the parser joins a right-associative chain from the right in
-  `parseOperators` (`join`) rather than recursing per operator. Tests:
-  `tests/tail-call-test.ts`, `tests/repl-interrupt-pty.py`.
+  (`STACK_LIMIT`), and a host `RangeError` in `evaluate` is the same overflow,
+  as one while parsing is a parse error and one in a checked statement its
+  depth limit (`depthIssue`). Tests: `tests/tail-call-test.ts`,
+  `tests/repl-interrupt-pty.py`.
 - Fixity: the parser sees the prelude's declarations and the parsed file's
   (`fileFixities`, one table per `parse`, `fixitiesOf(program)`); a chain
   holding another operator is marked `reassociate` (its parentheses are kept
@@ -652,26 +641,11 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   `deciding`, `choosing`) moves, and reads its operands again only if reading
   changed a type, so a chain of them costs linear work: whatever changes a type
   (a `link`, `decided`, `solution`) must count in `typeChanges`, as `unify`
-  does; one waiting only on unlinked variables keeps them (`waits`, followed
-  through aliases) and stays undecided while they stay so, until an operation
-  it waits through is decided or given a solution (`settled` drops its
-  dependents' `waits`; `copy` carries them to the copy's variables), and
-  `linkEnd` follows a variable's aliases in a loop, compressing them. A chain
-  of them 32 deep in `resolve` is resolved from its innermost
-  out, and a left- or right-nested `binop` or `pipe` chain longer than 64 is
-  typed so (`typedSpine`, its types in `spineTypes` while its top is typed,
-  each node's recorded type slimmed of a list's items and code once the one
-  above it is typed), so neither nests with its length; `++` of code types only
-  the right's items, after the left's (`codeList` with `joined`, its bindings
-  kept in `Formula.bound`). Nor does `copy` nest with a chain of operations,
-  copying it from its innermost out from 64 deep, nor `waiting`, nor the
-  checks an argument's type carries, with stacks of their own. A `RangeError`
-  in a statement is its
-  depth limit. A walk over a whole program or expression keeps its own stack
-  (`walkObjects`, or one of its own as `mentionedNames` and `valueNames`,
-  which keep each node's result), never the host's: a chain of thousands of
-  operators is a tree that deep. An evaluation that runs out of budget leaves its value unknown, an
-  error where a type needs it (`budgetCut`, below).
+  does. A walk over a whole program or expression keeps its own stack
+  (`walkObjects`, or a loop of its own), never the host's, and `linkEnd`
+  follows a variable's aliases in a loop, compressing them. An evaluation that
+  runs out of budget leaves its value unknown, an error where a type needs it
+  (`budgetCut`, below).
   `tests/type-level-evaluation-test.ts`, `tests/strict-checking-test.ts`.
 - The checker's evaluator calls the runtime's text functions
   (`text-natives.ts`: `upper`, `lower`, `chars`, `fromChars`, `parse`, which

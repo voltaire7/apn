@@ -714,15 +714,12 @@ a silent Dynamic fallback, wherever it happens: a check that tries something (a
 clause, an overload, code a known condition passes over) and reads a type error
 as its not fitting reads running out as none. The inference budget is per
 top-level statement, so a long program or module is not limited by its length.
-A chain of operators, however long (`a + b + c ...`, `x :: y :: ... :: []`,
-`f $ g $ ... x`, `inc \ inc \ ...`), is typed from its innermost operator out, so
-it nests no deeper than one; so are operators over values not known yet (`g x =
-x + 1 + 1 ...`, `x` a parameter), which wait on one another, as do compositions
-of a function over such values (`inc x = x + 1`): each operation is decided
-again only when a variable it waits on is, so neither reaches the inference
-budget with its length. An expression
-nested otherwise more than 256 deep, or deeper than the checker's stack holds,
-is past the depth limit. Gradual editor diagnostics remain available separately.
+Operators over values not known yet (`g x = x + 1 + 1 ...`, `x` a parameter)
+wait on one another, each on the one before it, at most 96 deep: a longer chain
+is that error too, and a type pattern (`g (x : Int) = ...`) decides them. An
+expression nested more than 256 deep (a chain of that many operators, whatever
+their operands), or deeper than the checker's stack holds, is past the depth
+limit. Gradual editor diagnostics remain available separately.
 
 ## Recursion and self-application
 
