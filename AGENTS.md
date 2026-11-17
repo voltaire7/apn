@@ -104,6 +104,9 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   definition, helper, doc section or test instead of writing a near-copy;
   give a module's shared pieces one name and refer to it; state a rule in one
   doc and link to it from others; remove what a change makes redundant.
+- Avoid keywords at all cost. A new form is a name the prelude defines, a
+  function or an operator (`import`, `use`, `load` and `else` are), never a
+  word the parser reserves.
 - Define as much of the language as possible in APN itself (`lib/prelude.apn`
   and the standard library): add a native, intrinsic or parser rule only for
   what APN cannot express, and keep it as small as it can be.
