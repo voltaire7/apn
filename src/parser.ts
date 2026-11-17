@@ -1326,7 +1326,11 @@ class Parser {
                         // in scope for the items after it (x <- m when the code runs).
                         const es = [] as Expr[];
                         for (;;) {
-                            es.push(this.item(this.peek(), () => this.isFieldDeclaration() ? this.parseFieldDeclaration()
+                            // An item may declare types, as a block's statement may.
+                            if (this.isTypeDeclaration()) for (const d of this.parseTypeDeclaration()) {
+                                es.push(d.t === "type" ? { t: "typeDef", def: d.def } : d.t === "def" ? { t: "stmDef", name: d.name, clauses: d.clauses } : d.value);
+                            }
+                            else es.push(this.item(this.peek(), () => this.isFieldDeclaration() ? this.parseFieldDeclaration()
                                 : this.isEagerBinding() ? this.parseEagerBinding()
                                 : this.isPatBinding() ? this.parsePatBinding() : this.isDef() ? this.parseBlockDef() : this.parseDelimitedExpr()));
                             this.skipListSeparators();
@@ -2400,9 +2404,10 @@ class Parser {
             if (token.k === "eof" || token.k === "dedent") return false;
             if (token.k === "sym") {
                 if (!depth && token.v === "|") return true;
-                if (!depth && token.v === ";") return false;
+                // (A block's statement, or a list's item, ends it.)
+                if (!depth && (token.v === ";" || token.v === ",")) return false;
                 if (["(", "[", "{"].includes(token.v)) depth++;
-                if ([")", "]", "}"].includes(token.v)) depth--;
+                if ([")", "]", "}"].includes(token.v) && --depth < 0) return false;
             }
             if (!depth && token.k === "newline") {
                 while (["newline", "indent"].includes(this.peek(j).k)) j++;
@@ -2785,11 +2790,22 @@ export function bindingItem(name: string, value: Expr): Expr {
 // field in scope for those after it), [x : Float, y : Float = 1.0] (a declared
 // field holds its type, or its default as one), [use base, x = 1] (a spread).
 const declaredFields = new WeakSet<Expr>();
-function recordOf(items: Expr[]): Expr | undefined {
-    if (!items.length) return undefined;
+function recordOf(written: Expr[]): Expr | undefined {
+    if (!written.length) return undefined;
+    // A function's clauses written as items join, as a block's statements do
+    // (copies: the list it may be instead keeps its items as written).
+    const items: Expr[] = [];
+    for (const item of written) {
+        if (item.t !== "stmDef") { items.push(item); continue; }
+        const copy = { ...item, clauses: [...item.clauses] };
+        if (declaredFields.has(item)) declaredFields.add(copy);
+        joinClauses(items, copy);
+    }
     const fields: Array<[string, Expr]> = [], declared = new Set<string>();
     for (const item of items) {
         if (item.t === "app" && item.f.t === "var" && item.f.name === "use") { fields.push(["_", item.a]); continue; }
+        // A type declaration binds its type and constructors (no field of its own here).
+        if (item.t === "typeDef") continue;
         if (item.t !== "stmDef") return undefined;
         const [clause] = item.clauses;
         const simple = item.clauses.length === 1 && !clause.params.length;

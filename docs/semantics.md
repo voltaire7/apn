@@ -693,10 +693,13 @@ error; ordinary recursive list spines such as `x = 1::x` still stream.
 
 A list literal whose items are all fields is a record. A field is a binding
 (`x = 1`, or a function, `f n = n * 2`), a declaration (`x : Float`, a field
-holding the type, or `x : Float = 1`, a typed value), or `use r`, which spreads
-`r`'s fields. Fields are code, as a block's statements are: each is in scope
-for those after it (`[x = 1, y = x + 1]`), and `x = x + 1` reads the `x` before
-it. The record keeps that code, so code joins and reads it as a list:
+holding the type, or `x : Float = 1`, a typed value), a type declaration (its
+type and constructors are fields), or `use r`, which spreads `r`'s fields.
+Fields are code, run as a block's statements are (see [bindings](#bindings-and-output)):
+a name a field binds is in scope for the whole record (`[f n = g n, g n = n + 1]`),
+a function's clauses join, and `x = x + 1` reads the `x` before it, so
+`[x = 1, x = x + 1]` is `[x = 2]`. The record's fields are the names it binds,
+in the order first bound. The record keeps that code, so code joins and reads it as a list:
 `[x = 1] ++ [x + 1]` is the code `[x = 1, x + 1]` (see [code](#code)). A
 declaration alone (`x : Float`) is a slot, which makes the record a template
 (see [templates](templates-and-types.md)); a binding holds its value, a type

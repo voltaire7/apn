@@ -141,6 +141,12 @@ for (const [source, expected] of [
     ['std <- import "std"\nrandom = std.number\nrandom.sq 4', '16'],
     ['numbers <- import "std/number"\nf _ = numbers\nuse (f [])\nsq 3', '9'],
     ['f _ = {\n    print "f"\n    import "std/number"\n}\nm <- f []\nuse m\nsq 3', '9'],
+    // A record's fields run as a block's statements do: in scope for the whole
+    // record, clauses joined, types declared with their constructors.
+    ['r = [\n    fact 0 = 1\n    fact n = n * fact (n - 1)\n    quad x = double (double x)\n    double x = x * 2\n]\n[r.fact 5, r.quad 3]', '[120,12]'],
+    ['r = [\n    Shape = Circle Float | Square Float\n    area (Circle r) = 3 * r * r\n    area (Square s) = s * s\n]\nr.area (r.Square 2.0)', '4.0'],
+    ['r = [x = 1, x = x + 1, y = x * 10, ones = 1 :: ones]\n[r.x, r.y, head r.ones]', '[2,20,1]'],
+    ['r = [\n    Box a = | Box a\n    map f (Box x) = Box (f x)\n    unbox (Box x) = x\n]\nr.unbox (map (+ 1) (r.Box 1))', '2'],
     // A block's functions are defined for the whole block, as the top level's are.
     ['{ f x = g x; g x = x + 1; f 1 }', '2'],
     ['k n = {\n    even 0 = True\n    even m = odd (m - 1)\n    odd 0 = False\n    odd m = even (m - 1)\n    even n\n}\n[k 4, k 5]', '[True,False]'],
@@ -154,6 +160,7 @@ for (const [source, expected] of [
 });
 for (const source of [
     // (A function defined further on is checked where it is used.)
+    'r = [area (s : String) = s ++ "!"]\nr.area 1',
     '{ f x = g x; g (x : String) = x ++ "!"; f 1 }',
     'f x = x + 1; f "bad"',
     'apply f x = f x; apply (x -> x + 1) "bad"',

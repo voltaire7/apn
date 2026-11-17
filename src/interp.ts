@@ -1654,6 +1654,7 @@ export class Interpreter {
                         break;
                     }
                     case "record": {
+                        if (e.items) { r = this.recordBlock(e as Extract<Expr, { t: "record" }> & { items: Expr[] }); break; }
                         // Fields are code: each is in scope for those after it, and
                         // x = x + 1 reads the x before it, as in a block.
                         // A field is bound to its value (x = Float), except one
@@ -2727,6 +2728,53 @@ export class Interpreter {
         return undefined;
     }
     // A list literal with bindings: its items, in order, as a block's statements.
+    // A record written as bindings runs them as a block does: a name it binds
+    // is in scope for all of it (a function a later item defines too), a
+    // rebinding reads the version before it, a function's clauses join and a
+    // type declares its constructors. Its fields are the names it binds, as
+    // their last versions have them, in the order first bound; each is bound
+    // to its value, except one declared with only its type, a slot (x : Float).
+    private recordBlock(e: Extract<Expr, { t: "record" }> & { items: Expr[] }): Value {
+        const outer = this.env, order: string[] = [], bound = new Set<string>();
+        const slots = new Set(e.declared?.filter(key => !e.v.some(([k, x]) => k === key && x.t === "app" && x.ascribed)));
+        const field = (name: string, isBound: boolean) => {
+            if (!order.includes(name)) order.push(name);
+            if (isBound) bound.add(name); else bound.delete(name);
+        };
+        this.env = new Env(outer);
+        try {
+            let n = 0;
+            for (const item of e.items) {
+                if (item.t === "typeDef") {
+                    this.declare(item.def, this.env);
+                    const own = this.env.bindings();
+                    for (const name of [item.def.name, ...item.def.variants.map(v => v.tag)]) if (own.has(name)) field(name, true);
+                    continue;
+                }
+                const [key, expression] = e.v[n++];
+                if (key === "_") {
+                    const spread = this.dataValue(this.eval(expression));
+                    if (spread.kind !== "record") throw new APNError("runtime", "use in a record opens a record");
+                    for (const [name, value] of spread.v) { this.bindNames([[name, value]]); field(name, !!spread.bound?.has(name)); }
+                    continue;
+                }
+                const { clauses } = item as Extract<Expr, { t: "stmDef" }>;
+                // A function is defined as a block defines it (its clauses join,
+                // and travel with the types they take).
+                if (clauses[0].params.length) { this.evalDef(key, clauses); field(key, true); continue; }
+                // A value is computed when used, as a list's item is; a literal
+                // costs nothing, and a declared field is checked now (a slot's
+                // type is known: see holdsType).
+                const now = e.declared?.includes(key) || ["int", "float", "numeric", "string", "char", "bool"].includes(expression.t);
+                this.bindNames([[key, now ? this.eval(expression) : this.delay(expression)]]);
+                field(key, !slots.has(key));
+            }
+            const live = this.env;
+            const r: Value = { kind: "record", v: order.map(name => [name, live.get(name)!]), ...bound.size ? { bound } : {} };
+            this.recordCode.set(r, { exprs: e.items, env: outer });
+            return r;
+        } finally { this.env = outer; }
+    }
     private codeList(exprs: Expr[], env: Env): Value {
         const state: CodeState = { before: new Map(), changed: new Set() };
         return mkList(exprs.map(expr => this.runItem({ expr, env }, state)));

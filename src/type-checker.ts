@@ -4322,10 +4322,40 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return code;
             }
             case "record": {
-                // Each field is in scope for those after it, as at runtime.
                 // A field is bound to its value, except a slot: x : T alone.
-                let result: Ty = { k: "record", fields: new Map() }, fieldScope: Scope = scope;
                 const slot = (key: string, value: Expr) => !!e.declared?.includes(key) && !(value.t === "app" && value.ascribed);
+                if (e.items) {
+                    // Its items run as a block's statements do, as at runtime
+                    // (Interpreter.recordBlock): its fields are what they bind.
+                    const child: Scope = new BlockScope(scope), parts: Array<{ spread: Ty } | { name: string; slot: boolean }> = [];
+                    declareAhead(e.items.flatMap(item => item.t === "stmDef" ? [{ name: item.name, clauses: item.clauses, statement: item }] : []), child);
+                    let n = 0;
+                    for (const item of e.items) {
+                        if (item.t === "typeDef") {
+                            declare(item.def, child);
+                            for (const name of [item.def.name, ...item.def.variants.map(v => v.tag)]) if (child.has(name)) parts.push({ name, slot: false });
+                            continue;
+                        }
+                        const [key, value] = e.v[n++];
+                        if (key === "_") {
+                            const type = infer(value, child);
+                            parts.push({ spread: type });
+                            const opened = resolve(type);
+                            if (opened.k === "record") for (const [name, field] of opened.fields) child.set(name, { type: field });
+                            continue;
+                        }
+                        if (e.declared?.includes(key)) child.set(key, { type: infer(value, child) });
+                        else if (!analyzed.has(item)) define(key, (item as Extract<Expr, { t: "stmDef" }>).clauses, child, item);
+                        parts.push({ name: key, slot: slot(key, value) });
+                    }
+                    let made: Ty = { k: "record", fields: new Map() };
+                    for (const part of parts) made = operation("merge-record", [made, "spread" in part ? part.spread
+                        : { k: "record", fields: new Map([[part.name, child.get(part.name)!.type]]), ...part.slot ? {} : { bound: new Set([part.name]) } }]);
+                    const record = resolve(made);
+                    return record.k === "record" ? { ...record, code: e.items.map(expr => ({ expr, scope })) } : made;
+                }
+                // Each field is in scope for those after it, as at runtime.
+                let result: Ty = { k: "record", fields: new Map() }, fieldScope: Scope = scope;
                 for (const [key, value] of e.v) {
                     const type = infer(value, fieldScope);
                     const field: Ty = { k: "record", fields: new Map([[key, type]]), ...slot(key, value) ? {} : { bound: new Set([key]) } };
@@ -4334,8 +4364,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     if (key !== "_") fieldScope.set(key, { type });
                     else { const opened = resolve(type); if (opened.k === "record") for (const [name, field] of opened.fields) fieldScope.set(name, { type: field }); }
                 }
-                const record = resolve(result);
-                return e.items && record.k === "record" ? { ...record, code: e.items.map(expr => ({ expr, scope })) } : result;
+                return result;
             }
             case "range": {
                 // [a..] is enumFrom a, and so on, with what those mean here.
