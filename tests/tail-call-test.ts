@@ -1,5 +1,4 @@
-import { CheckingSession } from "../src/checking-session.ts";
-import { Interpreter } from "../src/interp.ts";
+import { Interpreter, setInterruptFlag } from "../src/interp.ts";
 import { parseDocument } from "../src/parser.ts";
 
 function result(source: string): string {
@@ -41,13 +40,43 @@ Deno.test("an expression nested too deeply is an error, not a crash", () => {
     const parsed = failure(() => parseDocument(chain("y = 1", " :: 1", 6000, " :: []\ny")));
     if (!parsed.includes("nests too deeply to parse")) throw new Error(parsed);
 });
-// A load runs its file as a call: a file loading itself would never end, so
-// the check rejects it as a cycle, as it does an import's.
-Deno.test('a file that loads itself is a cyclic load', () => {
-    const directory = new URL('./fixtures/', import.meta.url).pathname;
-    try { new CheckingSession().load('self-load', directory); } catch (error) {
-        if (String(error).includes("cyclic load 'self-load'")) return;
+// A load runs its file as a call, so a file may load itself, as a function
+// calls itself: a load as its last statement is a tail call, looping in
+// constant stack (interruptible, the REPL's scope and folder restored), and
+// one before the end nests, running out of stack as a call does.
+Deno.test('a file loading itself last loops in constant stack until interrupted', () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    const scope = i.env;
+    i.sourceDir = new URL('./fixtures/self-load/', import.meta.url).pathname;
+    const directory = i.sourceDir;
+    const flag = new Int32Array(new SharedArrayBuffer(8));
+    const log = console.log;
+    let lines = 0;
+    console.log = () => { if (++lines === 3000) Atomics.store(flag, 0, 1); };
+    setInterruptFlag(flag);
+    try { i.run(parseDocument('load "forever"')); throw new Error('finished'); }
+    catch (error) { if ((error as Error).message !== 'interrupted') throw error; }
+    finally { console.log = log; setInterruptFlag(null); }
+    if (lines !== 3000) throw new Error(`stopped after ${lines} lines`);
+    if (i.env !== scope || i.sourceDir !== directory || i.stack !== 0) throw new Error('context leaked');
+    if (i.renderString(i.run(parseDocument('6 * 7'))) !== '42') throw new Error('REPL failed to recover');
+});
+Deno.test('a recursive load gives the value the file gives', () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    i.sourceDir = new URL('./fixtures/self-load/', import.meta.url).pathname;
+    const actual = i.renderString(i.run(parseDocument('v <- load "until"\nv ++ "!"')));
+    if (actual !== '"done!"') throw new Error(actual);
+});
+Deno.test('a load before the end nests and runs out of stack as a call does', () => {
+    const i = new Interpreter();
+    i.sourceDir = new URL('./fixtures/self-load/', import.meta.url).pathname;
+    const log = console.log;
+    console.log = () => {};
+    try { i.run(parseDocument('load "nested"')); } catch (error) {
+        if (String(error).includes('call stack overflow')) return;
         throw error;
-    }
-    throw new Error('a self-load checked');
+    } finally { console.log = log; }
+    throw new Error('a nested load ran forever');
 });

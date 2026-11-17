@@ -1,7 +1,7 @@
 import { APNError } from "./errors.ts";
 import { parse } from "./parser.ts";
 import { loadPath, readLoad, resolveModule, unknownModule } from "./modules.ts";
-import { type CheckOptions, checkTypes, dynamicEntry, importedValue, mayMutate, moduleType, moduleValue, type TypeBridge, type TypeScope } from "./type-checker.ts";
+import { type CheckOptions, checkTypes, dynamicEntry, importedValue, mayMutate, moduleType, moduleValue, recursiveValue, settleRecursive, type TypeBridge, type TypeScope } from "./type-checker.ts";
 import { type Expr, type TopLevel } from "./ast.ts";
 type Ty = ReturnType<typeof moduleValue>;
 
@@ -11,6 +11,8 @@ export class CheckingSession {
     // Each file's or folder's value, by its path (see moduleValue).
     private modules = new Map<string, Ty>();
     private loading = new Set<string>();
+    // The loads of a file made while it is checked (it loads itself), by its path.
+    private recursive = new Map<string, Ty[]>();
     // A bundle (a browser build) to import from instead of the disk: virtual
     // paths to sources (see bundleProgram in modules.ts).
     moduleSources?: Record<string, string>;
@@ -139,8 +141,15 @@ export class CheckingSession {
         const key = loadPath(name, directory, this.moduleSources);
         const known = this.modules.get(key);
         if (known) return importedValue(known);
-        if (this.loading.has(key)) throw new APNError("type", `cyclic load '${name}'`);
+        // A file loading itself (or one loading it) is recursion, as a function's
+        // call of itself is: its value there is the one the file turns out to have.
+        if (this.loading.has(key)) {
+            const placeholder = recursiveValue();
+            this.recursive.get(key)?.push(placeholder);
+            return placeholder;
+        }
         this.loading.add(key);
+        this.recursive.set(key, []);
         try {
             const source = readLoad(key, this.moduleSources);
             if (source === undefined) {
@@ -148,8 +157,12 @@ export class CheckingSession {
                     this.moduleSources ? { hint: "a browser build bundles only files inside the program's folder" } : {});
             }
             const value = moduleValue(this.check(parse(source, key), key.slice(0, key.lastIndexOf("/") + 1), new Map(), true, undefined, false).value);
+            for (const placeholder of this.recursive.get(key) ?? []) {
+                const problem = settleRecursive(placeholder, value);
+                if (problem) throw new APNError("type", `load '${name}': ${problem}`);
+            }
             this.modules.set(key, value);
             return importedValue(value);
-        } finally { this.loading.delete(key); }
+        } finally { this.loading.delete(key); this.recursive.delete(key); }
     }
 }

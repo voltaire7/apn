@@ -415,7 +415,13 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   own reads use `codeDirs`) on success, error, or interruption.
   `intrinsics.import`, `intrinsics.runFile` and `intrinsics.readFileFrom`
   actions keep the `dynamicDepth` they were made at, so one written inside
-  `Dynamic` runs unchecked. The checker types the prelude's `load` by its rule
+  `Dynamic` runs unchecked; a load also keeps the folder it was written in.
+  `runFile` returns its file's last action as an `IOTail` (`runModuleFile`'s
+  tail), which the `runIO` running the load goes on with, so a file loading
+  itself last loops in constant stack; a host `RangeError` from a nested load
+  is the run's overflow. The checker types a load of a file it is checking
+  (`CheckingSession.load`'s `recursive`) by a placeholder settled to the
+  file's value (`recursiveValue`, `settleRecursive`). The checker types the prelude's `load` by its rule
   (`PRELUDE_TYPINGS`). Non-tail calls keep the depth guard
   (`STACK_LIMIT`), and a host `RangeError` in `evaluate` is the same overflow,
   as one while parsing is a parse error and one in a checked statement its

@@ -1655,8 +1655,11 @@ or not (see [functions travel with types](#functions-travel-with-types)).
 `load` is the prelude's `load file = intrinsics.runFile (file ++ ".apn")`: an
 action running `file.apn` beside the running file as an import runs a module,
 but again each time it runs, yielding its value. A file is so a function of no
-arguments, and `m <- load "f"; use m` opens what it gives; a file loading itself
-is a cycle. The check follows a load with a literal path outside `Dynamic`, as
+arguments, and `m <- load "f"; use m` opens what it gives. A file may load
+itself, as a function calls itself: a load as its last statement is a tail call,
+which loops without growing the stack (`print "again"`, then `load "again"`,
+runs until Ctrl+C), and one before the end nests, as a call that is not last
+does. The check follows a load with a literal path outside `Dynamic`, as
 an import's. To read a file as [code](#code) instead, which `use` runs where it
 stands, write `parse` of what `readFileFrom` reads (`std.io`'s).
 See [the standard library reference](standard-library.md) for APIs and limits.

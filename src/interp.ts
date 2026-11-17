@@ -355,22 +355,30 @@ export class Interpreter {
     }
     // load "file": run file.apn beside the running file in a scope of its own,
     // again each time, yielding its value.
-    private runFile(name: string): Value {
-        const path = sourcePath(name, this.runningDir(), this.moduleSources);
+    // Its last statement's action is the load's tail (an IOTail runIO goes on
+    // with), so a file loading itself last loops in constant stack, as a
+    // function calling itself last does.
+    private runFile(name: string, directory = this.runningDir()): Value {
+        const path = sourcePath(name, directory, this.moduleSources);
         const source = this.moduleSources ? readLoad(path, this.moduleSources) : (() => { try { return Deno.readTextFileSync(path); } catch { return undefined; } })();
         if (source === undefined) {
             throw new APNError("runtime", this.moduleSources ? `'${name}' is not bundled` : `load: cannot read '${name}' (looked in '${path}')`,
                 this.moduleSources ? { hint: "a browser build bundles only files inside the program's folder" } : {});
         }
         // (Its names publish by use as a module's do, from this file's text.)
-        const value = this.runModuleFile({ source, label: path, directory: dirname(path) });
+        let value: Value | IOTail;
+        try { value = this.runModuleFile({ source, label: path, directory: dirname(path) }, true); }
+        catch (error) { throw error instanceof RangeError ? stackOverflow() : error; }
+        if (value instanceof IOTail) return value as unknown as Value;
         this.moduleValues.set(value, { origin: `${path}\0${source}`, checked: !!this.checking && !this.dynamicDepth });
         return value;
     }
 
     // Run one module file against builtins only (never the caller's bindings):
     // its value is its last statement's ([] when that binds).
-    private runModuleFile(file: ModuleFile): Value {
+    private runModuleFile(file: ModuleFile): Value;
+    private runModuleFile(file: ModuleFile, tail: true): Value | IOTail;
+    private runModuleFile(file: ModuleFile, tail = false): Value | IOTail {
         const caller = this.env;
         const callerDir = this.sourceDir;
         const builtins = new Env();
@@ -384,9 +392,17 @@ export class Interpreter {
             this.env = scope;
             this.sourceDir = file.directory;
             this.runDepth++; this.moduleDepth++;
-            let value: Value;
-            try { value = this.run(program); } finally { this.runDepth--; this.moduleDepth--; }
-            return program[program.length - 1]?.t === "expr" ? value : mkList([]);
+            const last = program[program.length - 1];
+            try {
+                // (A tail's action runs after the file returns, in the scope its closures keep.)
+                if (tail && last?.t === "expr") {
+                    this.run(program.slice(0, -1));
+                    const value = this.demand(this.eval(last.value));
+                    return value.kind === "io" || value.kind === "pending" ? new IOTail(value) : value;
+                }
+                const value = this.run(program);
+                return last?.t === "expr" ? value : mkList([]);
+            } finally { this.runDepth--; this.moduleDepth--; }
         } finally {
             this.env = caller;
             this.sourceDir = callerDir;
@@ -4912,11 +4928,17 @@ export class Interpreter {
             const fresh = (v: Value): Value => v.kind === "thunk" && v.env ? { kind: "thunk", body: v.body, env: v.env } : v;
             // A module read inside Dynamic is read unchecked wherever it runs.
             if (name === "intrinsics.import" || name === "intrinsics.runFile" || name === "intrinsics.readFileFrom") {
-                const depth = this.dynamicDepth;
+                // (A load finds its file from where it is written, wherever it runs.)
+                const depth = this.dynamicDepth, directory = this.runningDir();
                 return { kind: "io", result: ACTIONS.get(name), run: () => {
                     const outer = this.dynamicDepth;
                     this.dynamicDepth = depth;
-                    try { return this.callNative(name, argsIn.map(fresh), tag, true); } finally { this.dynamicDepth = outer; }
+                    try {
+                        if (name !== "intrinsics.runFile") return this.callNative(name, argsIn.map(fresh), tag, true);
+                        const path = this.force(argsIn[0]);
+                        if (path.kind !== "string") throw new APNError("runtime", "load runs one file, named by a path string");
+                        return this.runFile(path.v, directory);
+                    } finally { this.dynamicDepth = outer; }
                 } };
             }
             return { kind: "io", result: ACTIONS.get(name), run: () => this.callNative(name, argsIn.map(fresh), tag, true) };

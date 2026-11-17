@@ -502,7 +502,8 @@ existing behavior; repeated patterns do not prove function equivalence.
 Static checking follows literal `import` and `load` dependencies and infers their
 values, each file checked in a scope of its own. Nothing opens a record but
 `use`, which opens statically known records or lists of records. A file
-loading itself is a cycle; computed loads need an explicit `Dynamic` boundary. The checker never runs a file or performs an action to discover types.
+loading itself is typed as recursion is, its own load giving the value the file
+turns out to have; computed loads need an explicit `Dynamic` boundary. The checker never runs a file or performs an action to discover types.
 
 Overloaded arithmetic retains constraints in inferred functions: `f x = x + 1`
 can be called with compatible numeric inputs, and `f "bad"` is rejected. List

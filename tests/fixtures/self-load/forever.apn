@@ -1,0 +1,3 @@
+# Runs again forever: its last statement loads it, a tail call.
+print "again"
+load "forever"

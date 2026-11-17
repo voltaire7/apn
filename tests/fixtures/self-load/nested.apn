@@ -1,0 +1,4 @@
+# Its load is not its last statement: each run nests in the one before.
+print "again"
+next <- load "nested"
+[next = next]

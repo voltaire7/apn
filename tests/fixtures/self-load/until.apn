@@ -1,0 +1,5 @@
+# Loads itself again until its input says to stop: a recursive load.
+std <- import "std"
+use std.io
+args <- getArgs
+null args ? return "done" : load "until"

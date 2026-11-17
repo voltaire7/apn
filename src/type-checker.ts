@@ -360,13 +360,29 @@ export function moduleType(read: () => TypeScope): Ty { return { k: "record", fi
 // defined them (their clauses and fixities too), each generic, its other
 // value as it is, and [] for a file ending in a binding.
 export function moduleValue(value: Ty | undefined): Ty {
-    const t = value ? resolve(value) : list(variable(), constant(0n));
+    let t = value ? resolve(value) : list(variable(), constant(0n));
+    // (A file ending in an action, run as its statement, gives what the action yields.)
+    if (isIO(t) || isPending(t)) t = resolve((t as Extract<Ty, { k: "variant" }>).args[0]);
     if (t.k !== "record" || t.fields instanceof ModuleFields) return t;
     const scope: TypeScope = new Map([...t.fields].map(([name, type]): [string, Entry] => {
         const defined = t.scope?.get(name);
         return [name, defined ? { ...defined, nonGeneric: undefined, mono: false, inherited: undefined } : { type }];
     }));
     return { k: "record", fields: new ModuleFields(scope) };
+}
+// What a load of a file still being checked gives (the file loading itself):
+// its value, decided once the file is (see settleRecursive), as a function's
+// call of itself takes its result.
+export function recursiveValue(): Ty { return variable(); }
+// The file's value for such a load: the type it was used as, which must be the
+// value's (a problem's text otherwise).
+export function settleRecursive(placeholder: Ty, value: Ty): string | undefined {
+    const used = resolve(placeholder);
+    // (A file that only loads itself again never gives a value: any type is its.)
+    if (resolve(value) === used) return undefined;
+    if (used.k === "var") { (used as Extract<Ty, { k: "var" }>).link = value; return undefined; }
+    const [wanted, given] = [text(used), text(value)];
+    return wanted === given ? undefined : `the file's own load is used as ${wanted}, but its value is ${given}`;
 }
 // A module's value for one import: its own copy (a module's record copies each
 // name when first read).
