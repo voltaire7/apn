@@ -6,10 +6,12 @@
 # The input is a list (a string is its characters), so a list of anything
 # parses, code included. Its names repeat others' (string, as decode's): a
 # program using both imports one qualified (parser <- import "std/parser").
-_option <- import "std/option"
-_sequence <- import "std/sequence"
-_functions <- import "std/function"
-use [_option,_sequence,_functions]
+option <- import "std/option"
+sequences <- import "std/sequence"
+functions <- import "std/function"
+use [option,sequences,functions]
+
+parserDigit d = length (takeWhile (!= d) (to (List Char) "0123456789"))
 [
     Parser a = | Parser (input -> Result [a,input] String)
     _parserRun (Parser p) input = p input
@@ -86,8 +88,7 @@ use [_option,_sequence,_functions]
     }
     spaces = many space
     # A whole number, from its digits.
-    number = map (ds -> foldl (n, d -> n * 10 + _parserDigit d) 0 ds) (some digit)
-    _parserDigit d = length (takeWhile (!= d) (to (List Char) "0123456789"))
+    number = map (ds -> foldl (n, d -> n * 10 + parserDigit d) 0 ds) (some digit)
     # p, and the spaces after it.
     token p = {
         x <- p

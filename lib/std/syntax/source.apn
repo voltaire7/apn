@@ -2,11 +2,11 @@
 # leaves and nodes, so it runs Dynamic, as the meta reader does. A piece of
 # syntax is written for the place it stands in, in parentheses only where it
 # would read differently bare there, as the parser requires.
-_sequence <- import "std/sequence"
-_text <- import "std/text"
-_functions <- import "std/function"
-_option <- import "std/option"
-use [_sequence,_functions,_option,_text]
+sequences <- import "std/sequence"
+strings <- import "std/text"
+functions <- import "std/function"
+option <- import "std/option"
+use [sequences,functions,option,strings]
 [
     _fromAST syntax = _shown _end syntax
 

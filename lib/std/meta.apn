@@ -1,8 +1,8 @@
-_text <- import "std/text"
-_sequence <- import "std/sequence"
-_functions <- import "std/function"
-_option <- import "std/option"
-use [_text,_sequence,_functions,_option]
+strings <- import "std/text"
+sequences <- import "std/sequence"
+functions <- import "std/function"
+option <- import "std/option"
+use [strings,sequences,functions,option]
 parser <- (load "meta/parser" : Dynamic)
 use parser
 primitives <- (load "meta/primitives" : Dynamic)

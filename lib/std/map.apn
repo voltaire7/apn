@@ -1,14 +1,15 @@
-_sequence <- import "std/sequence"
-_functions <- import "std/function"
-_option <- import "std/option"
-use [_sequence,_functions,_option]
+sequences <- import "std/sequence"
+functions <- import "std/function"
+option <- import "std/option"
+use [sequences,functions,option]
+
+insertCombined combine acc [key,value] =
+    insert [[key, has key acc ? combine (lookup key acc) value : value]] acc
 [
     # Persistent map transformations. Input maps are never modified.
     getOption key m = has key m ? Some (lookup key m) : None
     getOr fallback key m = has key m ? lookup key m : fallback
-    _insertCombined combine acc [key,value] =
-        insert [[key, has key acc ? combine (lookup key acc) value : value]] acc
-    insertWith combine entries m = foldl (_insertCombined combine) m entries
+    insertWith combine entries m = foldl (insertCombined combine) m entries
     update key f m = has key m ? insert [[key, f (lookup key m)]] m : m
     mapValues f m = (map ([key,value] -> [key, f value]) (pairs m) : HashMap _ _)
     filterMap predicate m = (filter ([key,value] -> predicate key value) (pairs m) : HashMap _ _)

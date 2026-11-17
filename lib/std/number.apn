@@ -1,7 +1,7 @@
-_sequence <- import "std/sequence"
-_functions <- import "std/function"
-_option <- import "std/option"
-use [_sequence,_functions,_option]
+sequences <- import "std/sequence"
+functions <- import "std/function"
+option <- import "std/option"
+use [sequences,functions,option]
 [
     # Exact arithmetic remains exact through these functions.
     sq x = x * x

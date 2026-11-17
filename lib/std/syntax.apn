@@ -1,8 +1,8 @@
-_sequence <- import "std/sequence"
-_text <- import "std/text"
-_functions <- import "std/function"
-_option <- import "std/option"
-use [_sequence,_functions,_option,_text]
+sequences <- import "std/sequence"
+strings <- import "std/text"
+functions <- import "std/function"
+option <- import "std/option"
+use [sequences,functions,option,strings]
 source <- (load "syntax/source" : Dynamic)
 use source
 lambda <- (load "syntax/lambda" : Dynamic)

@@ -1,11 +1,11 @@
 # GLSL expressions as values, for writing a shader's code in APN (as
 # p5.strands writes it in JavaScript): arithmetic and the math functions on
 # them write GLSL. A number joins in as a float, and a list as a vector.
-_text <- import "std/text"
-_sequence <- import "std/sequence"
-_functions <- import "std/function"
-_option <- import "std/option"
-use [_text,_sequence,_functions,_option]
+strings <- import "std/text"
+sequences <- import "std/sequence"
+functions <- import "std/function"
+option <- import "std/option"
+use [strings,sequences,functions,option]
 [
     Glsl = | Glsl String
 

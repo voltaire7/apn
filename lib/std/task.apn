@@ -1,8 +1,8 @@
 # Commands that run an action and send its result, as Elm's Task.perform and
 # Task.attempt. A task is an ordinary action: time.now, time.here, file.toUrl,
 # sequence of several, and so on.
-_option <- import "std/option"
-use _option
+option <- import "std/option"
+use option
 [
     TaskEffect = TaskPerform Dynamic Dynamic | TaskAttempt Dynamic Dynamic Dynamic
     perform toMessage action = TaskPerform action toMessage

@@ -1,7 +1,10 @@
-_sequence <- import "std/sequence"
-_functions <- import "std/function"
-_option <- import "std/option"
-use [_sequence,_functions,_option]
+sequences <- import "std/sequence"
+functions <- import "std/function"
+option <- import "std/option"
+use [sequences,functions,option]
+
+# Unicode WhiteSpace plus line terminators (the same set as ECMAScript \s).
+isSpace c = contains c (to (List Char) " \t\n\r\v\f                 　﻿")
 [
     upper = upper
     lower = lower
@@ -30,7 +33,7 @@ use [_sequence,_functions,_option]
         step state c = {
             current = c :: snd state
             take width current == marker
-                ? [_prepend (from (List Char) (reverse (drop width current))) (fst state), []]
+                ? [prepend (from (List Char) (reverse (drop width current))) (fst state), []]
                 : [fst state, current]
         }
         state = foldl step [[],[]] (to (List Char) text)
@@ -45,12 +48,10 @@ use [_sequence,_functions,_option]
     } : String
     replaceAll search replacement text = joinWith replacement (splitOn search text)
 
-    # Unicode WhiteSpace plus line terminators (the same set as ECMAScript \s).
-    _isSpace c = contains c (to (List Char) " \t\n\r\v\f                 　﻿")
     words text = filter (x -> x != "")
-        (splitOn " " (from (List Char) (map (c -> _isSpace c ? ' ' : c) (to (List Char) text))))
+        (splitOn " " (from (List Char) (map (c -> isSpace c ? ' ' : c) (to (List Char) text))))
     trim text = from (List Char)
-        (reverse (dropWhile _isSpace (reverse (dropWhile _isSpace (to (List Char) text)))))
+        (reverse (dropWhile isSpace (reverse (dropWhile isSpace (to (List Char) text)))))
 
     # Common puzzle-input shapes; CRLF and trailing blank lines are accepted.
     nonEmptyLines text = filter (line -> line != "") (map trim (lines text))

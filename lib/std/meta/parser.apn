@@ -1,8 +1,8 @@
-_text <- import "std/text"
-_sequence <- import "std/sequence"
-_functions <- import "std/function"
-_option <- import "std/option"
-use [_text,_sequence,_functions,_option]
+strings <- import "std/text"
+sequences <- import "std/sequence"
+functions <- import "std/function"
+option <- import "std/option"
+use [strings,sequences,functions,option]
 [
     # A source reader written in APN. Tokens are [kind,value]; no native parser.
     # It reads into toAST's lists (lib/syntax.apn): a string literal is its quoted
@@ -11,7 +11,7 @@ use [_text,_sequence,_functions,_option]
     mpFlush state = state.buffer == "" ? state : [
         mode = "code"
         buffer = ""
-        tokens = _prepend (mpToken state.kind state.buffer) state.tokens
+        tokens = prepend (mpToken state.kind state.buffer) state.tokens
         kind = ""
         depth = state.depth
     ]
@@ -27,11 +27,11 @@ use [_text,_sequence,_functions,_option]
     mpStringStep state c = c == "\\"
         ? mpState "escape" state.buffer state.tokens "" state.depth
         : (c == "\""
-        ? mpState "code" "" (_prepend (mpToken "literal" state.buffer) state.tokens) "" state.depth
+        ? mpState "code" "" (prepend (mpToken "literal" state.buffer) state.tokens) "" state.depth
         : mpState "string" (state.buffer ++ c) state.tokens "" state.depth)
     # A newline outside ( ) and [ ] ends a statement.
     mpLineEnd state flushed = state.depth == 0
-        ? mpState "code" "" (_prepend (mpToken "symbol" ";") flushed.tokens) "" 0
+        ? mpState "code" "" (prepend (mpToken "symbol" ";") flushed.tokens) "" 0
         : flushed
     mpLexStep state char = {
         [next] = [mpLexStepRaw state char]
@@ -59,7 +59,7 @@ use [_text,_sequence,_functions,_option]
             : (space
             ? (newline ? mpLineEnd state flushed : flushed)
             : (punctuation
-            ? mpState "code" "" (_prepend (mpToken "symbol" c) flushed.tokens) ""
+            ? mpState "code" "" (prepend (mpToken "symbol" c) flushed.tokens) ""
                 (state.depth + mpNesting c)
             : (state.kind == kind
             ? mpState "code" (state.buffer ++ c) state.tokens kind state.depth
@@ -126,7 +126,7 @@ use [_text,_sequence,_functions,_option]
     # An application is one list, function first: f x y is ["f","x","y"].
     mpApplication minimum stop left tokens = minimum <= 9 ? (mpStarts tokens ? {
         [arguments] = [mpArguments stop tokens []]
-        next = mpMore minimum stop (_prepend left (fst arguments)) (snd arguments)
+        next = mpMore minimum stop (prepend left (fst arguments)) (snd arguments)
         next
     } : [left,tokens]) : [left,tokens]
     mpArguments stop tokens collected = mpStarts tokens ? {
@@ -194,14 +194,14 @@ use [_text,_sequence,_functions,_option]
     }
     mpArray tokens = {
         [items] = [mpItems tokens]
-        [_prepend "[]" (fst items), snd items]
+        [prepend "[]" (fst items), snd items]
     }
     mpItems tokens = mpText tokens == "]" ? [[], tail tokens] : {
         [item] = [mpExpr 1 "" tokens]
         [rest] = [snd item]
         mpText rest == "]" ? [[fst item], tail rest] : {
             more = mpItems (mpRequire "," rest)
-            [_prepend (fst item) (fst more), snd more]
+            [prepend (fst item) (fst more), snd more]
         }
     }
     mpDefinition tokens = {
@@ -216,21 +216,21 @@ use [_text,_sequence,_functions,_option]
     mpBlock tokens definitions = mpDefinition tokens ? {
         [definition] = [mpReadDefinition tokens]
         seq (snd definition) []
-        next = mpBlock (mpSkip (snd definition)) (_prepend (fst definition) definitions)
+        next = mpBlock (mpSkip (snd definition)) (prepend (fst definition) definitions)
         next
     } : {
         [body] = [mpExpr 1 "" tokens]
-        [_prepend "{}" (reverse (_prepend (fst body) definitions)), mpRequire "}" (mpSkip (snd body))]
+        [prepend "{}" (reverse (prepend (fst body) definitions)), mpRequire "}" (mpSkip (snd body))]
     }
     mpProgram tokens definitions = mpDefinition tokens ? {
         [definition] = [mpReadDefinition tokens]
         seq (snd definition) []
-        next = mpProgram (mpSkip (snd definition)) (_prepend (fst definition) definitions)
+        next = mpProgram (mpSkip (snd definition)) (prepend (fst definition) definitions)
         next
-    } : (null tokens ? _prepend "{}" (reverse definitions) : {
+    } : (null tokens ? prepend "{}" (reverse definitions) : {
         [body] = [mpExpr 1 "" tokens]
         null (mpSkip (snd body))
-            ? _prepend "{}" (reverse (_prepend (fst body) definitions))
+            ? prepend "{}" (reverse (prepend (fst body) definitions))
             : fail ("meta reader: trailing token " ++ mpText (snd body))
     })
     mpParse source = mpProgram (mpSkip (mpLex source)) []

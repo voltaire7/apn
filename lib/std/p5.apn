@@ -1,7 +1,33 @@
 # Callback records are ordinary APN values; drawing starts in the browser.
-_html <- import "std/html"
-_array <- import "std/array"
-_glsl <- import "std/glsl"
+html <- import "std/html"
+array <- import "std/array"
+shaders <- import "std/glsl"
+
+# Shaders whose hooks are APN functions on GLSL values (the glsl module's), as
+# p5.strands writes them in JavaScript. uniforms names each uniform's GLSL type
+# and its value each frame, a function of the sketch: [time = ["float", (Sketch
+# p -> p.millis)]]; a hook reads one by name (Glsl "time"). A filter's hook gets
+# its inputs (texCoord, canvasSize, texelSize, canvasContent) and gives the
+# pixel's color.
+input field = shaders.Glsl ("inputs." ++ field)
+# The others' hooks, by name, get a vertex's inputs (objectInputs,
+# worldInputs, cameraInputs) or a pixel's (pixelInputs, a material's) and
+# give those they change: [position = ...]. (Each is checked where it is
+# written; here they are Dynamic.)
+hookKeys = [
+    objectInputs = "Vertex getObjectInputs", worldInputs = "Vertex getWorldInputs"
+    cameraInputs = "Vertex getCameraInputs", pixelInputs = "Inputs getPixelInputs"
+]
+_vertex = [
+    position = input "position", normal = input "normal", texCoord = input "texCoord"
+    color = input "color"
+]
+_pixel = [
+    normal = input "normal", texCoord = input "texCoord", color = input "color"
+    ambientLight = input "ambientLight", ambientMaterial = input "ambientMaterial"
+    specularMaterial = input "specularMaterial", emissiveMaterial = input "emissiveMaterial"
+    shininess = input "shininess", metalness = input "metalness"
+]
 [
     p5Object = p5Object
     p5SketchType = p5SketchType
@@ -11,7 +37,7 @@ _glsl <- import "std/glsl"
     # A sketch inside an HTML view (an element program's): it keeps drawing across
     # renders with the newest callbacks, which may read the model, and p.send msg
     # sends a message to update.
-    canvas callbacks = _html.HtmlSketch callbacks
+    canvas callbacks = html.HtmlSketch callbacks
     # A callback's p, the running sketch: setup (p : Sketch) = ... Its properties
     # are typed (width, mouseX: Number; mouseIsPressed: Bool; key: String), and
     # its methods Dynamic, as p5's take many kinds of arguments (a color is a
@@ -42,49 +68,24 @@ _glsl <- import "std/glsl"
     baseMaterialShader = p5Object "baseMaterialShader" []
     modify hooks shader = p5Object "modify" [shader,hooks]
 
-    # Shaders whose hooks are APN functions on GLSL values (the glsl module's), as
-    # p5.strands writes them in JavaScript. uniforms names each uniform's GLSL type
-    # and its value each frame, a function of the sketch: [time = ["float", (Sketch
-    # p -> p.millis)]]; a hook reads one by name (Glsl "time"). A filter's hook gets
-    # its inputs (texCoord, canvasSize, texelSize, canvasContent) and gives the
-    # pixel's color.
-    _input field = _glsl.Glsl ("inputs." ++ field)
     # The hooks by key, and the uniforms as p5 takes them ("float time": value).
     _hooks uniforms code = (["uniforms", (map ([name,[type,value]] ->
         [type ++ " " ++ name, value]) (pairs uniforms) : HashMap _ _)] :: code
         : HashMap _ _) : Dynamic
     buildFilterShader uniforms hook = {
         color = hook [
-            texCoord = _input "texCoord", canvasSize = _input "canvasSize"
-            texelSize = _input "texelSize", canvasContent = _glsl.Glsl "canvasContent"
+            texCoord = input "texCoord", canvasSize = input "canvasSize"
+            texelSize = input "texelSize", canvasContent = shaders.Glsl "canvasContent"
         ]
-        code = "(FilterInputs inputs, in sampler2D canvasContent) { return " ++ _glsl.glsl color
+        code = "(FilterInputs inputs, in sampler2D canvasContent) { return " ++ shaders.glsl color
         modify (_hooks uniforms [["vec4 getColor", code ++ "; }"]]) baseFilterShader
     }
-    # The others' hooks, by name, get a vertex's inputs (objectInputs,
-    # worldInputs, cameraInputs) or a pixel's (pixelInputs, a material's) and
-    # give those they change: [position = ...]. (Each is checked where it is
-    # written; here they are Dynamic.)
-    _hookKeys = [
-        objectInputs = "Vertex getObjectInputs", worldInputs = "Vertex getWorldInputs"
-        cameraInputs = "Vertex getCameraInputs", pixelInputs = "Inputs getPixelInputs"
-    ]
-    _vertex = [
-        position = _input "position", normal = _input "normal", texCoord = _input "texCoord"
-        color = _input "color"
-    ]
-    _pixel = [
-        normal = _input "normal", texCoord = _input "texCoord", color = _input "color"
-        ambientLight = _input "ambientLight", ambientMaterial = _input "ambientMaterial"
-        specularMaterial = _input "specularMaterial", emissiveMaterial = _input "emissiveMaterial"
-        shininess = _input "shininess", metalness = _input "metalness"
-    ]
     _structHooks uniforms hooks = _hooks uniforms (map ([name,hook] -> {
         pixel = name == "pixelInputs"
         [struct,inputs] = pixel ? ["Inputs", (_pixel : Dynamic)] : ["Vertex", (_vertex : Dynamic)]
-        assign [field,value] = "inputs." ++ field ++ " = " ++ _glsl.glsl value ++ "; "
+        assign [field,value] = "inputs." ++ field ++ " = " ++ shaders.glsl value ++ "; "
         body = foldl (++) "" (map assign (pairs (hook inputs)))
-        [_hookKeys (name : String), "(" ++ struct ++ " inputs) { " ++ body ++ "return inputs; }"]
+        [hookKeys (name : String), "(" ++ struct ++ " inputs) { " ++ body ++ "return inputs; }"]
     }) (pairs (hooks : Dynamic)))
     buildColorShader uniforms hooks = modify (_structHooks uniforms hooks) baseColorShader
     buildMaterialShader uniforms hooks = modify (_structHooks uniforms hooks) baseMaterialShader
@@ -99,7 +100,7 @@ _glsl <- import "std/glsl"
 
     # Vectors are lists ([x,y] or [x,y,z]): + - * / work on them (and with a
     # number) element by element, so these complete p5.Vector.
-    mag v = sqrt (_array.dot v v) : Float
+    mag v = sqrt (array.dot v v) : Float
     normalize v = v / (mag v == 0 ? 1.0 : mag v)
     setMag length v = normalize v * length
     limit most v = v * (mag v > most ? most / mag v : 1.0)

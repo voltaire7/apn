@@ -2,12 +2,37 @@
 # element program drawing SVG that fills the window. The origin is the
 # screen's center, y grows upward, and angles are in degrees, counterclockwise.
 numbers <- import "std/number"
-_html <- import "std/html"
-_time <- import "std/time"
-use [numbers,_html,_time]
+html <- import "std/html"
+clock <- import "std/time"
+use [numbers,html,clock]
 strings <- import "std/text"
 svg <- import "std/svg"
 browser <- import "std/browser"
+
+# The computer: the mouse, the keyboard, the screen and the time (milliseconds).
+toScreen width height = [
+    width = width
+    height = height
+    top = height / 2
+    left = 0 - width / 2
+    right = width / 2
+    bottom = 0 - height / 2
+]
+updateKeyboard isDown key keyboard = {
+    others = filter (k -> k != key) keyboard.keys
+    keyboard.keys = isDown ? key :: others : others
+    key ~ [
+        " " -> keyboard [space = isDown]
+        "Enter" -> keyboard [enter = isDown]
+        "Shift" -> keyboard [shift = isDown]
+        "Backspace" -> keyboard [backspace = isDown]
+        "ArrowUp" -> keyboard [up = isDown]
+        "ArrowDown" -> keyboard [down = isDown]
+        "ArrowLeft" -> keyboard [left = isDown]
+        "ArrowRight" -> keyboard [right = isDown]
+        _ -> keyboard
+    ]
+}
 [
     # A shape is what it is, placed: where it is, its angle, size and opacity
     # (Placed, whose shape is never itself Placed). A color is its red, green and
@@ -162,15 +187,6 @@ browser <- import "std/browser"
         svg.height "100%"
     ] (map _render shapes)
 
-    # The computer: the mouse, the keyboard, the screen and the time (milliseconds).
-    _toScreen width height = [
-        width = width
-        height = height
-        top = height / 2
-        left = 0 - width / 2
-        right = width / 2
-        bottom = 0 - height / 2
-    ]
     _noKeys = [
         up = False, down = False, left = False, right = False
         space = False, enter = False, shift = False, backspace = False
@@ -179,7 +195,7 @@ browser <- import "std/browser"
     _computer = [
         mouse = [x = 0.0, y = 0.0, down = False, click = False]
         keyboard = _noKeys
-        screen = _toScreen 600 600
+        screen = toScreen 600 600
         time = 0
     ]
     GameMsg =
@@ -191,21 +207,6 @@ browser <- import "std/browser"
         | GameClick
         | GameButton Bool
         | GameVisibility browser.Visibility
-    _updateKeyboard isDown key keyboard = {
-        others = filter (k -> k != key) keyboard.keys
-        keyboard.keys = isDown ? key :: others : others
-        key ~ [
-            " " -> keyboard [space = isDown]
-            "Enter" -> keyboard [enter = isDown]
-            "Shift" -> keyboard [shift = isDown]
-            "Backspace" -> keyboard [backspace = isDown]
-            "ArrowUp" -> keyboard [up = isDown]
-            "ArrowDown" -> keyboard [down = isDown]
-            "ArrowLeft" -> keyboard [left = isDown]
-            "ArrowRight" -> keyboard [right = isDown]
-            _ -> keyboard
-        ]
-    }
     _advance updateMemory msg game = {
         computer = game.computer
         msg ~ [
@@ -217,17 +218,17 @@ browser <- import "std/browser"
                 [game,browser.none]
             }
             GameViewport viewport -> {
-                game.computer.screen = _toScreen viewport.width viewport.height
+                game.computer.screen = toScreen viewport.width viewport.height
                 [game,browser.none]
             }
             GameResized width height -> {
-                game.computer.screen = _toScreen width height
+                game.computer.screen = toScreen width height
                 [game,browser.none]
             }
             # Compared, the keyboard is computed now, as Elm computes it, so no
             # chain of pending updates builds up; a held key's repeats change nothing.
             GameKey isDown key -> {
-                keyboard = _updateKeyboard isDown key computer.keyboard
+                keyboard = updateKeyboard isDown key computer.keyboard
                 keyboard == computer.keyboard ? [game,browser.none] : {
                     game.computer.keyboard = keyboard
                     [game,browser.none]

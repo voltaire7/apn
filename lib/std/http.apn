@@ -4,12 +4,12 @@
 # by lowercase name: response.headers "content-type"). Its options are a
 # FetchOptions, each field optional ([] for none), the zero value of one (no
 # body, a timeout of 0) none: [method = "POST", headers = [["Accept","*/*"]]].
-_option <- import "std/option"
-_text <- import "std/text"
-_sequence <- import "std/sequence"
-_functions <- import "std/function"
-use [_option,_text,_sequence,_functions]
-_decode <- import "std/decode"
+option <- import "std/option"
+strings <- import "std/text"
+sequences <- import "std/sequence"
+functions <- import "std/function"
+use [option,strings,sequences,functions]
+decode <- import "std/decode"
 [
     FetchOptions = [
         method : String = "GET"
@@ -57,7 +57,7 @@ _decode <- import "std/decode"
     ]
     expectJson toMessage decoder = [
         json = True
-        success = value -> toMessage (mapError BadBody (_decode.decodeValue decoder value))
+        success = value -> toMessage (mapError BadBody (decode.decodeValue decoder value))
         failure = failure toMessage
     ]
 ]

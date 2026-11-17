@@ -1,8 +1,8 @@
-_map <- import "std/map"
-_sequence <- import "std/sequence"
-_functions <- import "std/function"
-_option <- import "std/option"
-use [_map,_sequence,_functions,_option]
+maps <- import "std/map"
+sequences <- import "std/sequence"
+functions <- import "std/function"
+option <- import "std/option"
+use [maps,sequences,functions,option]
 [
     # Breadth-first traversal with level frontiers; keys must be HashMap scalar keys.
     # Mark on insertion so cycles and duplicate edges cannot enqueue a node twice.
@@ -17,7 +17,7 @@ use [_map,_sequence,_functions,_option]
             seq depth []
             visit acc node = has node (fst acc)
                 ? acc
-                : [insert [[node,depth]] (fst acc), _prepend node (snd acc)]
+                : [insert [[node,depth]] (fst acc), prepend node (snd acc)]
             [next] = [foldl visit [state.distances,[]] (concatMap neighbors state.frontier)]
             seq (fst next)
                 (seq (snd next)
