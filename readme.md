@@ -23,7 +23,7 @@ deno test --allow-read tests/*-test.ts
 | `lib/` | Modular standard library |
 | `examples/` | A tour of the language and runnable examples |
 | `tests/` | Evaluation regression tests |
-| `docs/` | [Evaluation semantics](docs/semantics.md), [templates and types](docs/templates-and-types.md), [zero initialization](docs/zero-initialization.md), [operator precedence](docs/semantics.md#operator-precedence-and-associativity), [IO actions](docs/semantics.md#io-actions) |
+| `docs/` | [Evaluation semantics](docs/semantics.md), [templates and types](docs/templates-and-types.md), [zero initialization](docs/zero-initialization.md), [operator precedence](docs/semantics.md#operator-precedence-and-associativity), [IO actions](docs/semantics.md#io-actions), [symmetry](docs/symmetry.md), [equivalence](docs/equivalence.md) |
 
 Import standard modules by name from any directory (and your own files or
 folders the same way, see [the standard library](docs/standard-library.md)):
