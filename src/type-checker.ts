@@ -844,6 +844,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let requirements: Ty[] = [];
     // Checks a value's type carried to where it is used (a variant's checks).
     const carried = new Set<Ty>();
+    // A function a scope defines, declared ahead of its definition (a name not
+    // visible there is defined for the whole scope): by its type until defined.
+    type Ahead = { name: string; clauses: { params: Pattern[]; body: Expr }[]; scope: Scope; statement: object };
+    const forwardOf = new Map<Ty, Ahead>();
+    function declareAhead(definitions: Array<{ name: string; clauses: { params: Pattern[]; body: Expr }[]; statement: object }>, scope: Scope): void {
+        for (const { name, clauses, statement } of definitions) {
+            if (!clauses[0].params.length || scope.has(name)) continue;
+            const t = variable();
+            forwardOf.set(t, { name, clauses, scope, statement });
+            scope.set(name, { type: t });
+        }
+    }
     // What a value definition is not generic in: its scope's monomorphic
     // types. A check its value carried that still waits on what it is generic
     // in (f = h ~ [Handler g -> g], h holding s -> s ++ "!") goes with each use
@@ -1846,7 +1858,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const bound = scope.get(arg.name), kind = bound && resolve(bound.type).k;
                 // (A function defined later is declared ahead: forward.)
                 const typeLike = kind === "type" || kind === "fn" || kind === "intrinsic" || kind === "factory" || kind === "alias" ||
-                    !!bound && bound.type === forward.get(arg.name);
+                    !!bound && forwardOf.has(bound.type);
                 if (ordinary ? bound : valueAt(n) ? bound && !typeLike : typeLike) return;
                 captures.add(arg.name);
                 if (vector && n === 0) scope.set(arg.name, { type: atom("Int"), mono: true, index: { constant: 0n, terms: new Map([[`n${serial++}`, 1n]]) } });
@@ -4270,11 +4282,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const infix = infixSpelling(e, scope);
                 if (infix) return infer(infix, scope, expected);
                 let entry = scope.get(e.name);
-                const declaration = forwardDefinitions.get(e.name);
-                if (declaration && entry?.type === forward.get(e.name)) {
-                    define(declaration.name, declaration.clauses, rootScope, declaration.clauses[0].body);
-                    analyzed.add(declaration);
-                    entry = rootScope.get(e.name);
+                // A function its scope defines further on is defined when first used.
+                const ahead = entry && forwardOf.get(entry.type);
+                if (ahead) {
+                    define(ahead.name, ahead.clauses, ahead.scope, ahead.clauses[0].body);
+                    analyzed.add(ahead.statement);
+                    entry = ahead.scope.get(e.name);
                     if (entry) scope.set(e.name, entry);
                 }
                 if (!entry && openNames && !options.runtimeNames?.has(e.name)) {
@@ -4904,9 +4917,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 doBlocks.push(block);
                 try {
                     const scoped = declaresNames(e);
+                    declareAhead(e.stmts.flatMap(s => s.t === "stmDef" ? [{ name: s.name, clauses: s.clauses, statement: s }] : []), child);
                     for (const [n, s] of e.stmts.entries()) {
                         if (scoped) readPatterns(s, child);
-                        result = infer(s, child);
+                        // (One its use defined already.)
+                        result = s.t === "stmDef" && analyzed.has(s) ? list(dynamic, constant(0n)) : infer(s, child);
                         const binds = s.t === "patDef" || s.t === "stmDef" || s.t === "typeDef";
                         // A <- binding, or a discarded statement in a monad, makes the
                         // block a do-block: its last statement is the action (or the
@@ -7702,7 +7717,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // Definitions of map, >>=, <*> or return define an instance: inferred on
         // their own and recorded for the session; the method stays as it is.
         // Its first definition (the prelude's (>>=) = intrinsics.bind) binds it.
-        if (isInstance(name, clauses, scope) && instances && scope.has(name) && scope.get(name)!.type !== forward.get(name)) {
+        if (isInstance(name, clauses, scope) && instances && scope.has(name) && !forwardOf.has(scope.get(name)!.type)) {
             const forward = variable();
             instances.set(name, [...instances.get(name) ?? [], forward]);
             const own: Scope = new Map(scope);
@@ -7943,7 +7958,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             });
             return;
         }
-        forwardDefinitions.delete(name);
         const nonGeneric = captured(scope);
         // An instance's own uses of its method are itself where they give it
         // what its patterns take, and the method otherwise, as the run
@@ -7951,8 +7965,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // to String (Money m) is the method. Its type starts as what its
         // patterns take, to decide.
         const instance = isInstance(name, clauses, scope) && previous && !previous.recursive;
-        const pending = forward.get(name) ?? (instance ? patternSkeleton(clauses, scope) : variable());
-        forward.delete(name);
+        // (Declared ahead, by this scope: its type so far is the one its uses met.)
+        const ahead = scope.get(name)?.type, declared = ahead && forwardOf.get(ahead)?.scope === scope ? ahead : undefined;
+        if (declared) forwardOf.delete(declared);
+        const pending = declared ?? (instance ? patternSkeleton(clauses, scope) : variable());
         // Its clauses' own calls of an overloaded math function may take the
         // previous meaning too (sin (Dual a b) = Dual (sin a) ...).
         const fallback = previous && !previous.recursive ? overloaded(name, clauses, scope, previous) : undefined;
@@ -8272,15 +8288,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // the checker types already cover them.
     const instances = options.instances ?? (options.prelude ? new Map<string, unknown[]>() : undefined);
     const originalScope = new Map(scope);
-    const forward = new Map<string, Ty>();
-    const forwardDefinitions = new Map<string, Extract<TopLevel, { t: "def" }>>();
-    const analyzed = new Set<TopLevel>();
-    const rootScope = scope;
-    for (const statement of program) if (statement.t === "def" && statement.clauses[0].params.length && !scope.has(statement.name)) {
-        const t = variable(); forward.set(statement.name, t);
-        forwardDefinitions.set(statement.name, statement);
-        scope.set(statement.name, { type: t });
-    }
+    const analyzed = new Set<object>();
+    declareAhead(program.flatMap(statement => statement.t === "def" ? [{ ...statement, statement }] : []), scope);
     function validate(t: Ty, seen = new Set<Ty>()): void {
         const value = resolve(t);
         if (seen.has(value)) return;

@@ -141,6 +141,9 @@ for (const [source, expected] of [
     ['std <- import "std"\nrandom = std.number\nrandom.sq 4', '16'],
     ['numbers <- import "std/number"\nf _ = numbers\nuse (f [])\nsq 3', '9'],
     ['f _ = {\n    print "f"\n    import "std/number"\n}\nm <- f []\nuse m\nsq 3', '9'],
+    // A block's functions are defined for the whole block, as the top level's are.
+    ['{ f x = g x; g x = x + 1; f 1 }', '2'],
+    ['k n = {\n    even 0 = True\n    even m = odd (m - 1)\n    odd 0 = False\n    odd m = even (m - 1)\n    even n\n}\n[k 4, k 5]', '[True,False]'],
     // A record pattern binds a module's names as use opens them: generic.
     ['std <- import "std"\n[sequence] = std\n[sequence.sum [1,2], sequence.sum [0.5]]', '[3,0.5]'],
     ['[sum] <- import "std/sequence"\n[sum [1,2], sum [0.5]]', '[3,0.5]'],
@@ -150,7 +153,8 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const source of [
-    'std <- import "std"; use std.sequence; sum ["bad"]',
+    // (A function defined further on is checked where it is used.)
+    '{ f x = g x; g (x : String) = x ++ "!"; f 1 }',
     'f x = x + 1; f "bad"',
     'apply f x = f x; apply (x -> x + 1) "bad"',
     'x | missingGuard -> x',
