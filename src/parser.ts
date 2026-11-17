@@ -1326,10 +1326,14 @@ class Parser {
                         // in scope for the items after it (x <- m when the code runs).
                         const es = [] as Expr[];
                         for (;;) {
-                            // An item may declare types, as a block's statement may.
-                            if (this.isTypeDeclaration()) for (const d of this.parseTypeDeclaration()) {
+                            // An item may declare types and operators, as a block's statement may.
+                            const first = this.peek();
+                            const operator = this.skipFixityDeclaration() ? undefined : this.item(first, () => this.tryOperatorDefinition());
+                            if (operator) es.push({ t: "stmDef", ...operator });
+                            else if (this.isTypeDeclaration()) for (const d of this.item(first, () => this.parseTypeDeclaration())) {
                                 es.push(d.t === "type" ? { t: "typeDef", def: d.def } : d.t === "def" ? { t: "stmDef", name: d.name, clauses: d.clauses } : d.value);
                             }
+                            else if (this.isSym("]") || this.peek().k === "newline" || this.peek().k === "dedent") { /* a fixity declaration alone */ }
                             else es.push(this.item(this.peek(), () => this.isFieldDeclaration() ? this.parseFieldDeclaration()
                                 : this.isEagerBinding() ? this.parseEagerBinding()
                                 : this.isPatBinding() ? this.parsePatBinding() : this.isDef() ? this.parseBlockDef() : this.parseDelimitedExpr()));

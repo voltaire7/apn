@@ -147,6 +147,8 @@ for (const [source, expected] of [
     ['r = [\n    Shape = Circle Float | Square Float\n    area (Circle r) = 3 * r * r\n    area (Square s) = s * s\n]\nr.area (r.Square 2.0)', '4.0'],
     ['r = [x = 1, x = x + 1, y = x * 10, ones = 1 :: ones]\n[r.x, r.y, head r.ones]', '[2,20,1]'],
     ['r = [\n    Box a = | Box a\n    map f (Box x) = Box (f x)\n    unbox (Box x) = x\n]\nr.unbox (map (+ 1) (r.Box 1))', '2'],
+    // A record defines operators and declares their fixity as a block does.
+    ['r = [\n    V = | V Int\n    V a + V b = V (a + b)\n    infixr 3 <|>\n    a <|> b = a ++ b\n]\nuse r\n[V 1 + V 2, [1] <|> [2]]', '[V 3, [1,2]]'],
     // A block's functions are defined for the whole block, as the top level's are.
     ['{ f x = g x; g x = x + 1; f 1 }', '2'],
     ['k n = {\n    even 0 = True\n    even m = odd (m - 1)\n    odd 0 = False\n    odd m = even (m - 1)\n    even n\n}\n[k 4, k 5]', '[True,False]'],
