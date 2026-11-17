@@ -8,7 +8,7 @@ for (const source of [
     'f x x = x; f 1 1',
     '(x, x -> x) 1 1',
     'f [x,x] = x; f [1,1]',
-    'f [a = x, b = x] = x; f [a = 1, b = 1]',
+    'f [x = a, x = b] = x; f [a = 1, b = 1]',
     'f x [x] = x; f 1 [x = 1]',
     '(x -> x -> x) 2 1',
     'x = 2; f x x = x; f 1 1',
@@ -21,7 +21,7 @@ for (const source of [
     'f x x = x; f 1 2',
     '(x, x -> x) 1 2',
     'f [x,x] = x; f [1,2]',
-    'f [a = x, b = x] = x; f [a = 1, b = 2]',
+    'f [x = a, x = b] = x; f [a = 1, b = 2]',
     'f x [x] = x; f 1 [x = 2]',
 ]) Deno.test(`repeated patterns reject: ${source}`, () => {
     try { run(source); } catch (e) {
@@ -38,7 +38,7 @@ for (const checked of [false, true]) {
         ['x x = x; x x x == x', 'True'],
         ['x n x = 42; partial = x 1; partial x', '42'],
         ['x [x] = 42; x [x]', '42'],
-        ['x [self = x] = 42; x [self = x]', '42'],
+        ['x [x = self] = 42; x [self = x]', '42'],
         ['x (x::xs) = 42; x [x]', '42'],
         ['x x = 1; x other = 2; x x', '1'],
         ['x x = 1; x other = 2; x 0', '2'],

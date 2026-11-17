@@ -234,7 +234,7 @@ print headers.`Content-Type`   # => json
 print (headers "count")       # => 2 (a string reads the field it names)
 print (headers 0)             # => ["Content-Type","json"] (positional entry)
 print headers                 # => [`Content-Type` = "json", count = 2]
-[count = counted] = headers
+[counted = count] = headers
 print counted                 # => 2
 headers "count" = 3
 print headers.count           # => 3
@@ -383,10 +383,10 @@ print v                    # => 123
 # RENAME destructuring (Rust-style):  [srcKey = name, ...]  pulls those fields
 # OUT of a record and binds name — [x: val1, y: val2] = [x: 1, y: 2, z: 3]
 point = [x = 1, y = 2, z = 3]
-[x = val1, y = val2] = point
+[val1 = x, val2 = y] = point
 print [val1,val2]        # => [1,2]
 # works in function params and match alternatives too:
-sumXY [x = xv, y = yv] = xv + yv
+sumXY [xv = x, yv = y] = xv + yv
 print (sumXY point)        # => 3
 
 # ---------------------------------------------------------
@@ -864,7 +864,7 @@ print (foldl (_, b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 #              fires (exits 0) when it is actually USED.
 # ---------------------------------------------------------
 # Selective imports bind only the requested names.
-[halt = selectedHalt] <- import "std/system"
+[selectedHalt = halt] <- import "std/system"
 # selectedHalt is available; other exports are not introduced by this binding.
 {
     numbers <- load "../../lib/std/number"   # extensionless name
@@ -2210,6 +2210,6 @@ print symmetryRecord                 # [x:10,y:20]
 symmetryPairs = [["x", 1], ["y", 2]]
 symmetryPairs "x" = 10
 print symmetryPairs                  # [["x", 10], ["y", 2]]
-[x = symmetryFirst, _ = symmetryRest] = [x = 1, y = 2, z = 3]
+[symmetryFirst = x, symmetryRest = _] = [x = 1, y = 2, z = 3]
 print [symmetryFirst,symmetryRest]   # [1, [y:2,z:3]]
 

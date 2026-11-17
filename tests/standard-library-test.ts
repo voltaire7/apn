@@ -193,7 +193,7 @@ for (const cached of [false, true]) {
 }
 Deno.test('selective imports rename fields and preserve unselected bindings', () => {
     const i = new Interpreter();
-    i.run(parse('fibonacci = 123; [halt = stop] <- import "std/system"'));
+    i.run(parse('fibonacci = 123; [stop = halt] <- import "std/system"'));
     if (!i.env.get('stop') || i.env.get('halt')) throw new Error('wrong selected names');
     if (i.renderString(i.run(parse('fibonacci'))) !== '123') throw new Error('overwrote unselected binding');
 });

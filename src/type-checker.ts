@@ -2486,16 +2486,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "recPat": {
                 const fields = new Map<string, Ty>();
+                const binder = (name: string): Pattern => name === "_" ? { p: "wildcard" } : { p: "var", name };
                 for (const [key, name] of p.v) {
                     if (key === "_") continue;
                     const t = variable();
                     fields.set(key, t);
-                    bind({ p: "var", name }, t, scope, e, bound);
+                    bind(binder(name), t, scope, e, bound);
                 }
                 const rest = p.v.find(([key]) => key === "_");
                 if (rest) {
                     const remainder = operation("remainder", [expected, { k: "record", fields }]);
-                    bind({ p: "var", name: rest[1] }, remainder, scope, e, bound);
+                    bind(binder(rest[1]), remainder, scope, e, bound);
                 } else unify({ k: "record", fields }, expected, e);
                 return;
             }

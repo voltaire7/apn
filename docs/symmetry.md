@@ -44,8 +44,8 @@ spelling that built it (see [bindings](semantics.md#bindings-and-output) and
 | A cons cell | `x :: xs` | `h :: t = xs` |
 | A constructed value | `Some x`, `Box 1` | `Some a = o`, `(Box n)` |
 | A typed value | `(x : Int)` | `f (n : Int) = ...` |
-| A record | `[a = x]` | `[a = n] = r` |
-| A record and its other fields | `[a = x, _ = rest]` | `[a = n, _ = others] = r` |
+| A record | `[a = x]` | `[a = x] = r` |
+| A record and its other fields | `[a = x, use rest]` | `[a = x, rest = _] = r` |
 | A module | `[f = ..., g = ...]` at a file's end | `[f] <- import "file"` |
 
 ## Defining and calling
@@ -86,11 +86,10 @@ A type is written as the values it holds (see
 
 ## Where the symmetry breaks
 
-These pairs are spelled alike but name different things on the two sides.
-Each is an open question, not a rule to rely on.
+Every `=` binds its left from its right: a definition, a field, a record
+pattern's entry (`[a = x] = r` binds `a` to `r`'s `x`) and a renamed selection
+alike. That rule wins where it and the symmetry above disagree:
 
 | Form | Read | Written |
 | --- | --- | --- |
 | Renamed selection, `v.[a = x]` | `v`'s `x`, as a record's `a` | `v`'s `a`, from the right side's `x` |
-| A record pattern, `[a = n] = r` | — | the left (`a`) is `r`'s field, the right (`n`) the name bound, while every other `=` binds its left |
-| `_` as a record key | `[_ = r]` in a literal spreads `r` | `[_ = rest]` in a pattern binds the other fields |

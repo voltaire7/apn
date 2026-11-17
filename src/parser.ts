@@ -621,16 +621,18 @@ class Parser {
             let mode: "bare" | "keyed" | undefined;
             while (!this.isSym("]")) {
                 if (this.isKeyedEntry()) {
-                    if (mode === "bare") throw new Error("Parser: a pattern cannot mix bare names and 'field = name' entries");
+                    // name = field: the name bound (or _, nothing), from the
+                    // field (or _, the fields not named), as every = binds its left.
+                    if (mode === "bare") throw new Error("Parser: a pattern cannot mix bare names and 'name = field' entries");
                     mode = "keyed";
-                    const key = this.parseEntryKey();
-                    this.next(); // =
                     const nm = this.next();
-                    if (nm.k !== "ident") throw new Error("Parser: expected a name after '=' in a record pattern");
+                    if (nm.k !== "ident" || nm.quoted) throw new Error("Parser: expected a name before '=' in a record pattern");
+                    this.next(); // =
+                    const key = this.parseEntryKey();
                     if (key === "_" && keyed.some(([k]) => k === "_")) throw new Error("Parser: record pattern permits only one remainder");
                     keyed.push([key, nm.v]);
                 } else {
-                    if (mode === "keyed") throw new Error("Parser: a pattern cannot mix bare names and 'field = name' entries");
+                    if (mode === "keyed") throw new Error("Parser: a pattern cannot mix bare names and 'name = field' entries");
                     mode = "bare";
                     // An item is a whole pattern, up to its ',': [Some x, y].
                     const item = this.parseConsPattern();
@@ -1555,11 +1557,26 @@ class Parser {
         // Only direct field assignment wraps its scalar RHS.
         if (aliases.length && aliases.length !== entries.length) throw new Error("Parser: cannot mix renamed and unnamed assignment entries");
         if (types.some(t => t)) return { t: "patDef", pattern: { p: "var", name }, value: this.typedAssignment(name, path, rhs, entries, aliases, types) };
+        // v.[x, _] = [a, b]: _ takes its value and discards it, as in a list pattern.
+        if (bracketed && entries.includes("_")) return this.discardingAssignment(name, path, rhs, entries, aliases);
         const value = bracketed ? rhs : { t: "list", v: [rhs] } as Expr;
         const update: Expr = { t: "setFields", rec: { t: "var", name }, entries, value, ...(aliases.length ? { aliases } : {}), ...(path.length ? { path } : {}) };
         return pattern?.p === "as"
             ? { t: "patDef", pattern, value: rhs, update: { name, value: update } }
             : { t: "patDef", pattern: { p: "var", name }, value: update };
+    }
+
+    // v.[x, _, y] = rhs: the entries other than _ take their values (a list
+    // literal's items as written; another value is read once, by position).
+    discardingAssignment(name: string, path: string[], rhs: Expr, entries: string[], aliases: string[]): Expr {
+        if (aliases.length) throw new Error("Parser: a renamed selection names each field it sets; write the fields it sets");
+        const kept = entries.flatMap((entry, n) => entry === "_" ? [] : [n]);
+        const held = this.freshName(), from: Expr = { t: "var", name: held };
+        const literal = rhs.t === "list" && rhs.v.length === entries.length ? rhs.v : undefined;
+        if (!kept.length) return { t: "patDef", pattern: { p: "wildcard" }, value: rhs };
+        const value: Expr = { t: "list", v: kept.map(n => literal ? literal[n] : { t: "app", f: from, a: { t: "int", v: BigInt(n) } }) };
+        const update: Expr = { t: "setFields", rec: { t: "var", name }, entries: kept.map(n => entries[n]), value, ...(path.length ? { path } : {}) };
+        return { t: "patDef", pattern: { p: "var", name }, value: literal ? update : { t: "block", style: "(", stmts: [{ t: "stmDef", name: held, clauses: [{ params: [], body: rhs }] }, update] } };
     }
 
     // A field assignment's [ ] entries: x, x = a (renamed), each typed or not
@@ -2800,6 +2817,8 @@ function recordOf(written: Expr[]): Expr | undefined {
     // (copies: the list it may be instead keeps its items as written).
     const items: Expr[] = [];
     for (const item of written) {
+        // _ = e binds nothing, as in a block: it is no field (and never runs).
+        if (item.t === "stmDef" && item.name === "_") continue;
         if (item.t !== "stmDef") { items.push(item); continue; }
         const copy = { ...item, clauses: [...item.clauses] };
         if (declaredFields.has(item)) declaredFields.add(copy);
@@ -3059,7 +3078,7 @@ export function patternSource(p: Pattern): string {
             if (p.typed) return `(${patternSource(p.args[p.args.length - 1])} : ${[p.tag, ...p.args.slice(0, -1).map(patternSource)].join(" ")})`;
             return `(${p.tag} ${p.args.map(patternSource).join(" ")})`;
         case "typeBind": return `(${patternSource(p.value)} : ${p.name})`;
-        case "recPat": return `[${p.v.map(([k, v]) => fieldSource(k, v)).join(", ")}]`;
+        case "recPat": return `[${p.v.map(([k, v]) => k === v ? k : `${v} = ${k === "_" ? "_" : keySource(k)}`).join(", ")}]`;
         case "range": return `[${p.lo}..${p.hi}]`;
     }
 }

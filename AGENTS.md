@@ -100,10 +100,13 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   the same behavior (`v.x` is the field, `v.[x]` a record holding it, so
   `v.x != v.[x]`). If two spellings would mean the same, drop one or give
   each its own meaning.
-- Avoid redundancy everywhere: say each thing once. Reuse an existing
-  definition, helper, doc section or test instead of writing a near-copy;
-  give a module's shared pieces one name and refer to it; state a rule in one
-  doc and link to it from others; remove what a change makes redundant.
+- Redundancy is evil: say each thing once, in the language, the code and the
+  docs. A form that makes a program repeat itself (a name written twice to do
+  one thing, two steps that always go together) is a design flaw to fix, not
+  a style to live with. Reuse an existing definition, helper, doc section or
+  test instead of writing a near-copy; give a module's shared pieces one name
+  and refer to it; state a rule in one doc and link to it from others; remove
+  what a change makes redundant.
 - Avoid keywords at all cost. A new form is a name the prelude defines, a
   function or an operator (`import`, `use`, `load` and `else` are), never a
   word the parser reserves.

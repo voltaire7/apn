@@ -9,7 +9,9 @@ for (const checked of [false, true]) {
             ["[use [x = 1], use [y = 2], z = 3]", "[x = 1, y = 2, z = 3]"],
             ["r = [use [child = [x = 1]], y = 2]; r.child.x", "1"],
             ["x = 1; r = [x = x, use [y = 2]]; r.y", "2"],
-            ["base = [x = 1]; r = [_ = base]; r.x = 2; [base.x,r.x]", "[1,2]"],
+            ["base = [x = 1]; r = [use base]; r.x = 2; [base.x,r.x]", "[1,2]"],
+            // _ = e binds nothing, in a record as in a block.
+            ["base = [x = 1]; [_ = base, y = 2]", "[y = 2]"],
             [
                 "unused = missing : Dynamic; base = [x = unused]; r = [use base, y = 2]; r.y",
                 "2",

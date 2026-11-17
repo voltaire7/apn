@@ -18,33 +18,38 @@ for (const checked of [false, true]) {
                 "[child = [x = 3, y = 2]]",
             ],
             ["v = [x = (1 : Float)]; v.[x = a] = [a = 3]; v", "[x = 3.0]"],
+            // _ takes its value and discards it, as in a list pattern.
+            ["v = [x = 0, y = 0]; v.[x,_] = [1,2]; v", "[x = 1, y = 0]"],
+            ["v = [x = 0, y = 0]; pair = [7,8]; v.[_,y] = pair; v", "[x = 0, y = 8]"],
+            ["v = [c = [x = 0, y = 0]]; v.c.[_,y] = [1,2]; v", "[c = [x = 0, y = 2]]"],
+            ["v = [x = 0]; v.[_] = [5]; v", "[x = 0]"],
             ['a = [["x", 1], ["y", 2]]; a "x" = 10; a', '[["x", 10], ["y", 2]]'],
             ['a = [["x", 1], ["y","hi"]]; a "x" = 10; a', '[["x", 10], ["y","hi"]]'],
             ['a = [["x", 1], ["x", 2]]; a "x" = 10; a', '[["x", 10], ["x", 2]]'],
             ['a = [["x", (1 : Float)]]; k = "x"; a k = 2; a', '[["x", 2.0]]'],
             [
-                "[x = first, _ = rest] = [x = 1, y = 2, z = 3]; [first,rest]",
+                "[first = x, rest = _] = [x = 1, y = 2, z = 3]; [first,rest]",
                 "[1, [y = 2, z = 3]]",
             ],
-            ["[_ = rest, x = first] = [x = 1, y = 2]; [first,rest]", "[1, [y = 2]]"],
-            ["[x = first, _ = rest] = [x = 1]; rest", "[]"],
+            ["[rest = _, first = x] = [x = 1, y = 2]; [first,rest]", "[1, [y = 2]]"],
+            ["[first = x, rest = _] = [x = 1]; rest", "[]"],
             [
-                "f [x = first, _ = rest] = [use rest, x = first]; f [x = 1, y = 2]",
+                "f [first = x, rest = _] = [use rest, x = first]; f [x = 1, y = 2]",
                 "[y = 2, x = 1]",
             ],
-            ["[y = 2] ~ [[x = a, _ = r] -> a, _ -> 0]", "0"],
-            ["f [x = a, _ = r] = a; f [y = b, _ = r] = b; f [y = 2]", "2"],
-            ["f [x = first, _ = rest] = rest; f [x = 1, y = 2]", "[y = 2]"],
-            ["f [x = first, _ = rest] = rest.y; f [x = 1, y = 2]", "2"],
+            ["[y = 2] ~ [[a = x, r = _] -> a, _ -> 0]", "0"],
+            ["f [a = x, r = _] = a; f [b = y, r = _] = b; f [y = 2]", "2"],
+            ["f [first = x, rest = _] = rest; f [x = 1, y = 2]", "[y = 2]"],
+            ["f [first = x, rest = _] = rest.y; f [x = 1, y = 2]", "2"],
             [
-                "f [x = first, _ = rest] = [first,rest]; [f [x = 1, y = 2], f [x = 3, z = 4]]",
+                "f [first = x, rest = _] = [first,rest]; [f [x = 1, y = 2], f [x = 3, z = 4]]",
                 "[[1, [y = 2]], [3, [z = 4]]]",
             ],
             [
-                "unused = missing : Dynamic; [x = first, _ = rest] = [x = 1, y = unused]; first",
+                "unused = missing : Dynamic; [first = x, rest = _] = [x = 1, y = unused]; first",
                 "1",
             ],
-            ["[x = first, _ = rest] = [x = 1, y = 2]; [use rest, x = first]", "[y = 2, x = 1]"],
+            ["[first = x, rest = _] = [x = 1, y = 2]; [use rest, x = first]", "[y = 2, x = 1]"],
         ]
     ) {
         Deno.test(`selection symmetry checked=${checked}: ${source}`, () => {
@@ -66,8 +71,8 @@ for (const checked of [false, true]) {
             "v = [x = 1]; v.[x = a] = [a = .2]",
             'a = [["x", 1]]; a "missing" = 2',
             'a = [["x", 1]]; a "x" = .2',
-            "[x = first, _ = rest] = [y = 1]",
-            "f [x = first, _ = rest] = rest.x; f [x = 1]",
+            "[first = x, rest = _] = [y = 1]",
+            "f [first = x, rest = _] = rest.x; f [x = 1]",
             "[x:first,_:a,_:b]=[x:1]",
         ]
     ) {

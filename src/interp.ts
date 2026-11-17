@@ -1232,7 +1232,7 @@ export class Interpreter {
             case "typeBind": return node(text(":"), of(p.value), text(p.name));
             case "schema": return node(text(":"), of(p.value), this.sexprOf(p.type));
             case "as": return node(text("."), of(p.left), of(p.right));
-            case "recPat": return node(text("[:]"), ...p.v.map(([k, v]) => node(text(keySource(k)), text(v))));
+            case "recPat": return node(text("[:]"), ...p.v.map(([k, v]) => node(text(v), text(k === "_" ? k : keySource(k)))));
             case "range": return node(text(".."), mkInt(p.lo), mkInt(p.hi));
         }
     }
@@ -6840,12 +6840,13 @@ export class Interpreter {
                 for (const [k, val] of v.v) fields.set(k, val);
                 const selected = new Set(p.v.filter(([key]) => key !== "_").map(([key]) => key));
                 for (const [key, name] of p.v) {
+                    const binder: Pattern = name === "_" ? { p: "wildcard" } : { p: "var", name };
                     if (key === "_") {
-                        if (!this.matchPattern({ p: "var", name }, { kind: "record", v: v.v.filter(([field]) => !selected.has(field)) }, binds)) return false;
+                        if (!this.matchPattern(binder, { kind: "record", v: v.v.filter(([field]) => !selected.has(field)) }, binds)) return false;
                         continue;
                     }
                     if (!fields.has(key)) return false;
-                    if (!this.matchPattern({ p: "var", name }, fields.get(key)!, binds)) return false;
+                    if (!this.matchPattern(binder, fields.get(key)!, binds)) return false;
                 }
                 return true;
             }

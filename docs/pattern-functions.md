@@ -63,7 +63,7 @@ mean `add 1 2`. A collection variable works the same way as a literal.
 | --- | --- | --- |
 | `value` | Binds the entire list | Binds the entire record |
 | `[x,y]` | Binds exactly two elements by position | Binds fields named `x` and `y` |
-| `[x = a, y = b]` | Does not match | Binds fields `x` and `y` as `a` and `b` |
+| `[a = x, b = y]` | Does not match | Binds `a` and `b` to fields `x` and `y` |
 | `(x::xs)` | Binds the head and tail of a nonempty list | Does not match |
 
 `x :: xs` matches the constructor `::` names, as any infix pattern with an
@@ -114,7 +114,7 @@ variable name. Renaming those variables also changes which fields it selects.
 Use a keyed pattern when local variable names should differ from field names:
 
 ```apn
-sumFields [x = a, y = b] = a + b
+sumFields [a = x, b = y] = a + b
 sumFields [y = 2, x = 1]     # 3
 ```
 
@@ -427,13 +427,15 @@ not record order. Use `whole.([t] [x])` to retain the complete original record.
 
 ## Record remainder patterns
 
-`_ = rest` in a keyed record pattern captures the fields not explicitly selected:
+`rest = _` in a keyed record pattern captures the fields not explicitly selected
+(each entry binds its left, as every `=` does: `first = x` binds `first` to the
+field `x`, and `_ = x` takes `x` and discards it):
 
 ```apn
-[x = first, _ = rest] = [x = 1, y = 2, z = 3]
+[first = x, rest = _] = [x = 1, y = 2, z = 3]
 # first = 1; rest = [y = 2, z = 3]
 
-withoutX [x = first, _ = rest] = rest
+withoutX [first = x, rest = _] = rest
 withoutX [x = 1, y = 2]            # [y = 2]
 [use rest, x = first]              # rebuild: [y = 2, z = 3, x = 1]
 ```
@@ -442,4 +444,4 @@ There may be one remainder entry, anywhere in the pattern. Explicit fields must
 exist. The remainder is a record (including when empty), preserves source order,
 and shares untouched lazy fields and references. This works in bindings,
 function parameters, and pattern lambdas used by `match`. Its meaning is the
-counterpart of `_:` flattening in record expressions.
+counterpart of `use` spreading a record in a record literal.

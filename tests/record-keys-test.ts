@@ -21,14 +21,14 @@ for (const [name, source, expected] of [
     ["backticked update", 'obj = [`a b` = 1]\nobj.`a b` = 2\nobj', '[`a b` = 2]'],
     ["string update", 'obj = [x = 1]\nobj "x" = 3\nobj', '[x = 3]'],
     ["renamed selection", 'obj = [x = 1, y = 2]\nobj.[first = x, second = y]', '[first = 1, second = 2]'],
-    ["keyed destructuring", 'obj = [x = 1, y = 2]\n[x = a, y = b] = obj\n[a,b]', '[1,2]'],
+    ["keyed destructuring", 'obj = [x = 1, y = 2]\n[a = x, b = y] = obj\n[a,b]', '[1,2]'],
     ["bare destructuring", '[x] = [x = 1, y = 2]\nx', '1'],
-    ["pattern dispatch", 'f [x = value] = value + 10\n[f [x = 1], f [x = 2]]', '[11,12]'],
+    ["pattern dispatch", 'f [value = x] = value + 10\n[f [x = 1], f [x = 2]]', '[11,12]'],
     ["unused values stay deferred", 'unused = missing + 1\nobj = [x = 1, y = unused]\nobj "x"', '1'],
     ["fields are computed when used", 'obj = [x = head [], y = 2]\nobj.y', '2'],
     ["pairs give the key's text", 'pairs [x = 1, `a b` = 2]', '[["x", 1], ["a b", 2]]'],
     ["function source keys", 'f obj = obj.`a b`\nf', 'obj -> obj.`a b`'],
-    ["function source patterns", 'f [x = value] = value\nf', '[x = value] -> value'],
+    ["function source patterns", 'f [value = x] = value\nf', '[value = x] -> value'],
     ["function source records", 'f x = [x = x, y = x]\nf', 'x -> [x = x, y = x]'],
 ] as const) {
     Deno.test(`record keys: ${name}`, () => {
@@ -40,7 +40,7 @@ for (const [source, message] of [
     ['obj = [x = 1]\nobj.y', "no field 'y'"],
     ['obj = [x = 1]\nobj "y"', "no field 'y'"],
     ['arr = [10,20]\narr "0"', 'association lookup expects'],
-    ['f [x = v] = v\nf [y = 1]', 'no clause'],
+    ['f [v = x] = v\nf [y = 1]', 'no clause'],
     ['obj = [x: 1]', "a record's field is written x = 1"],
 ] as const) {
     Deno.test(`record keys reject: ${source}`, () => {

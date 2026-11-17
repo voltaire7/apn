@@ -11,7 +11,7 @@ for (const checked of [false, true]) {
                 "[Some 1, 1]",
             ],
             [
-                "whole.[x = a, y = b] = [x = 1, y = 2]; [whole,a,b]",
+                "whole.[a = x, b = y] = [x = 1, y = 2]; [whole,a,b]",
                 "[[x = 1, y = 2], 1, 2]",
             ],
             ["v.[x,y] = [1,2]; [v,x,y]", "[[1,2], 1, 2]"],
@@ -39,7 +39,7 @@ for (const checked of [false, true]) {
                 "[[1], [x = 1.0]]",
             ],
             [
-                "f whole.[x = a, y = b] = [whole,a,b]; f [x = 1, y = 2]",
+                "f whole.[a = x, b = y] = [whole,a,b]; f [x = 1, y = 2]",
                 "[[x = 1, y = 2], 1, 2]",
             ],
             ["f x.x = x; f 1", "1"],

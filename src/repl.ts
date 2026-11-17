@@ -276,7 +276,7 @@ function helpText(): string {
         `  [x = 1, y = x + 1]  (a record: its fields are bindings, each in scope for those after it)`,
         `  [x : Float, y : Float = 1]  (declared fields: a type, or a typed value); [use r, z = 3] spreads r`,
         `  [\`my value\` = 1]  (a field that is not a name is in backticks; read r.\`my value\` or r "my value")`,
-        `  [x = a, y = b] = value  (rename destructure: pull fields out of a record)`,
+        `  [a = x, b = y] = value  (rename destructure: a and b from fields x and y)`,
         `  [["x", 1]] "x"  (association lookup; first matching string key)`,
         `  nums 0 / nums -1 / nums [0,2]   (single or multiple indices)`,
         `  (["x", 1] : [String,Int]) / templates.values / templates.(expr)  (list templates)`,

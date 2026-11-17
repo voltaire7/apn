@@ -120,7 +120,7 @@ Spacing is part of the syntax (a parse error otherwise):
   `(- 2)` a section. Before a closing bracket an operator ends a section
   (`(1 +)`).
 - A record field is `key: value`, not `key:value`: `[x = 1]`, not `[x:1]`;
-  likewise keyed patterns and selections (`[x = a, y = b]`).
+  likewise keyed patterns and selections (`[a = x, b = y]`).
 - `( )` and `[ ]` take no space inside (`(f x)`, `[1,2]`); a `{ }` block on one
   line takes exactly one (`{ 123 }`, not `{123}` or `{ 123  }`). Empty groups
   are `()`, `[]` and `{}`.
@@ -295,7 +295,7 @@ rebinding may have another type. The left side may be a pattern:
 `[a,b] = [1,2]`, a cons pattern `x::xs = [1,2,3,4]` (or `x :: y :: rest`),
 `Some x = optionValue` (parentheses optional, also for an imported
 constructor), a literal (`1 = n` asserts that `n` is 1), or a keyed
-record pattern `[x = a] = record`. A failed match is an error: before the
+record pattern `[a = x] = record` (binding `a` to the field `x`). A failed match is an error: before the
 run when the value is known (`1 = 2`, `None = Some 1`), otherwise when the
 binding runs. A list of definition heads defines each by its own item of a list
 written on the right: `[f x, g y] = [x, y]` is `f x = x` and `g y = y` (a list
@@ -697,8 +697,9 @@ holding the type, or `x : Float = 1`, a typed value), a type declaration (its
 type and constructors are fields), or `use r`, which spreads `r`'s fields.
 Fields are code, run as a block's statements are (see [bindings](#bindings-and-output)):
 a name a field binds is in scope for the whole record (`[f n = g n, g n = n + 1]`),
-a function's clauses join, and `x = x + 1` reads the `x` before it, so
-`[x = 1, x = x + 1]` is `[x = 2]`. The record's fields are the names it binds,
+a function's clauses join, `x = x + 1` reads the `x` before it, so
+`[x = 1, x = x + 1]` is `[x = 2]`, and `_ = e` binds nothing (`[_ = e, b = 2]`
+is `[b = 2]`). The record's fields are the names it binds,
 in the order first bound. The record keeps that code, so code joins and reads it as a list:
 `[x = 1] ++ [x + 1]` is the code `[x = 1, x + 1]` (see [code](#code)). A
 declaration alone (`x : Float`) is a slot, which makes the record a template
@@ -791,12 +792,15 @@ A record is code, so `++` joins it to more code (`[x = 1] ++ [x + 1]`).
 
 An empty list `[]` becomes a record on its first field assignment.
 `obj.[x] = [10]` requires a one-element RHS list; `obj.[x] = 10` errors.
+A `_` among the fields takes its value and discards it, as in a list
+pattern: `obj.[x,_] = [1,2]` sets `x` alone.
 `obj.child.x = 10` and `obj.child.[x,y] = [10,20]` rebuild nested parent records.
 See the [access and assignment reference](templates-and-types.md#access-and-assignment-reference)
 for forms, conversion rules, scoping, and failure behavior.
 
-Destructuring `[x = a, y = b]` binds each field to a name, the bare pattern
-`[x]` binds the field `x` to `x`, and `_ = rest` binds the record of the
+Destructuring `[a = x, b = y]` binds each name on the left to the field on the
+right, as every `=` binds its left; the bare pattern `[x]` binds the field `x`
+to `x`, `_ = x` takes `x` and discards it, and `rest = _` binds the record of the
 remaining fields. Renamed plucks such as `obj.[value = field]` create named
 destination fields.
 

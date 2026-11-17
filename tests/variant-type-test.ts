@@ -89,7 +89,7 @@ for (const checked of [true, false]) Deno.test(`a union of types is written in p
 // field to its name; a constructor takes one as a field, converting a list.
 for (const [source, expected] of [
     ['len3 [x : Int, y : Int, z : Int] = x + y + z\n[len3 [1,2,3], len3 [x = 1, y = 2, z = 4]]', '[6,7]'],
-    ['Vector3 [x : Int, y : Int, z : Int] = _\nv = Vector3 [1,2,3]\nsx (Vector3 [x = a]) = a\n[v, sx v, typeOf v]', '[Vector3 [x = 1, y = 2, z = 3], 1, Vector3 [x : Int, y : Int, z : Int]]'],
+    ['Vector3 [x : Int, y : Int, z : Int] = _\nv = Vector3 [1,2,3]\nsx (Vector3 [a = x]) = a\n[v, sx v, typeOf v]', '[Vector3 [x = 1, y = 2, z = 3], 1, Vector3 [x : Int, y : Int, z : Int]]'],
 ] as const) for (const checked of [true, false]) Deno.test(`a record pattern of types (checked=${checked}): ${source}`, () => {
     const interpreter = new Interpreter();
     if (checked) interpreter.enableChecking();
