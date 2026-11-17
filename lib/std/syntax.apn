@@ -14,10 +14,10 @@ use lambda
     # syntax is a list headed by a token no name can be (["[]",1,2] is [1,2],
     # [":","x","Int"] is (x : Int)).
     # fromAST writes such data as source; eval runs it at the program's top level.
-    fromAST syntax = (_fromAST syntax : Dynamic) : String
+    fromAST syntax = (written syntax : Dynamic) : String
     eval syntax = intrinsics.eval (fromAST syntax)
     # toLambda gives code desugared to lambdas and application, as code: each
     # item of [x = 10, y = x + 1, y] is the block of the bindings before it, so
     # its last is (x -> (y -> y) (x + 1)) 10 (see syntax/lambda). probe shows it.
-    toLambda code = eval (_lambda [] (intrinsics.syntax code) : Dynamic)
+    toLambda code = eval (desugared [] (intrinsics.syntax code) : Dynamic)
 ]

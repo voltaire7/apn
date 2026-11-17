@@ -135,9 +135,11 @@ f =<< m = m >>= f
 # yielding the list of their results (Haskell's); mapM f xs runs f on each
 # element; when and unless run an action on a condition. sequence passes on
 # what it has so far, so a long list of actions runs in constant stack.
-sequence ms = _sequenceFrom ms (xs -> xs)
-_sequenceFrom [] done = return (done [])
-_sequenceFrom (m :: rest) done = m >>= x -> _sequenceFrom rest (xs -> done (x :: xs))
+sequence ms = {
+    collect [] done = return (done [])
+    collect (m :: rest) done = m >>= x -> collect rest (xs -> done (x :: xs))
+    collect ms (xs -> xs)
+}
 mapM f xs = sequence (map f xs)
 when condition action = condition ? action >> return [] : return []
 unless condition action = condition ? return [] : action >> return []

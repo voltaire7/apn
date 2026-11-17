@@ -1633,6 +1633,9 @@ option <- import "std/option"  # one module: option.withDefault, option.Some
 A module's record is a record as any is (see [records](#records)): its fields
 are in scope for all of it, a function's clauses join, a type's constructors
 are fields, and `use r` in it passes `r`'s names on, which nothing else does.
+So what both the record and a helper above it need is a record of its own,
+opened by each: `shared = [Glsl = | Glsl String]`, `use shared` before the
+helpers, and `use shared` in the module's record.
 A file ending in a binding gives `[]`. One ending in a function gives the
 function, a module that takes parameters: after `make <- import "counter"`,
 `make 10` is a module of its own. `import` is a prelude function (`import =

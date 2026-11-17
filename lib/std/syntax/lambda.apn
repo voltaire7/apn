@@ -12,109 +12,108 @@ strings <- import "std/text"
 functions <- import "std/function"
 option <- import "std/option"
 use [sequences,functions,option,strings]
-[
-    _lambda bound (leaf : String) = leaf
-    _lambda bound (b : Bool) = b
-    _lambda bound (n : Number) = n
-    _lambda bound [] = []
-    _lambda bound (head :: rest) = _core bound head rest
+lambda bound (leaf : String) = leaf
+lambda bound (b : Bool) = b
+lambda bound (n : Number) = n
+lambda bound [] = []
+lambda bound (head :: rest) = core bound head rest
 
-    _core bound "->" [params,body] = _curry bound params body
-    _core bound "{}" [] = ["{}"]
-    _core bound "{}" statements = _block bound statements
-    _core bound "()" [op,x] = ["->", ["_1"], [op, "_1", _lambda bound x]]
-    _core bound "$" [f,x] = [_lambda bound f, _lambda bound x]
-    _core bound "=" [left,right] = ["=", _bindingPattern left, _value bound [["=",left,right]]]
-    _core bound "[]" items = any _isBinding items
-        ? "[]" :: _listItems bound [] items
-        : map (_lambda bound) ("[]" :: items)
-    _core bound head args = map (_lambda bound) (head :: args)
+core bound "->" [params,body] = curried bound params body
+core bound "{}" [] = ["{}"]
+core bound "{}" statements = block bound statements
+core bound "()" [op,x] = ["->", ["_1"], [op, "_1", lambda bound x]]
+core bound "$" [f,x] = [lambda bound f, lambda bound x]
+core bound "=" [left,right] = ["=", bindingPattern left, valueOf bound [["=",left,right]]]
+core bound "[]" items = any isBinding items
+    ? "[]" :: listItems bound [] items
+    : map (lambda bound) ("[]" :: items)
+core bound head args = map (lambda bound) (head :: args)
 
-    # A list with bindings: its bindings scope over its later items, so each
-    # other item is the block of the bindings before it, ending in the item:
-    # [x = 1, x + 1] is [(x -> x + 1) 1], [x <- m, f x] is [m >>= x -> f x].
-    _listItems _ _ [] = []
-    _listItems bound before (item :: rest) = _isBinding item
-        ? _listItems bound (before ++ [item]) rest
-        : _block bound (before ++ [item]) :: _listItems bound before rest
-    _isBinding ["=",_,_] = True
-    _isBinding ["<-",_,_] = True
-    _isBinding _ = False
+# A list with bindings: its bindings scope over its later items, so each
+# other item is the block of the bindings before it, ending in the item:
+# [x = 1, x + 1] is [(x -> x + 1) 1], [x <- m, f x] is [m >>= x -> f x].
+listItems _ _ [] = []
+listItems bound before (item :: rest) = isBinding item
+    ? listItems bound (before ++ [item]) rest
+    : block bound (before ++ [item]) :: listItems bound before rest
+isBinding ["=",_,_] = True
+isBinding ["<-",_,_] = True
+isBinding _ = False
 
-    # One lambda per parameter; a guard stays on the last.
-    _curry bound [param] body = ["->", [param], _lambda (_binders param ++ bound) body]
-    _curry bound (param :: params) body =
-        ["->", [param], _curry (_binders param ++ bound) params body]
+# One lambda per parameter; a guard stays on the last.
+curried bound [param] body = ["->", [param], lambda (binders param ++ bound) body]
+curried bound (param :: params) body =
+    ["->", [param], curried (binders param ++ bound) params body]
 
-    # A block: each statement takes the rest of the block as its body.
-    _block bound [statement] = _last bound statement
-    _block bound (["=",left,right] :: rest) = {
-        [clauses,after] = _clauses left right rest
-        pattern = _bindingPattern left
-        null after ? _value bound clauses
-            : [["->", [pattern], _block (_binders pattern ++ bound) after], _value bound clauses]
-    }
-    _block bound (["<-",left,right] :: rest) =
-        [">>=", _lambda bound right, ["->", [left], _block (_binders left ++ bound) rest]]
-    _block bound (statement :: rest) = [">>", _lambda bound statement, _block bound rest]
-    # A block's last statement is its value; a last binding gives the bound value.
-    _last bound ["=",left,right] = _value bound (head (_clauses left right []))
-    _last bound statement = _lambda bound statement
+# A block: each statement takes the rest of the block as its body.
+block bound [statement] = last bound statement
+block bound (["=",left,right] :: rest) = {
+    [clauses,after] = clausesOf left right rest
+    pattern = bindingPattern left
+    null after ? valueOf bound clauses
+        : [["->", [pattern], block (binders pattern ++ bound) after], valueOf bound clauses]
+}
+block bound (["<-",left,right] :: rest) =
+    [">>=", lambda bound right, ["->", [left], block (binders left ++ bound) rest]]
+block bound (statement :: rest) = [">>", lambda bound statement, block bound rest]
+# A block's last statement is its value; a last binding gives the bound value.
+last bound ["=",left,right] = valueOf bound (head (clausesOf left right []))
+last bound statement = lambda bound statement
 
-    # A definition's clauses: f's consecutive clauses, and the statements after.
-    _clauses left right rest = _isDefinition left
-        ? [
-            ["=",left,right] :: takeWhile (_sameDefinition (head left)) rest
-            dropWhile (_sameDefinition (head left)) rest
-        ]
-        : [[["=",left,right]],rest]
-    _sameDefinition name ["=", other :: _, _] = other == name
-    _sameDefinition _ _ = False
-    _isDefinition (name :: _) = _isName name
-    _isDefinition _ = False
+# A definition's clauses: f's consecutive clauses, and the statements after.
+clausesOf left right rest = isDefinition left
+    ? [
+        ["=",left,right] :: takeWhile (sameDefinition (head left)) rest
+        dropWhile (sameDefinition (head left)) rest
+    ]
+    : [[["=",left,right]],rest]
+sameDefinition name ["=", other :: _, _] = other == name
+sameDefinition _ _ = False
+isDefinition (name :: _) = isName name
+isDefinition _ = False
 
-    # The value a binding's clauses give, a fixed point when it refers to itself.
-    _value bound clauses = {
-        name = _name (head clauses 1)
-        value = _definition (name :: bound) clauses
-        _isName name && !contains name bound && _mentions name value
-            ? [_y, ["->", [name], value]]
-            : value
-    }
-    _definition bound [["=",left,right]] = _isDefinition left
-        ? _function bound [[tail left, right]]
-        : _lambda bound right
-    _definition bound clauses =
-        _function bound (map (["=",left,right] -> [tail left, right]) clauses)
-    # One clause of plain names is a curried lambda; anything else matches its
-    # arguments: f (Some x) y = ... is _1 -> _2 -> ([_1,_2] ~ [[Some x, y] -> ...]).
-    _function bound [[params,body]] = all _isPlain params
-        ? _curry bound params body
-        : _matching bound [[params,body]]
-    _function bound clauses = _matching bound clauses
-    _matching bound clauses = {
-        arity = length (head (head clauses))
-        names = map (n -> "_" ++ to String n) [1..arity]
-        one = arity == 1
-        subject = one ? head names : "[]" :: names
-        cases = map ([params,body] -> ["->", [one ? head params : "[]" :: params], body]) clauses
-        _curry bound names ["~", subject, "[]" :: cases]
-    }
-    _y = ["->", ["f"], [["->", ["x"], ["f", ["x","x"]]], ["->", ["x"], ["f", ["x","x"]]]]]
+# The value a binding's clauses give, a fixed point when it refers to itself.
+valueOf bound clauses = {
+    name = nameOf (head clauses 1)
+    value = definition (name :: bound) clauses
+    isName name && !contains name bound && mentions name value
+        ? [fixedPoint, ["->", [name], value]]
+        : value
+}
+definition bound [["=",left,right]] = isDefinition left
+    ? function bound [[tail left, right]]
+    : lambda bound right
+definition bound clauses =
+    function bound (map (["=",left,right] -> [tail left, right]) clauses)
+# One clause of plain names is a curried lambda; anything else matches its
+# arguments: f (Some x) y = ... is _1 -> _2 -> ([_1,_2] ~ [[Some x, y] -> ...]).
+function bound [[params,body]] = all isPlain params
+    ? curried bound params body
+    : matching bound [[params,body]]
+function bound clauses = matching bound clauses
+matching bound clauses = {
+    arity = length (head (head clauses))
+    names = map (n -> "_" ++ to String n) [1..arity]
+    one = arity == 1
+    subject = one ? head names : "[]" :: names
+    cases = map ([params,body] -> ["->", [one ? head params : "[]" :: params], body]) clauses
+    curried bound names ["~", subject, "[]" :: cases]
+}
+fixedPoint = ["->", ["f"], [["->", ["x"], ["f", ["x","x"]]], ["->", ["x"], ["f", ["x","x"]]]]]
 
-    # What a binding binds: its name, or the pattern it takes apart.
-    _bindingPattern left = _isDefinition left ? head left : left
-    _name (name : String) = name
-    _name (name :: _) = _isName name ? name : ""
-    _binders (name : String) = _isName name ? [name] : []
-    _binders (first :: rest) =
-        foldr (pattern, names -> _binders pattern ++ names) [] (first :: rest)
-    _binders _ = []
-    _isPlain (name : String) = _isName name
-    _isPlain _ = False
-    _isName name = name != "" && name != "_" && contains (head (to (List Char) name)) _nameStarts
-    _nameStarts = to (List Char) "abcdefghijklmnopqrstuvwxyz_"
-    _mentions name (leaf : String) = leaf == name
-    _mentions name (first :: rest) = any (_mentions name) (first :: rest)
-    _mentions _ _ = False
-]
+# What a binding binds: its name, or the pattern it takes apart.
+bindingPattern left = isDefinition left ? head left : left
+nameOf (name : String) = name
+nameOf (name :: _) = isName name ? name : ""
+binders (name : String) = isName name ? [name] : []
+binders (first :: rest) =
+    foldr (pattern, names -> binders pattern ++ names) [] (first :: rest)
+binders _ = []
+isPlain (name : String) = isName name
+isPlain _ = False
+isName name = name != "" && name != "_" && contains (head (to (List Char) name)) nameStarts
+nameStarts = to (List Char) "abcdefghijklmnopqrstuvwxyz_"
+mentions name (leaf : String) = leaf == name
+mentions name (first :: rest) = any (mentions name) (first :: rest)
+mentions _ _ = False
+[desugared = lambda]

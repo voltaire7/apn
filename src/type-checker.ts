@@ -364,11 +364,14 @@ export function moduleValue(value: Ty | undefined): Ty {
     // (A file ending in an action, run as its statement, gives what the action yields.)
     if (isIO(t) || isPending(t)) t = resolve((t as Extract<Ty, { k: "variant" }>).args[0]);
     if (t.k !== "record" || t.fields instanceof ModuleFields) return t;
-    const scope: TypeScope = new Map([...t.fields].map(([name, type]): [string, Entry] => {
-        const defined = t.scope?.get(name);
-        return [name, defined ? { ...defined, nonGeneric: undefined, mono: false, inherited: undefined } : { type }];
-    }));
-    return { k: "record", fields: new ModuleFields(scope) };
+    const record = t;
+    return { k: "record", fields: new ModuleFields(new Map([...t.fields].map(([name, type]) => [name, fieldEntry(record, name, type)]))) };
+}
+// A record's field as opening it defines the name: as the record's own scope
+// defined it (its clauses and fixity too, for static evaluation), each generic.
+export function fieldEntry(record: Extract<Ty, { k: "record" }>, name: string, type: Ty): Entry {
+    const defined = record.scope?.get(name);
+    return defined ? { ...defined, nonGeneric: undefined, mono: false, inherited: undefined } : { type };
 }
 // What a load of a file still being checked gives (the file loading itself):
 // its value, decided once the file is (see settleRecursive), as a function's
@@ -4378,7 +4381,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                             const type = infer(value, child);
                             parts.push({ spread: type });
                             const opened = resolve(type);
-                            if (opened.k === "record") for (const [name, field] of opened.fields) child.set(name, { type: field });
+                            if (opened.k === "record") for (const [name, field] of opened.fields) child.set(name, fieldEntry(opened, name, field));
                             continue;
                         }
                         // A field naming a native or a function is that one (upper = upper,
@@ -4544,7 +4547,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                             if (!isModuleType(resolve(entry.type))) validate(entry.type);
                             scope.set(name, entry);
                         }
-                        else if (t.k === "record") for (const [name, type] of t.fields) scope.set(name, { type, opened: a });
+                        else if (t.k === "record") for (const [name, type] of t.fields) scope.set(name, { ...fieldEntry(t, name, type), opened: a });
                         else if (t.k === "list" && t.items) t.items.forEach(open);
                         else if (isExplicit(t)) { runtimeChecks++; opaqueUse = true; }
                         // A record not known here (an import the check cannot read) was
