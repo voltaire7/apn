@@ -1614,9 +1614,9 @@ nothing: `use` opens a record.
 # shapes.apn
 std <- import "std"            # the file's own: an importer does not get it
 use std.number
-_turn = 2 * pi                 # its own too, a helper the record reads
+turn = 2 * pi                  # its own too, a helper the record reads
 [
-    circumference r = _turn * r
+    circumference r = turn * r
     area r = pi * sq r
 ]
 ```
