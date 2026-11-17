@@ -36,11 +36,13 @@ order _ = fail "sortBy comparator must return an integer"
     unique xs = null xs ? [] : head xs :: unique (filter (x -> x != head xs) (tail xs))
     # Dictionary order, which sorts: -1, 0 or 1 (<= is inclusion: "ab" <= "b"
     # is False, compare "ab" "b" is -1).
-    compare (x : String) (y : String) = _compareItems (to (List Char) x) (to (List Char) y)
-    compare (xs : List _) (ys : List _) = _compareItems xs ys
+    compare (x : String) (y : String) = compare (to (List Char) x) (to (List Char) y)
+    compare (xs : List _) (ys : List _) = {
+        items as bs = null as ? (null bs ? 0 : -1) : (null bs ? 1
+            : compare (head as) (head bs) ~ [0 -> items (tail as) (tail bs), c -> c])
+        items xs ys
+    }
     compare x y = x < y ? -1 : (x > y ? 1 : 0)
-    _compareItems xs ys = null xs ? (null ys ? 0 : -1) : (null ys ? 1
-        : compare (head xs) (head ys) ~ [0 -> _compareItems (tail xs) (tail ys), c -> c])
     sort xs = sortBy compare xs
     sortOn project xs = sortBy (on compare project) xs
     minimum xs = null xs ? None : Some (foldl min (head xs) (tail xs))
@@ -62,17 +64,18 @@ order _ = fail "sortBy comparator must return an integer"
     scanl f seed xs = seed :: (null xs ? [] : scanl f (f seed (head xs)) (tail xs))
 
     # Stable merge sort; equal keys always take the earlier (left) element.
-    _mergeSorted compare left right = null left ? right : (null right ? left
-        : (order (compare (head left) (head right)) <= 0
-        ? prepend (head left) (_mergeSorted compare (tail left) right)
-        : prepend (head right) (_mergeSorted compare left (tail right))))
-    _mergeSort compare xs = {
-        n = 0 + length xs
-        mid = quotient n 2
-        n < 2 ? xs : _mergeSorted compare (_mergeSort compare (take mid xs))
-            (_mergeSort compare (drop mid xs))
+    sortBy compare (xs : Vect n a) : Vect n a = {
+        merged left right = null left ? right : (null right ? left
+            : (order (compare (head left) (head right)) <= 0
+            ? prepend (head left) (merged (tail left) right)
+            : prepend (head right) (merged left (tail right))))
+        sorted ys = {
+            n = 0 + length ys
+            mid = quotient n 2
+            n < 2 ? ys : merged (sorted (take mid ys)) (sorted (drop mid ys))
+        }
+        (sorted xs : Dynamic)
     }
-    sortBy compare (xs : Vect n a) : Vect n a = (_mergeSort compare xs : Dynamic)
 
     # Force finite accumulator elements between simulation steps, not whole trees.
     forceList xs = seq (foldl (_, x -> seq x []) [] xs) xs

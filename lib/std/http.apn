@@ -17,17 +17,17 @@ decode <- import "std/decode"
         body : String
         timeout : Int
     ]
-    _options = pairs ([] : FetchOptions)
     # Ascribed, options keep the fields FetchOptions does not have, after its own.
     fetch url options = {
+        known = pairs ([] : FetchOptions)
+        unknown [name,_] = fail ("fetch: unknown option '" ++ name ++ "'; the options are "
+            ++ joinWith ", " (map ([key,_] -> key) known))
         given = options : FetchOptions
-        others = drop (length _options) (pairs given)
-        !null others ? _unknown (head others) : (given.timeout < 0
+        others = drop (length known) (pairs given)
+        !null others ? unknown (head others) : (given.timeout < 0
             ? fail "fetch: timeout must not be negative (milliseconds; 0 for none)"
             : sendRequest url (upper given.method) given.headers given.body given.timeout)
     }
-    _unknown [name,_] = fail ("fetch: unknown option '" ++ name ++ "'; the options are "
-        ++ joinWith ", " (map ([key,_] -> key) _options))
 
     # The body of a successful (2xx) response; any other status fails.
     fetchText url options = {

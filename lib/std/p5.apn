@@ -18,16 +18,28 @@ hookKeys = [
     objectInputs = "Vertex getObjectInputs", worldInputs = "Vertex getWorldInputs"
     cameraInputs = "Vertex getCameraInputs", pixelInputs = "Inputs getPixelInputs"
 ]
-_vertex = [
+vertexFields = [
     position = input "position", normal = input "normal", texCoord = input "texCoord"
     color = input "color"
 ]
-_pixel = [
+pixelFields = [
     normal = input "normal", texCoord = input "texCoord", color = input "color"
     ambientLight = input "ambientLight", ambientMaterial = input "ambientMaterial"
     specularMaterial = input "specularMaterial", emissiveMaterial = input "emissiveMaterial"
     shininess = input "shininess", metalness = input "metalness"
 ]
+# The hooks by key, and the uniforms as p5 takes them ("float time": value).
+withHooks uniforms code = (["uniforms", (map ([name,[type,value]] ->
+    [type ++ " " ++ name, value]) (pairs uniforms) : HashMap _ _)] :: code
+    : HashMap _ _) : Dynamic
+# A color or material shader's hooks: each a function of its inputs.
+withStructHooks uniforms hooks = withHooks uniforms (map ([name,hook] -> {
+    pixel = name == "pixelInputs"
+    [struct,inputs] = pixel ? ["Inputs", (pixelFields : Dynamic)] : ["Vertex", (vertexFields : Dynamic)]
+    assign [field,value] = "inputs." ++ field ++ " = " ++ shaders.glsl value ++ "; "
+    body = foldl (++) "" (map assign (pairs (hook inputs)))
+    [hookKeys (name : String), "(" ++ struct ++ " inputs) { " ++ body ++ "return inputs; }"]
+}) (pairs (hooks : Dynamic)))
 [
     p5Object = p5Object
     p5SketchType = p5SketchType
@@ -68,27 +80,16 @@ _pixel = [
     baseMaterialShader = p5Object "baseMaterialShader" []
     modify hooks shader = p5Object "modify" [shader,hooks]
 
-    # The hooks by key, and the uniforms as p5 takes them ("float time": value).
-    _hooks uniforms code = (["uniforms", (map ([name,[type,value]] ->
-        [type ++ " " ++ name, value]) (pairs uniforms) : HashMap _ _)] :: code
-        : HashMap _ _) : Dynamic
     buildFilterShader uniforms hook = {
         color = hook [
             texCoord = input "texCoord", canvasSize = input "canvasSize"
             texelSize = input "texelSize", canvasContent = shaders.Glsl "canvasContent"
         ]
         code = "(FilterInputs inputs, in sampler2D canvasContent) { return " ++ shaders.glsl color
-        modify (_hooks uniforms [["vec4 getColor", code ++ "; }"]]) baseFilterShader
+        modify (withHooks uniforms [["vec4 getColor", code ++ "; }"]]) baseFilterShader
     }
-    _structHooks uniforms hooks = _hooks uniforms (map ([name,hook] -> {
-        pixel = name == "pixelInputs"
-        [struct,inputs] = pixel ? ["Inputs", (_pixel : Dynamic)] : ["Vertex", (_vertex : Dynamic)]
-        assign [field,value] = "inputs." ++ field ++ " = " ++ shaders.glsl value ++ "; "
-        body = foldl (++) "" (map assign (pairs (hook inputs)))
-        [hookKeys (name : String), "(" ++ struct ++ " inputs) { " ++ body ++ "return inputs; }"]
-    }) (pairs (hooks : Dynamic)))
-    buildColorShader uniforms hooks = modify (_structHooks uniforms hooks) baseColorShader
-    buildMaterialShader uniforms hooks = modify (_structHooks uniforms hooks) baseMaterialShader
+    buildColorShader uniforms hooks = modify (withStructHooks uniforms hooks) baseColorShader
+    buildMaterialShader uniforms hooks = modify (withStructHooks uniforms hooks) baseMaterialShader
 
     # p5's calculations, which read nothing from a sketch and take its values as
     # they are (Dynamic too). p5's map(value, ...) is remap here, as map is APN's.
