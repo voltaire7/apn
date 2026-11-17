@@ -30,8 +30,10 @@ function applied(source: string, start: number, end: number): boolean {
     const heads = p === "\n" || "([{,;=".includes(p) || "+-*/%^!<>$&|?\\`@~:".includes(p);
     let after = end;
     while (after < source.length && (source[after] === " " || source[after] === "\t")) after++;
-    const n = source[after] ?? "";
-    const argument = /[A-Za-z0-9_([{"']/.test(n) || n === "." && /[0-9]/.test(source[after + 1] ?? "");
+    const n = source[after] ?? "", next = source[after + 1] ?? " ";
+    // (A spaced - or ! against its operand passes a negated argument: f -1, f !b.)
+    const negated = after > end && (n === "-" || n === "!") && !/[\s)\]},;]/.test(next);
+    const argument = /[A-Za-z0-9_([{"']/.test(n) || n === "." && /[0-9]/.test(next) || negated;
     return heads && argument;
 }
 // Whether the name at start..end begins a statement or an item (its line, or
