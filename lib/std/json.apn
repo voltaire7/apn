@@ -4,3 +4,6 @@
 # Floats numbers; prettyJson encodes it indented by two spaces. fromJson text
 # decodes one: objects become their [key,value] pairs (o "status" looks one
 # up), arrays lists, numbers Int or Float, null [].
+[
+    prettyJson = prettyJson
+]

@@ -1,1 +1,3 @@
-fromFile = 1
+[
+    fromFile = 1
+]

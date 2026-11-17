@@ -1,3 +1,5 @@
 # shapes/ is a folder: its record holds square, rectangle and solid, all
 # imported with it.
-squareArea side = side * side
+[
+    squareArea side = side * side
+]

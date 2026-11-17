@@ -1,12 +1,15 @@
 # Files the user picks or drops, as in Elm's File and File.Select. A file is a
 # record of name, size (bytes), mime and url (an object URL for its contents).
-File = [name : String, size : Int, mime : String, url : String]
-FileEffect = FileSelect Dynamic Dynamic Dynamic | FileDownload String String String
-# Commands opening the browser's file picker for these MIME types.
-selectFile mimes toMessage = FileSelect mimes False (files -> toMessage (head files))
-selectFiles mimes toMessage = FileSelect mimes True (files -> toMessage (head files) (tail files))
-# A command saving text as a file named name, of this MIME type (Elm's
-# File.Download.string): file.download "bubbles.json" "application/json" text.
-download name mime content = FileDownload name mime content
-# The file's contents as a URL, an action (a task, as Elm's File.toUrl).
-toUrl file = return file.url
+[
+    File = [name : String, size : Int, mime : String, url : String]
+    FileEffect = FileSelect Dynamic Dynamic Dynamic | FileDownload String String String
+    # Commands opening the browser's file picker for these MIME types.
+    selectFile mimes toMessage = FileSelect mimes False (files -> toMessage (head files))
+    selectFiles mimes toMessage =
+        FileSelect mimes True (files -> toMessage (head files) (tail files))
+    # A command saving text as a file named name, of this MIME type (Elm's
+    # File.Download.string): file.download "bubbles.json" "application/json" text.
+    download name mime content = FileDownload name mime content
+    # The file's contents as a URL, an action (a task, as Elm's File.toUrl).
+    toUrl file = return file.url
+]

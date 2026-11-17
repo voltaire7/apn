@@ -99,9 +99,9 @@ import = intrinsics.import
 # parse source: the code source writes, its statements as items (in the scope
 # parse runs in): code.x reads a binding, use code opens them, do code runs it.
 parse = intrinsics.parse
-# load file: an action reading file.apn beside the running file, its code the
-# result (each run reads it again): m <- load "f"; use m, or do m to run it.
-load file = map parse (intrinsics.readFileFrom (file ++ ".apn"))
+# load file: an action running file.apn beside the running file in a scope of
+# its own, again each time it runs, its value (its last statement's) the result.
+load file = intrinsics.runFile (file ++ ".apn")
 
 # Functor, Applicative and Monad. IO and lists are built in; any other type
 # joins by defining instances of map, >>= and return beside its declaration

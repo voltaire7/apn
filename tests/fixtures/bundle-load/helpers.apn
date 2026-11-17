@@ -1,3 +1,5 @@
-caption n = "clicked " ++ to String n
 extra <- load "parts/extra"
-use extra
+[
+    caption n = "clicked " ++ to String n
+    use extra
+]

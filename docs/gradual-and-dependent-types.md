@@ -500,12 +500,9 @@ existing behavior; repeated patterns do not prove function equivalence.
 ## Static boundaries and limits
 
 Static checking follows literal `import` and `load` dependencies and infers their
-records. Nothing opens a record but `use`, which opens statically known records
-or lists of records. Loaded files are checked with their lexical caller scope;
-a source change between checking and execution is rejected. Resubmit the loading
-definition to check the new source. A load of a file being checked (a file
-loading itself) reads code already checked, and adds nothing; computed loads
-need an explicit `Dynamic` boundary. The checker never runs a file or performs an action to discover types.
+values, each file checked in a scope of its own. Nothing opens a record but
+`use`, which opens statically known records or lists of records. A file
+loading itself is a cycle; computed loads need an explicit `Dynamic` boundary. The checker never runs a file or performs an action to discover types.
 
 Overloaded arithmetic retains constraints in inferred functions: `f x = x + 1`
 can be called with compatible numeric inputs, and `f "bad"` is rejected. List

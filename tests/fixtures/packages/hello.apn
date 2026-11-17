@@ -1,1 +1,3 @@
-greet n = "hi " ++ n
+[
+    greet n = "hi " ++ n
+]

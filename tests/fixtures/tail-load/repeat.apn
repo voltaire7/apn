@@ -1,4 +1,0 @@
-set counter $ counter - 1
-exported = 42
-again <- counter > 0 ? load "repeat" : return []
-use again

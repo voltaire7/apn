@@ -1,7 +1,7 @@
 # Table, from https://p5js.org/examples/loading-and-saving-data-table/
 # Load data from a CSV file, and save it to one.
 std <- import "std"
-use std.[html,io,option,p5,text]
+use std.[html,io,option,p5,text,sequence]
 [browser,file,http,task] = std
 
 # Bubbles, each a circle with a name; and the press a new one starts from,

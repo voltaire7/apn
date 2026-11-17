@@ -3,8 +3,10 @@
 # sequence of several, and so on.
 _option <- import "std/option"
 use _option
-TaskEffect = TaskPerform Dynamic Dynamic | TaskAttempt Dynamic Dynamic Dynamic
-perform toMessage action = TaskPerform action toMessage
-# attempt sends Ok of the result, or Err of the error's message when it fails.
-attempt toMessage action = TaskAttempt action (result -> toMessage (Ok result))
-    (error -> toMessage (Err error))
+[
+    TaskEffect = TaskPerform Dynamic Dynamic | TaskAttempt Dynamic Dynamic Dynamic
+    perform toMessage action = TaskPerform action toMessage
+    # attempt sends Ok of the result, or Err of the error's message when it fails.
+    attempt toMessage action = TaskAttempt action (result -> toMessage (Ok result))
+        (error -> toMessage (Err error))
+]

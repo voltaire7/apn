@@ -2,4 +2,6 @@
 # file, which reaches inside its folder with import "report/lines".
 listing <- import "report/lines"
 use listing
-report shapes = joinLines (map describe shapes)
+[
+    report shapes = joinLines (map describe shapes)
+]

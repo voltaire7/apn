@@ -3,4 +3,6 @@
 # "shapes" itself would be a cycle: that folder holds this file).
 rectangle <- import "shapes/rectangle"
 use rectangle
-boxVolume width height depth = rectangleArea width height * depth
+[
+    boxVolume width height depth = rectangleArea width height * depth
+]

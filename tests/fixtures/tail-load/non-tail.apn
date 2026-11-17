@@ -1,3 +1,0 @@
-repeat <- load "repeat"
-use repeat
-after <- return (counter + 7)

@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, type Binding, clausePlaces, walkObjects, type Contains, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, isLoadCall, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, type Binding, clausePlaces, walkObjects, type Contains, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { EVALUATED_NATIVES, nativeArity, READS_CODE, RETIRED_NATIVES, SHOWS, STANDARD_NATIVES, STRICT_NATIVES } from "./natives.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -69,7 +69,7 @@ type Ty =
     // code: the items a record written as a list literal keeps (see asCode);
     // bound: its fields bound to their value (x = Float), no slot even when
     // the value is a type (as the interpreter's record's bound).
-    | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string>; closed?: boolean; code?: FormulaItem[]; bound?: Set<string> }
+    | { k: "record"; fields: Map<string, Ty>; open?: boolean; preserve?: Set<string>; closed?: boolean; code?: FormulaItem[]; bound?: Set<string>; scope?: Scope }
     // chosen: one of value's choices, picked by a condition known only at runtime.
     // given: an indexed family's index values written so far, by parameter (Vec 2 Int).
     // applied: how many of a family's arguments are given (Pair a, Vec 2).
@@ -233,10 +233,13 @@ export interface CheckOptions {
      * in its monad too (a REPL input's is shown instead). */
     file?: boolean;
     library?: boolean;
-    loads?: (path: string, scope: TypeScope) => TypeScope;
+    /** The value of the file a literal load names, checked in a scope of its own. */
+    loads?: (path: string) => Ty;
     initial?: TypeScope;
-    imports?: (module: string) => TypeScope;
-    result?: (scope: TypeScope, exports: TypeScope) => void;
+    /** The value of the module a literal import names. */
+    imports?: (module: string) => Ty;
+    /** The program's scope, what it bound, and its value: its last statement's, if an expression. */
+    result?: (scope: TypeScope, exports: TypeScope, value?: Ty) => void;
     /** Names bound in the running interpreter; with it, other unknown names are reported as unbound. */
     runtimeNames?: ReadonlySet<string>;
     /** The program's input, when checking right before a run: the files readFile
@@ -248,7 +251,6 @@ export interface CheckOptions {
     /** Receives the scope before the program's statement at index (see CheckingSession.enter). */
     before?: { index: number; scope: (scope: TypeScope) => void };
     /** The variable names a file loaded by this path mentions, if the session checked it. */
-    loadedNames?: (path: string) => Set<string> | undefined;
     /** Whether code checked in this session outside this program used use on
      * a record of unknown fields (the names it opened cannot be traced here). */
     openedElsewhere?: () => boolean;
@@ -299,7 +301,9 @@ export function copyTypeScope(scope: TypeScope): TypeScope {
     const nodes = new Map<Ty, Ty>(), vars = new Map<Ty, Ty>();
     const copied = (t: Ty) => copy(t, vars, undefined, nodes);
     return new Map([...scope].map(([name, entry]) => {
-        const lazy: Entry = { ...entry };
+        // (Its other facts as they are: reading its type now would compute a lazy one.)
+        const { type: _type, nonGeneric: _nonGeneric, ...facts } = Object.getOwnPropertyDescriptors(entry);
+        const lazy = Object.defineProperties({}, facts) as Entry;
         let type: Ty | undefined, nonGeneric: Set<Ty> | undefined, done = false;
         Object.defineProperties(lazy, {
             type: { enumerable: true, get: () => type ??= copied(entry.type), set: (t: Ty) => { type = t; } },
@@ -352,6 +356,23 @@ class BlockScope extends Map<string, Entry> {
 }
 // A module's record type, its names read (and checked) when first needed.
 export function moduleType(read: () => TypeScope): Ty { return { k: "record", fields: new ModuleFields(read) }; }
+// A file's value as an import gives it: a record's fields as the scope that
+// defined them (their clauses and fixities too), each generic, its other
+// value as it is, and [] for a file ending in a binding.
+export function moduleValue(value: Ty | undefined): Ty {
+    const t = value ? resolve(value) : list(variable(), constant(0n));
+    if (t.k !== "record" || t.fields instanceof ModuleFields) return t;
+    const scope: TypeScope = new Map([...t.fields].map(([name, type]): [string, Entry] => {
+        const defined = t.scope?.get(name);
+        return [name, defined ? { ...defined, nonGeneric: undefined, mono: false, inherited: undefined } : { type }];
+    }));
+    return { k: "record", fields: new ModuleFields(scope) };
+}
+// A module's value for one import: its own copy (a module's record copies each
+// name when first read).
+export function importedValue(t: Ty): Ty {
+    return t.k === "record" && t.fields instanceof ModuleFields ? { k: "record", fields: t.fields.copied() } : copy(t);
+}
 // Whether a type is a module's record (an import's or a load's).
 export function isModuleType(t: Ty): boolean { return t.k === "record" && t.fields instanceof ModuleFields; }
 // What opens a standard module (std/name), for a hint.
@@ -4100,7 +4121,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function boundBy(v: Ty, rhs: Expr): Ty {
         const block = doBlocks[doBlocks.length - 1];
         if (isPending(v)) return (v as Extract<Ty, { k: "variant" }>).args[0];
-        if (["var", "operation", "dynamic", "intrinsic"].includes(v.k) || isLoadCall(rhs)) return runType(v);
+        if (["var", "operation", "dynamic", "intrinsic"].includes(v.k)) return runType(v);
         const mixed = (m: Ty) => block?.monad && monadKind(block.monad) !== monadKind(m);
         if (isIO(v)) {
             if (block && mixed(v)) return problem(`<- needs a ${text(block.monad!)} here, not ${text(v)}`, rhs);
@@ -4344,15 +4365,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                             if (opened.k === "record") for (const [name, field] of opened.fields) child.set(name, { type: field });
                             continue;
                         }
+                        // A field naming a native or a function is that one (upper = upper,
+                        // reverse = reverse), its clauses too, as at runtime.
+                        const named = value.t === "var" ? child.get(value.name) : undefined;
                         if (e.declared?.includes(key)) child.set(key, { type: infer(value, child) });
+                        else if (named && (named.builtin || named.clauses) && !forwardOf.has(named.type)) child.set(key, { ...named, inherited: undefined });
                         else if (!analyzed.has(item)) define(key, (item as Extract<Expr, { t: "stmDef" }>).clauses, child, item);
+                        // An operator's fixity is its value's, as at the top level.
+                        const fixity = fixitiesOf(program)?.get(key), entry = child.get(key);
+                        if (fixity && entry) entry.fixity = fixity;
                         parts.push({ name: key, slot: slot(key, value) });
                     }
                     let made: Ty = { k: "record", fields: new Map() };
                     for (const part of parts) made = operation("merge-record", [made, "spread" in part ? part.spread
                         : { k: "record", fields: new Map([[part.name, child.get(part.name)!.type]]), ...part.slot ? {} : { bound: new Set([part.name]) } }]);
                     const record = resolve(made);
-                    return record.k === "record" ? { ...record, code: e.items.map(expr => ({ expr, scope })) } : made;
+                    // (Its scope is kept: a module's record opens its fields as defined there.)
+                    return record.k === "record" ? { ...record, code: e.items.map(expr => ({ expr, scope })), scope: child } : made;
                 }
                 // Each field is in scope for those after it, as at runtime.
                 let result: Ty = { k: "record", fields: new Map() }, fieldScope: Scope = scope;
@@ -4469,11 +4498,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (resolved.k === "intrinsic" && resolved.name === "import") {
                     if (["list", "int", "float", "numeric", "char", "bool", "record"].includes(a.t)) return problem(IMPORT_ONE.message, a, IMPORT_ONE.hint);
                     if (a.t !== "string" || !options.imports) return io(unknown());
-                    return io({ k: "record", fields: new ModuleFields(copyTypeScope(options.imports(a.v))) });
+                    return io(options.imports(a.v));
                 }
                 if (resolved.k === "intrinsic" && resolved.name === "load" && a.t === "string" && options.loads) {
-                    // load "file": an action running the file here, yielding its record.
-                    return io({ k: "record", fields: new ModuleFields(options.loads(a.v, scope)) });
+                    // load "file": an action running the file in a scope of its own, yielding its value.
+                    return io(options.loads(a.v));
                 }
                 if (resolved.k === "intrinsic" && resolved.name === "do" && a.t === "list") {
                     return infer({ t: "block", stmts: a.v, style: "{" }, scope);
@@ -5479,13 +5508,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             seenExpr.set(x, envs);
             for (const name of mentionedNames(x)) {
                 if (env?.has(name)) { walkKnown(env.get(name)); continue; }
-                if (name === "load") {
-                    // A file loaded by a literal path reaches what its source names.
-                    const names = loadedNames(x);
-                    if (!names) { all = true; return; }
-                    names.forEach(walkName);
-                    continue;
-                }
                 if (MUTATING_NAMES.has(name)) continue;
                 // A name a Dynamic use may have opened has no visible origin.
                 if ((opaqueUse || options.openedElsewhere?.()) && !scope.has(name)) { all = true; return; }
@@ -5494,28 +5516,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         };
         walkExpr(e);
         return { cells, lazies, all };
-    }
-    // The names the files x loads mention, when every load in x names its
-    // file literally and the session checked that file (and it loads nothing).
-    // A use there opens names from records it names, so it reaches nothing more.
-    function loadedNames(x: Expr): Set<string> | undefined {
-        const names = new Set<string>();
-        let loads = 0, literal = 0, ok = true;
-        const walk = (node: unknown): void => {
-            if (!node || typeof node !== "object") return;
-            if (Array.isArray(node)) { node.forEach(walk); return; }
-            const n = node as Record<string, unknown>;
-            if (n.t === "var" && n.name === "load") loads++;
-            if (n.t === "app" && (n.f as Record<string, unknown>)?.t === "var" && (n.f as Record<string, unknown>).name === "load" && (n.a as Record<string, unknown>)?.t === "string") {
-                literal++;
-                const mentioned = options.loadedNames?.((n.a as { v: string }).v);
-                if (!mentioned || mentioned.has("load")) ok = false;
-                else mentioned.forEach(name => names.add(name));
-            }
-            Object.values(n).forEach(value => value && typeof value === "object" && walk(value));
-        };
-        walk(x);
-        return ok && loads === literal ? names : undefined;
     }
     // Values left unforced by earlier statements, still held by top-level
     // cells or kept values; the cells and values holding them.
@@ -8195,6 +8195,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Code parse makes is read at runtime (a literal load's is checked: see PRELUDE_TYPINGS).
     native("intrinsics.parse", [str], explicitDynamic);
     native("intrinsics.readFileFrom", [str], io(str));
+    // (load types a literal path's file by a rule: see PRELUDE_TYPINGS.)
+    native("intrinsics.runFile", [str], io(variable()));
     // A list's code: probe shows it, toAST gives it as lists; reduce gives
     // the values alone (a plain list, not code).
     native("intrinsics.written", [variable()], str);
@@ -8433,7 +8435,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // Whether a statement ran yet: a file's last statement then is in its monad.
     let ran = false;
+    // The program's value: its last statement's, when that is an expression.
+    let value: Ty | undefined;
     for (const [index, written] of program.entries()) {
+        value = undefined;
         if (options.before?.index === index) options.before.scope(new Map(scope));
         const statement = written;
         // Each top-level statement gets the same bounded work, so a long module
@@ -8475,7 +8480,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             else if (statement.t === "type") declare(statement.def, scope);
             else if (statement.t === "expr") {
                 executeTopLevel(statement.value, scope);
-                const type = infer(statement.value, scope);
+                const type = value = infer(statement.value, scope);
                 validate(type);
                 // The top level is a block: what binds nothing is an action.
                 const last = index === program.length - 1;
@@ -8547,7 +8552,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         issues.push({ message: `cannot establish static types: ${dynamicBoundaries} unresolved dynamic boundaries; mark runtime code with Dynamic`,
             ...unknownLength ? { hint: "the checker cannot find this list's length: mark it `Dynamic`, or write a clause per pattern so each clause's length follows" } : {}, pos: loc?.start ?? 0, len: Math.max(1, (loc?.end ?? 1) - (loc?.start ?? 0)), source: loc?.source, file: loc?.file });
     }
-    options.result?.(scope, new Map([...scope].filter(([name, entry]) => originalScope.get(name) !== entry)));
+    options.result?.(scope, new Map([...scope].filter(([name, entry]) => originalScope.get(name) !== entry)), value);
     return { issues, dynamicBoundaries, runtimeChecks, opaqueUse };
 }
 // A builtin's type as APN writes one (a -> List a), or undefined when it has

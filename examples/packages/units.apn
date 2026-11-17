@@ -1,4 +1,6 @@
 # Shared helpers, imported from subfolders too (imports search parent folders
 # up to the program's folder).
-squareMetres n = to String n ++ " m²"
-cubicMetres n = to String n ++ " m³"
+[
+    squareMetres n = to String n ++ " m²"
+    cubicMetres n = to String n ++ " m³"
+]

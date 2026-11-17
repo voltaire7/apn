@@ -1,34 +1,38 @@
 _sequence <- import "std/sequence"
-use _sequence
-# Exact arithmetic remains exact through these functions.
-sq x = x * x
-cube x = x * x * x
-clamp lo hi x = lo > hi ? fail "clamp requires lo <= hi" : max lo (min hi x)
-sign x = x < 0 ? -1 : (x > 0 ? 1 : 0)
-# Angles in radians, as in Elm's Basics: degrees 180 and turns 0.5 are pi.
-pi = 4 * atan 1
-degrees d = d * pi / 180
-turns t = 2 * pi * t
-# Division that cannot fail: None for a zero divisor (a Float zero too,
-# rather than infinity), else Some quotient.
-safeDiv _ 0 = None
-safeDiv x y = Some (x / y)
-factorial 0 = 1
-factorial n = isInteger n
-    ? (n < 0 ? fail "factorial expects a non-negative integer" : product [1..(n : Int)])
-    : fail "factorial expects an integer"
-mean xs = null xs ? None : Some (sum xs / length xs)
-variance xs = null xs ? None : {
-    m = 0 + withDefault (0 : Number) (mean xs)
-    Some (sum (map (x -> sq (x - m)) xs) / length xs)
-}
-standardDeviation xs = map sqrt (variance xs)
-median xs = null xs ? None : {
-    ordered = sort xs
-    n = length ordered
-    mid = quotient n 2
-    isOdd n ? Some (ordered mid) : Some ((ordered (mid - 1) + ordered mid) / 2)
-}
-isPrime n = n < 2 ? False : all (d -> n % d != 0) (takeWhile (d -> d * d <= n) [2..])
-primes = filter isPrime [2..]
-fibonacci = 0 :: 1 :: zipWith (+) fibonacci (tail fibonacci)
+_functions <- import "std/function"
+_option <- import "std/option"
+use [_sequence,_functions,_option]
+[
+    # Exact arithmetic remains exact through these functions.
+    sq x = x * x
+    cube x = x * x * x
+    clamp lo hi x = lo > hi ? fail "clamp requires lo <= hi" : max lo (min hi x)
+    sign x = x < 0 ? -1 : (x > 0 ? 1 : 0)
+    # Angles in radians, as in Elm's Basics: degrees 180 and turns 0.5 are pi.
+    pi = 4 * atan 1
+    degrees d = d * pi / 180
+    turns t = 2 * pi * t
+    # Division that cannot fail: None for a zero divisor (a Float zero too,
+    # rather than infinity), else Some quotient.
+    safeDiv _ 0 = None
+    safeDiv x y = Some (x / y)
+    factorial 0 = 1
+    factorial n = isInteger n
+        ? (n < 0 ? fail "factorial expects a non-negative integer" : product [1..(n : Int)])
+        : fail "factorial expects an integer"
+    mean xs = null xs ? None : Some (sum xs / length xs)
+    variance xs = null xs ? None : {
+        m = 0 + withDefault (0 : Number) (mean xs)
+        Some (sum (map (x -> sq (x - m)) xs) / length xs)
+    }
+    standardDeviation xs = map sqrt (variance xs)
+    median xs = null xs ? None : {
+        ordered = sort xs
+        n = length ordered
+        mid = quotient n 2
+        isOdd n ? Some (ordered mid) : Some ((ordered (mid - 1) + ordered mid) / 2)
+    }
+    isPrime n = n < 2 ? False : all (d -> n % d != 0) (takeWhile (d -> d * d <= n) [2..])
+    primes = filter isPrime [2..]
+    fibonacci = 0 :: 1 :: zipWith (+) fibonacci (tail fibonacci)
+]

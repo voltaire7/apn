@@ -1,3 +1,5 @@
 # A right-grouping operator a program opens with use.
-infixr 5 <->
-a <-> b = a - b
+[
+    infixr 5 <->
+    a <-> b = a - b
+]

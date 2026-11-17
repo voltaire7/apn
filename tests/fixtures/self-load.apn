@@ -1,0 +1,3 @@
+# Loads itself: a cyclic load.
+again <- load "self-load"
+[again = again]

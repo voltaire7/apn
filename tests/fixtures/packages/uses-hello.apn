@@ -1,3 +1,5 @@
 hello <- import "hello"
 use hello
-exported = greet "pkg"
+[
+    exported = greet "pkg"
+]

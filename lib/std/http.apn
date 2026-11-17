@@ -6,49 +6,58 @@
 # body, a timeout of 0) none: [method = "POST", headers = [["Accept","*/*"]]].
 _option <- import "std/option"
 _text <- import "std/text"
-use [_option,_text]
-FetchOptions = [method : String = "GET", headers : List [String,String], body : String, timeout : Int]
-_options = pairs ([] : FetchOptions)
-# Ascribed, options keep the fields FetchOptions does not have, after its own.
-fetch url options = {
-    given = options : FetchOptions
-    others = drop (length _options) (pairs given)
-    !null others ? _unknown (head others) : (given.timeout < 0
-        ? fail "fetch: timeout must not be negative (milliseconds; 0 for none)"
-        : sendRequest url (upper given.method) given.headers given.body given.timeout)
-}
-_unknown [name,_] = fail ("fetch: unknown option '" ++ name ++ "'; the options are "
-    ++ joinWith ", " (map ([key,_] -> key) _options))
-
-# The body of a successful (2xx) response; any other status fails.
-fetchText url options = {
-    response <- fetch url options
-    response.ok ? return response.body : fail ("fetch: " ++ response.url ++ " answered "
-        ++ to String response.status ++ " " ++ response.statusText)
-}
-# A successful response's body, decoded as JSON (see the json module).
-fetchJson url options = {
-    text <- fetchText url options
-    return (from JSON text)
-}
-
-# Requests as commands, as in Elm's Http: the browser sends them without
-# blocking, and the expectation turns the answer into a message.
+_sequence <- import "std/sequence"
+_functions <- import "std/function"
+use [_option,_text,_sequence,_functions]
 _decode <- import "std/decode"
-HttpError = BadUrl String | Timeout | NetworkError | BadStatus Int | BadBody String
-HttpEffect = | HttpGet Dynamic Dynamic
-get request = HttpGet request.url request.expect
-# An expectation: json says whether the body is parsed (as from JSON) first;
-# success gets the body, failure the status (0: no answer, -1: not JSON) and why.
-failure toMessage status reason = toMessage
-    (Err (status == 0 ? NetworkError : (status == -1 ? BadBody reason : BadStatus status)))
-expectString toMessage = [
-    json = False
-    success = body -> toMessage (Ok body)
-    failure = failure toMessage
-]
-expectJson toMessage decoder = [
-    json = True
-    success = value -> toMessage (mapError BadBody (_decode.decodeValue decoder value))
-    failure = failure toMessage
+[
+    FetchOptions = [
+        method : String = "GET"
+        headers : List [String,String]
+        body : String
+        timeout : Int
+    ]
+    _options = pairs ([] : FetchOptions)
+    # Ascribed, options keep the fields FetchOptions does not have, after its own.
+    fetch url options = {
+        given = options : FetchOptions
+        others = drop (length _options) (pairs given)
+        !null others ? _unknown (head others) : (given.timeout < 0
+            ? fail "fetch: timeout must not be negative (milliseconds; 0 for none)"
+            : sendRequest url (upper given.method) given.headers given.body given.timeout)
+    }
+    _unknown [name,_] = fail ("fetch: unknown option '" ++ name ++ "'; the options are "
+        ++ joinWith ", " (map ([key,_] -> key) _options))
+
+    # The body of a successful (2xx) response; any other status fails.
+    fetchText url options = {
+        response <- fetch url options
+        response.ok ? return response.body : fail ("fetch: " ++ response.url ++ " answered "
+            ++ to String response.status ++ " " ++ response.statusText)
+    }
+    # A successful response's body, decoded as JSON (see the json module).
+    fetchJson url options = {
+        text <- fetchText url options
+        return (from JSON text)
+    }
+
+    # Requests as commands, as in Elm's Http: the browser sends them without
+    # blocking, and the expectation turns the answer into a message.
+    HttpError = BadUrl String | Timeout | NetworkError | BadStatus Int | BadBody String
+    HttpEffect = | HttpGet Dynamic Dynamic
+    get request = HttpGet request.url request.expect
+    # An expectation: json says whether the body is parsed (as from JSON) first;
+    # success gets the body, failure the status (0: no answer, -1: not JSON) and why.
+    failure toMessage status reason = toMessage
+        (Err (status == 0 ? NetworkError : (status == -1 ? BadBody reason : BadStatus status)))
+    expectString toMessage = [
+        json = False
+        success = body -> toMessage (Ok body)
+        failure = failure toMessage
+    ]
+    expectJson toMessage decoder = [
+        json = True
+        success = value -> toMessage (mapError BadBody (_decode.decodeValue decoder value))
+        failure = failure toMessage
+    ]
 ]

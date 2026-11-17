@@ -239,6 +239,6 @@ Deno.test("html and text import together, in either order", () => {
         const i = new Interpreter();
         i.enableChecking();
         i.run(parse(source));
-        if (i.renderString(i.run(parse('[splitWhile (< 3) [1,2,3], upper "a"]'))) !== '[[[1,2],[3]], "A"]') throw new Error(source);
+        if (i.renderString(i.run(parse('[words "a b", upper "a"]'))) !== '[["a","b"], "A"]') throw new Error(source);
     }
 });

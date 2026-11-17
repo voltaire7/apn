@@ -1,20 +1,16 @@
 import { APNError } from "./errors.ts";
 import { parse } from "./parser.ts";
 import { loadPath, readLoad, resolveModule, unknownModule } from "./modules.ts";
-import { type CheckOptions, checkTypes, copyTypeScope, dynamicEntry, isModuleType, mayMutate, moduleType, type TypeBridge, type TypeScope } from "./type-checker.ts";
-import { readsModule, type Expr, type TopLevel } from "./ast.ts";
-import { NATIVE_EXPORTS } from "./natives.ts";
+import { type CheckOptions, checkTypes, dynamicEntry, importedValue, mayMutate, moduleType, moduleValue, type TypeBridge, type TypeScope } from "./type-checker.ts";
+import { type Expr, type TopLevel } from "./ast.ts";
+type Ty = ReturnType<typeof moduleValue>;
 
 /** Static state is separate from evaluation: checking never runs an APN action. */
 export class CheckingSession {
     private scope: TypeScope = new Map();
-    private modules = new Map<string, TypeScope>();
+    // Each file's or folder's value, by its path (see moduleValue).
+    private modules = new Map<string, Ty>();
     private loading = new Set<string>();
-    private checkedLoads = new Map<string, string>();
-
-    verifyLoad(name: string, directory: string, source: string): void {
-        if (this.checkedLoads.get(loadPath(name, directory, this.moduleSources)) !== source) throw new APNError("type", `load '${name}' was not checked with this source; resubmit its definition or use Dynamic for runtime loading`);
-    }
     // A bundle (a browser build) to import from instead of the disk: virtual
     // paths to sources (see bundleProgram in modules.ts).
     moduleSources?: Record<string, string>;
@@ -71,10 +67,11 @@ export class CheckingSession {
      * on a record of unknown fields. */
     private opaqueUses = new Set<TopLevel[]>();
 
-    private check(program: TopLevel[], directory: string, initial: TypeScope, library: boolean, before?: CheckOptions["before"], file = true): { scope: TypeScope; exports: TypeScope } {
+    private check(program: TopLevel[], directory: string, initial: TypeScope, library: boolean, before?: CheckOptions["before"], file = true): { scope: TypeScope; exports: TypeScope; value?: Ty } {
         this.mutation ||= mayMutate(program);
         let scope: TypeScope = new Map();
         let exports: TypeScope = new Map();
+        let value: Ty | undefined;
         const result = checkTypes(program, {
             strict: true, initial, library, before, file,
             runtimeNames: !library && this.runtimeNames ? new Set(this.runtimeNames()) : undefined,
@@ -87,13 +84,9 @@ export class CheckingSession {
             valueTypes: this.valueTypes,
             patternTypes: this.patternTypes,
             bridge: bridge => { this.bridge = bridge; },
-            loadedNames: path => this.loadedNames(path, directory),
-            imports: module => {
-                const fields = this.module(module, directory);
-                return fields;
-            },
-            loads: (path, caller) => this.load(path, directory, caller),
-            result: (value, published) => { scope = value; exports = published; },
+            imports: module => this.module(module, directory),
+            loads: path => this.load(path, directory),
+            result: (bound, published, last) => { scope = bound; exports = published; value = last; },
         });
         // A module's use opens names in its own scope, which no other program shares.
         if (result.opaqueUse && !library) this.opaqueUses.add(program);
@@ -103,63 +96,50 @@ export class CheckingSession {
             error.src = issue.source;
             throw error;
         }
-        return { scope, exports };
+        return { scope, exports, value };
     }
 
-    module(module: string, directory = "."): TypeScope {
+    // The value of the module spec names from directory, its own copy for this
+    // import: a file's (its last statement's), or a folder's record of its
+    // entries, each checked when first read.
+    module(module: string, directory = "."): Ty {
         const resolved = resolveModule(module, directory, this.moduleSources, this.root);
         if (!resolved) { const { message, hint } = unknownModule(module, !!this.moduleSources); throw new APNError("type", message, { hint }); }
-        if (this.modules.has(resolved.key)) return copyTypeScope(this.modules.get(resolved.key)!);
+        const known = this.modules.get(resolved.key);
+        if (known) return importedValue(known);
         if (this.loading.has(resolved.key)) throw new APNError("type", `cyclic import '${module}'`);
         this.loading.add(resolved.key);
         try {
-            // A file's exports, or a folder's entries, each a module checked
-            // when it is first used.
-            const exports: TypeScope = new Map();
-            for (const file of resolved.files) {
-                const checked = this.check(parse(file.source, file.label), file.directory, new Map(), true);
-                for (const key of file.std ? NATIVE_EXPORTS[file.std] ?? [] : []) {
-                    const entry = checked.scope.get(key);
-                    if (entry) checked.exports.set(key, entry);
+            let value: Ty;
+            if (resolved.files.length) {
+                const [file] = resolved.files;
+                // (Its last statement is its value, not an action of its block.)
+                value = moduleValue(this.check(parse(file.source, file.label), file.directory, new Map(), true, undefined, false).value);
+            } else {
+                const entries: TypeScope = new Map();
+                for (const entry of resolved.entries) {
+                    let type: Ty | undefined;
+                    entries.set(entry.name, Object.defineProperty({}, "type", {
+                        enumerable: true, get: () => type ??= this.module(entry.spec, entry.directory), set: (t: Ty) => { type = t; },
+                    }) as ReturnType<typeof dynamicEntry>);
                 }
-                for (const [name, entry] of checked.exports) {
-                    // A module the file names for itself (std <- import "std") is its own.
-                    if (isModuleType(entry.type) || entry.bound && readsModule(entry.bound)) continue;
-                    entry.nonGeneric = undefined; entry.mono = false;
-                    exports.set(name, entry);
-                }
+                value = moduleType(() => entries);
             }
-            for (const entry of resolved.entries) exports.set(entry.name, { type: moduleType(() => this.module(entry.spec, entry.directory)) });
-            this.modules.set(resolved.key, exports);
-            return copyTypeScope(exports);
+            this.modules.set(resolved.key, value);
+            return importedValue(value);
         } catch (error) {
             if (error instanceof APNError && !error.message.startsWith(`${module}: `)) error.message = `${module}: ${error.message}`;
             throw error;
         } finally { this.loading.delete(resolved.key); }
     }
 
-    /** Every variable name a checked loaded file mentions (see CheckOptions.loadedNames). */
-    loadedNames(name: string, directory: string): Set<string> | undefined {
-        const path = loadPath(name, directory, this.moduleSources);
-        // A statement's static run precedes checking it: read the file it loads.
-        const source = this.checkedLoads.get(path) ?? readLoad(path, this.moduleSources);
-        if (source === undefined) return undefined;
-        const names = new Set<string>();
-        const walk = (node: unknown): void => {
-            if (!node || typeof node !== "object") return;
-            if (Array.isArray(node)) { node.forEach(walk); return; }
-            const n = node as Record<string, unknown>;
-            if (n.t === "var" && typeof n.name === "string") names.add(n.name);
-            Object.values(n).forEach(value => value && typeof value === "object" && walk(value));
-        };
-        walk(parse(source, path));
-        return names;
-    }
-    // A loaded file's bindings, checked in the caller's scope. A load reads
-    // code: one of a file being checked (a file loading itself) adds nothing.
-    load(name: string, directory: string, caller = this.scope): TypeScope {
+    // The value of the file load name runs from directory: its last statement's,
+    // checked in a scope of its own.
+    load(name: string, directory: string): Ty {
         const key = loadPath(name, directory, this.moduleSources);
-        if (this.loading.has(key)) return new Map();
+        const known = this.modules.get(key);
+        if (known) return importedValue(known);
+        if (this.loading.has(key)) throw new APNError("type", `cyclic load '${name}'`);
         this.loading.add(key);
         try {
             const source = readLoad(key, this.moduleSources);
@@ -167,12 +147,9 @@ export class CheckingSession {
                 throw new APNError("type", this.moduleSources ? `load '${name}' is not bundled` : `load: cannot read '${name}' (looked in '${key}')`,
                     this.moduleSources ? { hint: "a browser build bundles only files inside the program's folder" } : {});
             }
-            const exports = this.check(parse(source, key), key.slice(0, key.lastIndexOf("/") + 1), copyTypeScope(caller), false).exports;
-            this.checkedLoads.set(key, source);
-            return exports;
-        } catch (error) {
-            if (error instanceof APNError) throw error;
-            throw new APNError("type", `load: cannot check '${name}': ${String(error)}`);
+            const value = moduleValue(this.check(parse(source, key), key.slice(0, key.lastIndexOf("/") + 1), new Map(), true, undefined, false).value);
+            this.modules.set(key, value);
+            return importedValue(value);
         } finally { this.loading.delete(key); }
     }
 }

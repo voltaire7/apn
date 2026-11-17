@@ -4,7 +4,9 @@ import { parse } from "../main.ts";
 function interpreter(): Interpreter {
     const i = new Interpreter();
     i.sourceDir = new URL("../examples/advent-of-code/", import.meta.url).pathname;
-    i.run(parse('sonar <- load "sonar-sweep"; fish <- load "lanternfish"; hill <- load "hill-climbing"; use sonar; use fish; use hill'));
+    // (A loaded file runs in a scope of its own: the library names the stress cases use are opened here.)
+    i.run(parse('std <- import "std"; use std.[text,search,sequence]\n' +
+        'sonar <- load "sonar-sweep"; fish <- load "lanternfish"; hill <- load "hill-climbing"\nuse [sonar,fish,hill]'));
     return i;
 }
 function result(i: Interpreter, source: string): string { return i.renderString(i.run(parse(source))); }

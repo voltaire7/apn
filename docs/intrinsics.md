@@ -159,12 +159,12 @@ no abstract types, every constructor is public. A `Mutable` cell is a reference 
 action that changes the store; a `HashMap` is an association list whose keys
 appear once.
 
-`load` is the prelude's (`load file = map parse (intrinsics.readFileFrom (file
-++ ".apn"))`), and `import` is `intrinsics.import`, an action as `readFileFrom`
-is: it finds the module, runs each file once per run in a scope of its own, and
-for a folder imports every entry with it, so reading a field (`std.option`)
-runs nothing. Only finding files and running one in a scope of its own are the
-interpreter's.
+`import` is `intrinsics.import` and `load` the prelude's `load file =
+intrinsics.runFile (file ++ ".apn")`, actions as `readFileFrom` is: each runs a
+file in a scope of its own, yielding its value (its last statement's), `import`
+once per run, after finding the module, and for a folder every entry with it,
+so reading a field (`std.option`) runs nothing; `load` again each time. Only
+finding files and running one in a scope of its own are the interpreter's.
 
 ## Dynamic
 

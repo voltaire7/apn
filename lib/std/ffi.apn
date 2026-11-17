@@ -1,2 +1,11 @@
 # Native ABI declarations use APN type constructors.
-function parameters result = [parameters = parameters, result = result]
+[
+    withLibrary = withLibrary
+    allocate = allocate
+    peek = peek
+    poke = poke
+    offset = offset
+    nullPointer = nullPointer
+
+    function parameters result = [parameters = parameters, result = result]
+]

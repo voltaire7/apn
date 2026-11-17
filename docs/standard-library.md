@@ -64,12 +64,11 @@ A record pattern takes some names of a module and leaves the rest:
 "std/system"` binds only `stop`. Each name it binds is the module's, as `use`
 opens it: `[sum] <- import "std/sequence"` sums Ints and Floats alike.
 
-`load "file"` reads `file.apn` beside the running file as code, again each time
-it runs; `use` of that code runs the file there, in the caller's scope, while
-`import` runs a module once, in its own scope (see
-[module imports](semantics.md#module-imports)). `parse` turns any source text
-into code, and `std.io`'s `readFileFrom` reads a file beside the running one,
-as `load` does (`readFile` reads from the working directory).
+`load "file"` runs `file.apn` beside the running file in a scope of its own,
+again each time it runs, yielding its value, while `import` runs a module once
+(see [module imports](semantics.md#module-imports)). `parse` turns any source
+text into code, and `std.io`'s `readFileFrom` reads a file beside the running
+one (`readFile` reads from the working directory).
 `sq` lives in `number`; `halt` lives in `system`.
 
 ## Functions — `function`
@@ -526,10 +525,10 @@ It selects the first matching unary function from a lazy list of alternatives.
 See [pattern functions and contracts](pattern-functions.md).
 
 A bare `load "file"` (or `import "path"`) in the REPL runs it without displaying
-the code or module it yields. This avoids forcing unused exports such as
-infinite lists. Use `module <- load "file"` to keep the code, then read
-selected fields, or `use module` to run the file there. Printing the whole
-module (`print module`) can stream indefinitely if it holds infinite lists.
+the value it yields. This avoids forcing unused exports such as infinite lists.
+Use `module <- load "file"` to keep the value, then read selected fields, or
+`use module` to open them. Printing the whole module (`print module`) can
+stream indefinitely if it holds infinite lists.
 
 ## Resource scopes and type utilities
 

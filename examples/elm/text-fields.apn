@@ -1,7 +1,7 @@
 # Text Fields, from https://elm-lang.org/examples/text-fields
 # A text input for reversing text. Very useful!
 std <- import "std"
-use std.[html,text]
+use std.[html,text,sequence]
 [browser] = std
 
 Msg = | Change String

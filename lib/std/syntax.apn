@@ -1,19 +1,23 @@
 _sequence <- import "std/sequence"
 _text <- import "std/text"
-use [_sequence,_text]
-# Code as data. toAST (in the prelude) gives an expression as lists: a leaf is
-# a number, a Bool, a name or a literal's source text ("x", "\"x\"", "'c'");
-# an application is a list, function first (["f","x"], ["+", 1, 2]); other
-# syntax is a list headed by a token no name can be (["[]",1,2] is [1,2],
-# [":","x","Int"] is (x : Int)).
-# fromAST writes such data as source; eval runs it at the program's top level.
+_functions <- import "std/function"
+_option <- import "std/option"
+use [_sequence,_functions,_option,_text]
 source <- (load "syntax/source" : Dynamic)
 use source
 lambda <- (load "syntax/lambda" : Dynamic)
 use lambda
-fromAST syntax = (_fromAST syntax : Dynamic) : String
-eval syntax = intrinsics.eval (fromAST syntax)
-# toLambda gives code desugared to lambdas and application, as code: each
-# item of [x = 10, y = x + 1, y] is the block of the bindings before it, so
-# its last is (x -> (y -> y) (x + 1)) 10 (see syntax/lambda). probe shows it.
-toLambda code = eval (_lambda [] (intrinsics.syntax code) : Dynamic)
+[
+    # Code as data. toAST (in the prelude) gives an expression as lists: a leaf is
+    # a number, a Bool, a name or a literal's source text ("x", "\"x\"", "'c'");
+    # an application is a list, function first (["f","x"], ["+", 1, 2]); other
+    # syntax is a list headed by a token no name can be (["[]",1,2] is [1,2],
+    # [":","x","Int"] is (x : Int)).
+    # fromAST writes such data as source; eval runs it at the program's top level.
+    fromAST syntax = (_fromAST syntax : Dynamic) : String
+    eval syntax = intrinsics.eval (fromAST syntax)
+    # toLambda gives code desugared to lambdas and application, as code: each
+    # item of [x = 10, y = x + 1, y] is the block of the bindings before it, so
+    # its last is (x -> (y -> y) (x + 1)) 10 (see syntax/lambda). probe shows it.
+    toLambda code = eval (_lambda [] (intrinsics.syntax code) : Dynamic)
+]

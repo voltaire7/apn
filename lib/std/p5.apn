@@ -2,101 +2,107 @@
 _html <- import "std/html"
 _array <- import "std/array"
 _glsl <- import "std/glsl"
-P5Program = | P5Sketch Dynamic
-sketch callbacks = P5Sketch callbacks
-# A sketch inside an HTML view (an element program's): it keeps drawing across
-# renders with the newest callbacks, which may read the model, and p.send msg
-# sends a message to update.
-canvas callbacks = _html.HtmlSketch callbacks
-# A callback's p, the running sketch: setup (p : Sketch) = ... Its properties
-# are typed (width, mouseX: Number; mouseIsPressed: Bool; key: String), and
-# its methods Dynamic, as p5's take many kinds of arguments (a color is a
-# number, a string or a list), so they are checked as they run.
-Sketch = p5SketchType
+[
+    p5Object = p5Object
+    p5SketchType = p5SketchType
 
-# The objects a sketch uses, as values: each sketch makes (or loads) one the
-# first time it uses it and keeps it. A sketch's preload lists the files to
-# load before setup: p5.sketch [preload = [font], setup = setup, draw = draw].
-loadImage path = p5Object "loadImage" [path]
-loadFont path = p5Object "loadFont" [path]
-loadModel path = p5Object "loadModel" [path]
-createImage width height = p5Object "createImage" [width,height]
-createGraphics width height = p5Object "createGraphics" [width,height]
-# A video from its sources (the first the browser plays), and an audio player.
-createVideo sources = p5Object "createVideo" [sources]
-createAudio source = p5Object "createAudio" [source]
-# The webcam, as a video (the browser asks the user first).
-createCapture = p5Object "createCapture" ["video"]
-createShader vertex fragment = p5Object "createShader" [vertex,fragment]
-createFilterShader fragment = p5Object "createFilterShader" [fragment]
-createFramebuffer = p5Object "createFramebuffer" []
-# A model drawn by draw (given the sketch's p) with the sketch's own shapes.
-buildGeometry draw = p5Object "buildGeometry" [draw]
-# p5's shaders, and one modified by GLSL hooks ([hookName = "body", ...]).
-baseFilterShader = p5Object "baseFilterShader" []
-baseColorShader = p5Object "baseColorShader" []
-baseMaterialShader = p5Object "baseMaterialShader" []
-modify hooks shader = p5Object "modify" [shader,hooks]
+    P5Program = | P5Sketch Dynamic
+    sketch callbacks = P5Sketch callbacks
+    # A sketch inside an HTML view (an element program's): it keeps drawing across
+    # renders with the newest callbacks, which may read the model, and p.send msg
+    # sends a message to update.
+    canvas callbacks = _html.HtmlSketch callbacks
+    # A callback's p, the running sketch: setup (p : Sketch) = ... Its properties
+    # are typed (width, mouseX: Number; mouseIsPressed: Bool; key: String), and
+    # its methods Dynamic, as p5's take many kinds of arguments (a color is a
+    # number, a string or a list), so they are checked as they run.
+    Sketch = p5SketchType
 
-# Shaders whose hooks are APN functions on GLSL values (the glsl module's), as
-# p5.strands writes them in JavaScript. uniforms names each uniform's GLSL type
-# and its value each frame, a function of the sketch: [time = ["float", (Sketch
-# p -> p.millis)]]; a hook reads one by name (Glsl "time"). A filter's hook gets
-# its inputs (texCoord, canvasSize, texelSize, canvasContent) and gives the
-# pixel's color.
-_input field = _glsl.Glsl ("inputs." ++ field)
-# The hooks by key, and the uniforms as p5 takes them ("float time": value).
-_hooks uniforms code = (["uniforms", (map ([name,[type,value]] ->
-    [type ++ " " ++ name, value]) (pairs uniforms) : HashMap _ _)] :: code : HashMap _ _) : Dynamic
-buildFilterShader uniforms hook = {
-    color = hook [
-        texCoord = _input "texCoord", canvasSize = _input "canvasSize"
-        texelSize = _input "texelSize", canvasContent = _glsl.Glsl "canvasContent"
+    # The objects a sketch uses, as values: each sketch makes (or loads) one the
+    # first time it uses it and keeps it. A sketch's preload lists the files to
+    # load before setup: p5.sketch [preload = [font], setup = setup, draw = draw].
+    loadImage path = p5Object "loadImage" [path]
+    loadFont path = p5Object "loadFont" [path]
+    loadModel path = p5Object "loadModel" [path]
+    createImage width height = p5Object "createImage" [width,height]
+    createGraphics width height = p5Object "createGraphics" [width,height]
+    # A video from its sources (the first the browser plays), and an audio player.
+    createVideo sources = p5Object "createVideo" [sources]
+    createAudio source = p5Object "createAudio" [source]
+    # The webcam, as a video (the browser asks the user first).
+    createCapture = p5Object "createCapture" ["video"]
+    createShader vertex fragment = p5Object "createShader" [vertex,fragment]
+    createFilterShader fragment = p5Object "createFilterShader" [fragment]
+    createFramebuffer = p5Object "createFramebuffer" []
+    # A model drawn by draw (given the sketch's p) with the sketch's own shapes.
+    buildGeometry draw = p5Object "buildGeometry" [draw]
+    # p5's shaders, and one modified by GLSL hooks ([hookName = "body", ...]).
+    baseFilterShader = p5Object "baseFilterShader" []
+    baseColorShader = p5Object "baseColorShader" []
+    baseMaterialShader = p5Object "baseMaterialShader" []
+    modify hooks shader = p5Object "modify" [shader,hooks]
+
+    # Shaders whose hooks are APN functions on GLSL values (the glsl module's), as
+    # p5.strands writes them in JavaScript. uniforms names each uniform's GLSL type
+    # and its value each frame, a function of the sketch: [time = ["float", (Sketch
+    # p -> p.millis)]]; a hook reads one by name (Glsl "time"). A filter's hook gets
+    # its inputs (texCoord, canvasSize, texelSize, canvasContent) and gives the
+    # pixel's color.
+    _input field = _glsl.Glsl ("inputs." ++ field)
+    # The hooks by key, and the uniforms as p5 takes them ("float time": value).
+    _hooks uniforms code = (["uniforms", (map ([name,[type,value]] ->
+        [type ++ " " ++ name, value]) (pairs uniforms) : HashMap _ _)] :: code
+        : HashMap _ _) : Dynamic
+    buildFilterShader uniforms hook = {
+        color = hook [
+            texCoord = _input "texCoord", canvasSize = _input "canvasSize"
+            texelSize = _input "texelSize", canvasContent = _glsl.Glsl "canvasContent"
+        ]
+        code = "(FilterInputs inputs, in sampler2D canvasContent) { return " ++ _glsl.glsl color
+        modify (_hooks uniforms [["vec4 getColor", code ++ "; }"]]) baseFilterShader
+    }
+    # The others' hooks, by name, get a vertex's inputs (objectInputs,
+    # worldInputs, cameraInputs) or a pixel's (pixelInputs, a material's) and
+    # give those they change: [position = ...]. (Each is checked where it is
+    # written; here they are Dynamic.)
+    _hookKeys = [
+        objectInputs = "Vertex getObjectInputs", worldInputs = "Vertex getWorldInputs"
+        cameraInputs = "Vertex getCameraInputs", pixelInputs = "Inputs getPixelInputs"
     ]
-    code = "(FilterInputs inputs, in sampler2D canvasContent) { return " ++ _glsl.glsl color
-    modify (_hooks uniforms [["vec4 getColor", code ++ "; }"]]) baseFilterShader
-}
-# The others' hooks, by name, get a vertex's inputs (objectInputs,
-# worldInputs, cameraInputs) or a pixel's (pixelInputs, a material's) and
-# give those they change: [position = ...]. (Each is checked where it is
-# written; here they are Dynamic.)
-_hookKeys = [
-    objectInputs = "Vertex getObjectInputs", worldInputs = "Vertex getWorldInputs"
-    cameraInputs = "Vertex getCameraInputs", pixelInputs = "Inputs getPixelInputs"
-]
-_vertex = [
-    position = _input "position", normal = _input "normal", texCoord = _input "texCoord"
-    color = _input "color"
-]
-_pixel = [
-    normal = _input "normal", texCoord = _input "texCoord", color = _input "color"
-    ambientLight = _input "ambientLight", ambientMaterial = _input "ambientMaterial"
-    specularMaterial = _input "specularMaterial", emissiveMaterial = _input "emissiveMaterial"
-    shininess = _input "shininess", metalness = _input "metalness"
-]
-_structHooks uniforms hooks = _hooks uniforms (map ([name,hook] -> {
-    pixel = name == "pixelInputs"
-    [struct,inputs] = pixel ? ["Inputs", (_pixel : Dynamic)] : ["Vertex", (_vertex : Dynamic)]
-    assign [field,value] = "inputs." ++ field ++ " = " ++ _glsl.glsl value ++ "; "
-    body = foldl (++) "" (map assign (pairs (hook inputs)))
-    [_hookKeys (name : String), "(" ++ struct ++ " inputs) { " ++ body ++ "return inputs; }"]
-}) (pairs (hooks : Dynamic)))
-buildColorShader uniforms hooks = modify (_structHooks uniforms hooks) baseColorShader
-buildMaterialShader uniforms hooks = modify (_structHooks uniforms hooks) baseMaterialShader
+    _vertex = [
+        position = _input "position", normal = _input "normal", texCoord = _input "texCoord"
+        color = _input "color"
+    ]
+    _pixel = [
+        normal = _input "normal", texCoord = _input "texCoord", color = _input "color"
+        ambientLight = _input "ambientLight", ambientMaterial = _input "ambientMaterial"
+        specularMaterial = _input "specularMaterial", emissiveMaterial = _input "emissiveMaterial"
+        shininess = _input "shininess", metalness = _input "metalness"
+    ]
+    _structHooks uniforms hooks = _hooks uniforms (map ([name,hook] -> {
+        pixel = name == "pixelInputs"
+        [struct,inputs] = pixel ? ["Inputs", (_pixel : Dynamic)] : ["Vertex", (_vertex : Dynamic)]
+        assign [field,value] = "inputs." ++ field ++ " = " ++ _glsl.glsl value ++ "; "
+        body = foldl (++) "" (map assign (pairs (hook inputs)))
+        [_hookKeys (name : String), "(" ++ struct ++ " inputs) { " ++ body ++ "return inputs; }"]
+    }) (pairs (hooks : Dynamic)))
+    buildColorShader uniforms hooks = modify (_structHooks uniforms hooks) baseColorShader
+    buildMaterialShader uniforms hooks = modify (_structHooks uniforms hooks) baseMaterialShader
 
-# p5's calculations, which read nothing from a sketch and take its values as
-# they are (Dynamic too). p5's map(value, ...) is remap here, as map is APN's.
-remap value start1 stop1 start2 stop2 =
-    start2 + (value - start1) * (stop2 - start2) / (stop1 - start1)
-lerp start stop amount = start + (stop - start) * amount
-constrain value low high = value < low ? low : (value > high ? high : value)
-dist x1 y1 x2 y2 = sqrt ((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1) : Number)
+    # p5's calculations, which read nothing from a sketch and take its values as
+    # they are (Dynamic too). p5's map(value, ...) is remap here, as map is APN's.
+    remap value start1 stop1 start2 stop2 =
+        start2 + (value - start1) * (stop2 - start2) / (stop1 - start1)
+    lerp start stop amount = start + (stop - start) * amount
+    constrain value low high = value < low ? low : (value > high ? high : value)
+    dist x1 y1 x2 y2 = sqrt ((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1) : Number)
 
-# Vectors are lists ([x,y] or [x,y,z]): + - * / work on them (and with a
-# number) element by element, so these complete p5.Vector.
-mag v = sqrt (_array.dot v v) : Float
-normalize v = v / (mag v == 0 ? 1.0 : mag v)
-setMag length v = normalize v * length
-limit most v = v * (mag v > most ? most / mag v : 1.0)
-heading [x,y] = atan2 y x
-fromAngle angle = [cos angle, sin angle]
+    # Vectors are lists ([x,y] or [x,y,z]): + - * / work on them (and with a
+    # number) element by element, so these complete p5.Vector.
+    mag v = sqrt (_array.dot v v) : Float
+    normalize v = v / (mag v == 0 ? 1.0 : mag v)
+    setMag length v = normalize v * length
+    limit most v = v * (mag v > most ? most / mag v : 1.0)
+    heading [x,y] = atan2 y x
+    fromAngle angle = [cos angle, sin angle]
+]

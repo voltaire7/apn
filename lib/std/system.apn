@@ -1,2 +1,4 @@
 # Process control. Importing this module does not exit.
-halt = exit 0
+[
+    halt = exit 0
+]

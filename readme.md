@@ -38,8 +38,9 @@ frequencies $ words $ "one two one"
 
 Bind one module without opening it with `text <- import "std/text"`.
 See the [standard library reference](docs/standard-library.md) or run
-`apn examples/standard-library.apn`. Imports are cached; `load "file"`
-executes a file each time, relative to the current source file.
+`apn examples/standard-library.apn`. A file's value is its last statement's,
+so a module ends in the record it gives. Imports are cached; `load "file"`
+runs a file each time, relative to the current source file, yielding its value.
 
 APN can also evaluate its own core. See the
 [metacircular evaluator](docs/metacircular-evaluator.md):

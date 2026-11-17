@@ -36,6 +36,8 @@ export const NATIVES: Array<[string, number]> = [
     ["intrinsics.refine", 2],
     // import path: an action reading a module, its record the result.
     ["intrinsics.import", 1],
+    // runFile path: an action running a file beside the running one, its value the result.
+    ["intrinsics.runFile", 1],
     // readFileFrom path: an action reading a file beside the running one;
     // parse source: the code it writes, its items in the scope parse runs in.
     ["intrinsics.readFileFrom", 1], ["intrinsics.parse", 1],
@@ -59,7 +61,7 @@ export const nativeArity = (name: string): number | undefined => ARITIES.get(nam
 // performs. Each with what its action yields, for its type ("a" when that
 // depends on its arguments).
 export const ACTIONS = new Map(Object.entries({
-    "intrinsics.import": "Module", "intrinsics.readFileFrom": "String", compile: "[]", print: "[]", echo: "[]",
+    "intrinsics.import": "Module", "intrinsics.runFile": "a", "intrinsics.readFileFrom": "String", compile: "[]", print: "[]", echo: "[]",
     emit: "[]", repl: "[]", exit: "[]", set: "[]", while: "[]", for: "[]", readFile: "String",
     readStdin: "String", getArgs: "[String]", sendRequest: "Record", bracket: "a", withFile: "a",
     withLibrary: "a", entropy: "Int", currentTime: "Int", zoneOffset: "Int",

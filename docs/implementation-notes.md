@@ -365,7 +365,7 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
 - IO: an action is a `Value` of kind `io` whose `run` performs it. `IO_NATIVES`
   (and host natives) return actions from `callNative` instead of acting;
   `runStmt` (top-level statements) and `runIO` run them. A file runs with
-  `run(program, tailLoad, file = true)` (`main.ts`, `load`, the browser) and
+  `run(program, tailLoad, file = true)` (`main.ts`, the browser) and
   checks with `CheckOptions.file`, so its last statement follows the block
   rule; the REPL and tests run inputs without it, showing the last value. A do-block's last
   step returns an `IOTail` that `runIO`'s loop continues, so recursive actions
@@ -400,8 +400,8 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   session's `instances` (`define` infers them on a copy of the scope), tracks
   each do-block's monad in `doBlocks`, and its view analysis and `topNames`
   skip instance clauses. Tests: `tests/monad-test.ts`.
-- `pattern <- expression` sets AST `patDef.eager`: the value must be an action
-  (`isLoadCall` reads `load` unevaluated), run with `runIO` and its result `reference`d
+- `pattern <- expression` sets AST `patDef.eager`: the value must be an action,
+  run with `runIO` and its result `reference`d
   before matching, keeping Mutable/Pointer references and lazy container
   fields. The checker never re-derives an eager binding (no `definition`), and
   view/key analysis sees through `return`/`return`. Don't change `=` semantics.
@@ -413,10 +413,9 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   owns the iterative loop, splices into the scope `use` was written in, and
   restores `sourceDir` (set to the code's file's folder, `codeSources`; code's
   own reads use `codeDirs`) on success, error, or interruption.
-  `intrinsics.import` and `intrinsics.readFileFrom` actions keep the
-  `dynamicDepth` they were made at, so one written inside `Dynamic` runs
-  unchecked; `parse` keeps whether the text it reads was (`sourcePaths`), as
-  `verifyLoad` checks. The checker types the prelude's `load` by its rule
+  `intrinsics.import`, `intrinsics.runFile` and `intrinsics.readFileFrom`
+  actions keep the `dynamicDepth` they were made at, so one written inside
+  `Dynamic` runs unchecked. The checker types the prelude's `load` by its rule
   (`PRELUDE_TYPINGS`). Non-tail calls keep the depth guard
   (`STACK_LIMIT`), and a host `RangeError` in `evaluate` is the same overflow,
   as one while parsing is a parse error and one in a checked statement its
@@ -436,19 +435,22 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   `Env.bindings` reads a scope through its versions (module exports), and
   `newest` is the version `eval` runs in. `use` publishes the same way, and its
   statement adopts the version (`adoptPublished`). The runtime tags the
-  records `importStandard` makes and the code `parse` makes of a file
-  (`moduleValues`, with their origin; the REPL echoes none), and the checker
-  types both as `ModuleFields` (kept through `copy`); no statement opens one. `use` of a module
-  record publishes its names with the module's origin; the checker opens the
-  module's scope entries (clauses too) and settles each type (`validate`) as a
-  statement's value is, so later code meets its calls decided; a module
-  leaves out of its record the names it bound to the modules it read
-  (`readsModule`, the runtime's `moduleValues`). Tests: `tests/load-test.ts`,
+  values `importModule` and `runFile` give and the code `parse` makes of a file
+  (`moduleValues`, with their origin and whether checked; the REPL echoes
+  none). The checker types a file's value from its last statement
+  (`CheckOptions.result`, `moduleValue`): a record literal keeps the scope its
+  fields were defined in (`scope`), so a module's record is `ModuleFields` over
+  those entries (clauses and fixities too, kept through `copy`, copied per
+  import by `importedValue`), and a field naming a native or function is that
+  entry (`upper = upper`). `use` of a module record publishes its names with
+  the module's origin; the checker opens the module's scope entries and
+  settles each type (`validate`) as a statement's value is, so later code
+  meets its calls decided. Tests: `tests/load-test.ts`,
   `tests/default-checking-test.ts`. The checker never re-checks a reader: a reader's types
   are its version's. Its static block evaluation (`evaluateBlock`) follows
   the same rule. Tests: `tests/semantics-test.ts`, `tests/default-checking-test.ts`.
-- A statically checked load's record (`verifyLoad` ran) publishes by `use` without
-  `protectDynamicWrite`. For other loads, `publishForeignBindings` records,
+- A statically checked module or load's record publishes by `use` without
+  `protectDynamicWrite`. For others, `publishForeignBindings` records,
   per caller scope, which origin (path plus source text) published each
   binding (`publishedBy`), and skips the guard only when the same origin
   replaces the exact value it published. Tests: `tests/dynamic-boundary-test.ts`.

@@ -1,77 +1,80 @@
-_function <- import "std/function"
+_functions <- import "std/function"
 _option <- import "std/option"
-use [_function,_option]
-# Producers and prefix consumers work with infinite lists.
-repeat x = x :: repeat x
-replicate n x = take n (repeat x)
-cycle xs = null xs ? [] : xs ++ cycle xs
-zip xs ys = zipWith pair xs ys
-zipWithIndex (xs : Vect n a) : Vect n [Int,a] = (zipWith pair [0..] xs : Dynamic)
-concat xss = foldr (++) [] xss
-concatMap f xs = concat (map f xs)
-flatten xss = concat xss
-sum xs = foldl (+) (0 : Number) xs
-product xs = foldl (*) (1 : Number) xs
-contains x xs = any (y -> x == y) xs
-findIndex predicate xs = map fst (find (entry -> predicate (snd entry)) (zipWithIndex xs))
-headOption xs = null xs ? None : Some (head xs)
-lastOption xs = foldl (_, x -> Some x) None xs
-atOption n xs = n < 0 ? None : headOption (drop n xs)
-takeUntil predicate xs = takeWhile (x -> not (predicate x)) xs
-splitAt n xs = [take n xs, drop n xs]
-splitWhile predicate xs = [takeWhile predicate xs, dropWhile predicate xs]
-chunksOf n xs = n <= 0 ? fail "chunksOf expects a positive size"
-    : (null xs ? [] : take n xs :: chunksOf n (drop n xs))
-intersperse separator xs = null xs ? []
-    : head xs :: foldr (x, rest -> separator :: x :: rest) [] (tail xs)
-partition predicate xs = [filter predicate xs, filter (x -> not (predicate x)) xs]
-unique xs = null xs ? [] : head xs :: unique (filter (x -> x != head xs) (tail xs))
-# Dictionary order, which sorts: -1, 0 or 1 (<= is inclusion: "ab" <= "b"
-# is False, compare "ab" "b" is -1).
-compare (x : String) (y : String) = _compareItems (to (List Char) x) (to (List Char) y)
-compare (xs : List _) (ys : List _) = _compareItems xs ys
-compare x y = x < y ? -1 : (x > y ? 1 : 0)
-_compareItems xs ys = null xs ? (null ys ? 0 : -1) : (null ys ? 1
-    : compare (head xs) (head ys) ~ [0 -> _compareItems (tail xs) (tail ys), c -> c])
-sort xs = sortBy compare xs
-sortOn project xs = sortBy (on compare project) xs
-minimum xs = null xs ? None : Some (foldl min (head xs) (tail xs))
-maximum xs = null xs ? None : Some (foldl max (head xs) (tail xs))
+use [_functions,_option]
+[
+    # Producers and prefix consumers work with infinite lists.
+    repeat x = x :: repeat x
+    replicate n x = take n (repeat x)
+    cycle xs = null xs ? [] : xs ++ cycle xs
+    zip xs ys = zipWith pair xs ys
+    zipWithIndex (xs : Vect n a) : Vect n [Int,a] = (zipWith pair [0..] xs : Dynamic)
+    concat xss = foldr (++) [] xss
+    concatMap f xs = concat (map f xs)
+    flatten xss = concat xss
+    sum xs = foldl (+) (0 : Number) xs
+    product xs = foldl (*) (1 : Number) xs
+    contains x xs = any (y -> x == y) xs
+    findIndex predicate xs = map fst (find (entry -> predicate (snd entry)) (zipWithIndex xs))
+    headOption xs = null xs ? None : Some (head xs)
+    lastOption xs = foldl (_, x -> Some x) None xs
+    atOption n xs = n < 0 ? None : headOption (drop n xs)
+    takeUntil predicate xs = takeWhile (x -> not (predicate x)) xs
+    splitAt n xs = [take n xs, drop n xs]
+    splitWhile predicate xs = [takeWhile predicate xs, dropWhile predicate xs]
+    chunksOf n xs = n <= 0 ? fail "chunksOf expects a positive size"
+        : (null xs ? [] : take n xs :: chunksOf n (drop n xs))
+    intersperse separator xs = null xs ? []
+        : head xs :: foldr (x, rest -> separator :: x :: rest) [] (tail xs)
+    partition predicate xs = [filter predicate xs, filter (x -> not (predicate x)) xs]
+    unique xs = null xs ? [] : head xs :: unique (filter (x -> x != head xs) (tail xs))
+    # Dictionary order, which sorts: -1, 0 or 1 (<= is inclusion: "ab" <= "b"
+    # is False, compare "ab" "b" is -1).
+    compare (x : String) (y : String) = _compareItems (to (List Char) x) (to (List Char) y)
+    compare (xs : List _) (ys : List _) = _compareItems xs ys
+    compare x y = x < y ? -1 : (x > y ? 1 : 0)
+    _compareItems xs ys = null xs ? (null ys ? 0 : -1) : (null ys ? 1
+        : compare (head xs) (head ys) ~ [0 -> _compareItems (tail xs) (tail ys), c -> c])
+    sort xs = sortBy compare xs
+    sortOn project xs = sortBy (on compare project) xs
+    minimum xs = null xs ? None : Some (foldl min (head xs) (tail xs))
+    maximum xs = null xs ? None : Some (foldl max (head xs) (tail xs))
 
-# Prepending into a strict left fold reverses in linear time. The length a
-# fold or a merge keeps is checked as the result is made (: Dynamic).
-reverse (xs : Vect n a) : Vect n a = (foldl (acc, x -> x :: acc) [] xs : Dynamic)
-reverse (text : String) = from (List Char) (reverse (to (List Char) text))
+    # Prepending into a strict left fold reverses in linear time. The length a
+    # fold or a merge keeps is checked as the result is made (: Dynamic).
+    reverse (xs : Vect n a) : Vect n a = (foldl (acc, x -> x :: acc) [] xs : Dynamic)
+    reverse (text : String) = from (List Char) (reverse (to (List Char) text))
 
-_prepend x xs = x :: xs
+    _prepend x xs = x :: xs
 
-# Predicate consumers keep their skipping loop in the primitive lazy filter.
-_predicate value = truthy value
-dropWhile predicate xs = head
-    (filter (rest -> null rest || not (_predicate (predicate (head rest)))) (iterate tail xs))
-takeWhile predicate xs = null xs ? []
-    : (_predicate (predicate (head xs)) ? _prepend (head xs) (takeWhile predicate (tail xs)) : [])
-all predicate xs = null (dropWhile predicate xs)
-any predicate xs = not (all (x -> not (_predicate (predicate x))) xs)
-find predicate xs = headOption (dropWhile (x -> not (_predicate (predicate x))) xs)
-scanl f seed xs = seed :: (null xs ? [] : scanl f (f seed (head xs)) (tail xs))
+    # Predicate consumers keep their skipping loop in the primitive lazy filter.
+    _predicate value = truthy value
+    dropWhile predicate xs = head
+        (filter (rest -> null rest || not (_predicate (predicate (head rest)))) (iterate tail xs))
+    takeWhile predicate xs = null xs ? []
+        : (_predicate (predicate (head xs))
+            ? _prepend (head xs) (takeWhile predicate (tail xs)) : [])
+    all predicate xs = null (dropWhile predicate xs)
+    any predicate xs = not (all (x -> not (_predicate (predicate x))) xs)
+    find predicate xs = headOption (dropWhile (x -> not (_predicate (predicate x))) xs)
+    scanl f seed xs = seed :: (null xs ? [] : scanl f (f seed (head xs)) (tail xs))
 
-# Stable merge sort; equal keys always take the earlier (left) element.
-_order (value : Integer) = value
-_order _ = fail "sortBy comparator must return an integer"
-_mergeSorted compare left right = null left ? right : (null right ? left
-    : (_order (compare (head left) (head right)) <= 0
-    ? _prepend (head left) (_mergeSorted compare (tail left) right)
-    : _prepend (head right) (_mergeSorted compare left (tail right))))
-_mergeSort compare xs = {
-    n = 0 + length xs
-    mid = quotient n 2
-    n < 2 ? xs : _mergeSorted compare (_mergeSort compare (take mid xs))
-        (_mergeSort compare (drop mid xs))
-}
-sortBy compare (xs : Vect n a) : Vect n a = (_mergeSort compare xs : Dynamic)
+    # Stable merge sort; equal keys always take the earlier (left) element.
+    _order (value : Integer) = value
+    _order _ = fail "sortBy comparator must return an integer"
+    _mergeSorted compare left right = null left ? right : (null right ? left
+        : (_order (compare (head left) (head right)) <= 0
+        ? _prepend (head left) (_mergeSorted compare (tail left) right)
+        : _prepend (head right) (_mergeSorted compare left (tail right))))
+    _mergeSort compare xs = {
+        n = 0 + length xs
+        mid = quotient n 2
+        n < 2 ? xs : _mergeSorted compare (_mergeSort compare (take mid xs))
+            (_mergeSort compare (drop mid xs))
+    }
+    sortBy compare (xs : Vect n a) : Vect n a = (_mergeSort compare xs : Dynamic)
 
-# Force finite accumulator elements between simulation steps, not whole trees.
-forceList xs = seq (foldl (_, x -> seq x []) [] xs) xs
-repeatApply n f seed = foldl (value, _ -> f value) seed (take n [0..])
-count predicate xs = foldl (n, x -> predicate x ? n + 1 : n) 0 xs
+    # Force finite accumulator elements between simulation steps, not whole trees.
+    forceList xs = seq (foldl (_, x -> seq x []) [] xs) xs
+    repeatApply n f seed = foldl (value, _ -> f value) seed (take n [0..])
+    count predicate xs = foldl (n, x -> predicate x ? n + 1 : n) 0 xs
+]

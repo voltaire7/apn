@@ -1,5 +1,0 @@
-outside = 1
-{
-    repeat <- load "repeat"
-    use repeat
-}

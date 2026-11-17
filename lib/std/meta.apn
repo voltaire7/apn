@@ -1,30 +1,38 @@
 _text <- import "std/text"
-use _text
+_sequence <- import "std/sequence"
+_functions <- import "std/function"
+_option <- import "std/option"
+use [_text,_sequence,_functions,_option]
 parser <- (load "meta/parser" : Dynamic)
 use parser
 primitives <- (load "meta/primitives" : Dynamic)
 use primitives
-evaluator <- (load "meta/evaluator" : Dynamic)
+# The evaluator's source is read as code (the evaluator reads it too: see
+# metaSelfEval), and use runs it here.
+evaluator <- (map parse (intrinsics.readFileFrom "meta/evaluator.apn") : Dynamic)
 use evaluator
+[
+    metaPrimitives = metaPrimitives
 
-# The reader's output is toAST's lists; their shape is not statically typed.
-metaParse source = mpParse source : Dynamic
+    # The reader's output is toAST's lists; their shape is not statically typed.
+    metaParse source = mpParse source : Dynamic
 
-# Parse once, then evaluate syntax in our own environment and closure machinery.
-metaEval source = {
-    [program] = [mpParse source]
-    seq (mpForce program) (metaEvalSyntax program)
-} : Dynamic
-# Syntax data, from the reader or from toAST, as the evaluator runs it.
-metaEvalSyntax syntax = meEval metaPrimitives syntax : Dynamic
+    # Parse once, then evaluate syntax in our own environment and closure machinery.
+    metaEval source = {
+        [program] = [mpParse source]
+        seq (mpForce program) (metaEvalSyntax program)
+    } : Dynamic
+    # Syntax data, from the reader or from toAST, as the evaluator runs it.
+    metaEvalSyntax syntax = meEval metaPrimitives syntax : Dynamic
 
-# Evaluate the evaluator's source, then ask that interpreted evaluator to run
-# the user's parsed program. Neither layer calls the host parser/evaluator.
-# The program and its primitives reach the interpreted evaluator by name.
-metaSelfEval evaluatorSource source = {
-    [core] = [mpParse evaluatorSource]
-    [program] = [mpParse source]
-    [scope] = [insert [["objectScope",metaPrimitives],["objectProgram",program]] metaPrimitives]
-    [call] = [["meEval","objectScope","objectProgram"]]
-    seq (mpForce core) (seq (mpForce program) (meEval scope (core ++ [call])))
-} : Dynamic
+    # Evaluate the evaluator's source, then ask that interpreted evaluator to run
+    # the user's parsed program. Neither layer calls the host parser/evaluator.
+    # The program and its primitives reach the interpreted evaluator by name.
+    metaSelfEval evaluatorSource source = {
+        [core] = [mpParse evaluatorSource]
+        [program] = [mpParse source]
+        [scope] = [insert [["objectScope",metaPrimitives],["objectProgram",program]] metaPrimitives]
+        [call] = [["meEval","objectScope","objectProgram"]]
+        seq (mpForce core) (seq (mpForce program) (meEval scope (core ++ [call])))
+    } : Dynamic
+]

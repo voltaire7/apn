@@ -36,8 +36,9 @@ Deno.test("system exposes halt as a deferred action", () => {
     const module = i.run(parse('system <- import "std/system"; [system]')) as Extract<Value, { kind: "list" }>;
     if (i.env.get("halt")) throw new Error("namespaced import opened halt");
     const record = i.force(module.v[0]);
-    if (record.kind !== "record" || !record.v.some(([key]) => key === "halt")) throw new Error("halt was not exported in the module");
-    if (!i.renderString(record).includes("halt =")) throw new Error("module inspection lost halt");
+    const halt = record.kind === "record" ? record.v.find(([key]) => key === "halt") : undefined;
+    if (!halt) throw new Error("halt was not exported in the module");
+    if (i.force(halt[1]).kind !== "io") throw new Error("halt is not an action");
 });
 
 // A module (an import's or a load's) opens its names only by use, which opens

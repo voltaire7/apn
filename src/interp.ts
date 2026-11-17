@@ -18,7 +18,7 @@ import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_CLASSES, NUMERIC_TYPES, OWN_SCA
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { ACTION_SHOWN, APNError, didYouMean, missingTypeParameters, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
-import { type Alternative, type Binding, clausePlaces, listRole, readPatterns, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, declaresNames, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, isLoadCall, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, type Binding, clausePlaces, listRole, readPatterns, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, declaresNames, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, isUse } from "./ast.ts";
@@ -177,7 +177,7 @@ export class Interpreter {
     // A bundle (a browser build) to import from instead of the disk: virtual
     // paths to sources (see bundleProgram in modules.ts).
     moduleSources?: Record<string, string>;
-    private modules = new Map<string, Extract<Value, { kind: "record" }>>();
+    private modules = new Map<string, Value>();
     private importing = new Set<string>();
 
     // The records import and load yield are modules: nothing opens one but
@@ -187,6 +187,8 @@ export class Interpreter {
     // An operator's fixity travels with its value: a program's declaration
     // marks the value it binds, which use, an alias or added clauses keep.
     private valueFixities = new WeakMap<Value, Fixity>();
+    // The fixities the source running now declares (see fixitiesOf).
+    private runningFixities?: Map<string, Fixity>;
     private valueFixity(op: string): Fixity {
         return this.fixityOfValue(this.env.get(op)) ?? preludeFixity(op) ?? DEFAULT_FIXITY;
     }
@@ -314,7 +316,6 @@ export class Interpreter {
         let program: TopLevel[];
         try { program = parse(source.v, file?.path ?? "<parse>"); }
         catch (err) { throw err instanceof APNError ? err : new APNError("parse", (err as Error).message); }
-        if (file?.checked && file.path.endsWith(".apn")) this.checking!.verifyLoad(file.path.slice(0, -".apn".length), "/", source.v);
         const scope = new Env(this.env);
         if (file) this.codeDirs.set(scope, dirname(file.path));
         const code = this.codeList(this.statementItems(program), scope);
@@ -337,27 +338,39 @@ export class Interpreter {
     private importModule(module: string, directory: string): Value {
         const resolved = resolveModule(module, directory, this.moduleSources, this.moduleRoot);
         if (!resolved) { const { message, hint } = unknownModule(module, !!this.moduleSources); throw new APNError("runtime", message, { hint }); }
-        let record = this.modules.get(resolved.key);
-        if (!record) {
+        let value: Value | undefined = this.modules.get(resolved.key);
+        if (!value) {
             if (this.importing.has(resolved.key)) throw new APNError("runtime", `cyclic import '${module}'`);
             this.importing.add(resolved.key);
             try {
-                // A file's exports, or a folder's entries, each a module
-                // imported now (once per interpreter, however many import it).
-                const fields = new Map<string, Value>();
-                for (const file of resolved.files) for (const [name, value] of this.runModuleFile(file)) fields.set(name, value);
-                for (const entry of resolved.entries) fields.set(entry.name, this.importModule(entry.spec, entry.directory));
-                record = { kind: "record", v: [...fields] };
-                this.modules.set(resolved.key, record);
-                this.moduleValues.set(record, { origin: resolved.key });
+                // A file's value, or the record of a folder's entries, each a
+                // module imported now (once per interpreter, however many import it).
+                value = resolved.files.length ? this.runModuleFile(resolved.files[0])
+                    : { kind: "record", v: resolved.entries.map(entry => [entry.name, this.importModule(entry.spec, entry.directory)]) };
+                this.modules.set(resolved.key, value);
+                this.moduleValues.set(value, { origin: resolved.key });
             } finally { this.importing.delete(resolved.key); }
         }
-        return record;
+        return value;
+    }
+    // load "file": run file.apn beside the running file in a scope of its own,
+    // again each time, yielding its value.
+    private runFile(name: string): Value {
+        const path = sourcePath(name, this.runningDir(), this.moduleSources);
+        const source = this.moduleSources ? readLoad(path, this.moduleSources) : (() => { try { return Deno.readTextFileSync(path); } catch { return undefined; } })();
+        if (source === undefined) {
+            throw new APNError("runtime", this.moduleSources ? `'${name}' is not bundled` : `load: cannot read '${name}' (looked in '${path}')`,
+                this.moduleSources ? { hint: "a browser build bundles only files inside the program's folder" } : {});
+        }
+        // (Its names publish by use as a module's do, from this file's text.)
+        const value = this.runModuleFile({ source, label: path, directory: dirname(path) });
+        this.moduleValues.set(value, { origin: `${path}\0${source}`, checked: !!this.checking && !this.dynamicDepth });
+        return value;
     }
 
-    // Run one module file against builtins only (never the caller's bindings);
-    // its top-level bindings are its exports.
-    private runModuleFile(file: ModuleFile): Array<[string, Value]> {
+    // Run one module file against builtins only (never the caller's bindings):
+    // its value is its last statement's ([] when that binds).
+    private runModuleFile(file: ModuleFile): Value {
         const caller = this.env;
         const callerDir = this.sourceDir;
         const builtins = new Env();
@@ -366,16 +379,14 @@ export class Interpreter {
         bindNatives(builtins, [...NATIVES, ...STANDARD_NATIVES]);
         for (const [name, value] of this.preludeBindings) builtins.setLocal(name, value);
         const scope = new Env(builtins);
-        for (const exported of file.std ? NATIVE_EXPORTS[file.std] ?? [] : []) scope.setLocal(exported, builtins.get(exported)!);
         try {
             const program = parse(file.source, file.label);
             this.env = scope;
             this.sourceDir = file.directory;
             this.runDepth++; this.moduleDepth++;
-            try { this.run(program); } finally { this.runDepth--; this.moduleDepth--; }
-            // A module the file names for itself (std <- import "std", or a
-            // load's) is its own: <- bound the record itself, so nothing is forced.
-            return [...this.env.bindings().entries()].filter(([, value]) => !this.moduleValues.has(value));
+            let value: Value;
+            try { value = this.run(program); } finally { this.runDepth--; this.moduleDepth--; }
+            return program[program.length - 1]?.t === "expr" ? value : mkList([]);
         } finally {
             this.env = caller;
             this.sourceDir = callerDir;
@@ -490,6 +501,8 @@ export class Interpreter {
         const savedEnv = this.env, root = this.env.root(), saved = candidate ? new Map(root.map) : undefined;
         let succeeded = false;
         this.runDepth++;
+        const fixities = this.runningFixities;
+        this.runningFixities = fixitiesOf(program) ?? fixities;
         try {
             let last: Value = { kind: "list", v: [] }, ran = false;
             for (const [index, written] of program.entries()) {
@@ -525,6 +538,7 @@ export class Interpreter {
             return last;
         } finally {
             this.runDepth--;
+            this.runningFixities = fixities;
             if (!succeeded && saved) {
                 this.env = savedEnv;
                 root.map.clear();
@@ -1070,9 +1084,8 @@ export class Interpreter {
             return this.evalPatBinding({ pattern: { p: "var", name: b.update.name }, value: b.update.value });
         }
         const evaluated = b.pattern.p === "as" && !b.eager ? this.delay(b.value) : this.eval(b.value);
-        // x <- action runs the action and binds its result; anything else is
-        // an error, except a load (which runs a file and yields its exports).
-        if (b.eager && !isLoadCall(b.value)) {
+        // x <- action runs the action and binds its result; anything else is an error.
+        if (b.eager) {
             const action = this.reference(evaluated);
             if (action.kind !== "io" && action.kind !== "pending") throw new APNError("runtime", `<- runs an action, not a ${action.kind}`, { hint: "bind a value with `=`" });
         }
@@ -1862,7 +1875,7 @@ export class Interpreter {
                                 // Its monad: IO for an action (or a load), undecided for
                                 // return and the like, else the value's own (a list, an Option).
                                 // A discarded list is pure: [] is also the unit value.
-                                const value = s.t === "patDef" ? (isLoadCall(s.value) ? undefined : this.reference(this.eval(s.value))) : this.demand(this.eval(s));
+                                const value = s.t === "patDef" ? this.reference(this.eval(s.value)) : this.demand(this.eval(s));
                                 // The rest of the block runs in the scope as it is here.
                                 const block = e, start = si, here = this.env;
                                 if (!value || value.kind === "io") {
@@ -2761,7 +2774,16 @@ export class Interpreter {
                 const { clauses } = item as Extract<Expr, { t: "stmDef" }>;
                 // A function is defined as a block defines it (its clauses join,
                 // and travel with the types they take).
-                if (clauses[0].params.length) { this.evalDef(key, clauses); field(key, true); continue; }
+                if (clauses[0].params.length) {
+                    this.evalDef(key, clauses);
+                    // An operator's fixity is its value's, as at the top level.
+                    const fixity = this.runningFixities?.get(key), bound = this.env.get(key);
+                    if (fixity && bound) this.valueFixities.set(bound, fixity);
+                    field(key, true);
+                    continue;
+                }
+                // A method's value for a type travels with the type, as a block's does (return = Some).
+                if (!e.declared?.includes(key) && this.travelling(key, clauses)) { field(key, true); continue; }
                 // A value is computed when used, as a list's item is; a literal
                 // costs nothing, and a declared field is checked now (a slot's
                 // type is known: see holdsType).
@@ -4889,7 +4911,7 @@ export class Interpreter {
         if (!perform && ACTIONS.has(name)) {
             const fresh = (v: Value): Value => v.kind === "thunk" && v.env ? { kind: "thunk", body: v.body, env: v.env } : v;
             // A module read inside Dynamic is read unchecked wherever it runs.
-            if (name === "intrinsics.import" || name === "intrinsics.readFileFrom") {
+            if (name === "intrinsics.import" || name === "intrinsics.runFile" || name === "intrinsics.readFileFrom") {
                 const depth = this.dynamicDepth;
                 return { kind: "io", result: ACTIONS.get(name), run: () => {
                     const outer = this.dynamicDepth;
@@ -5286,6 +5308,11 @@ export class Interpreter {
                 const path = this.force(args[0]);
                 if (path.kind !== "string") throw new APNError("runtime", IMPORT_ONE.message, { hint: IMPORT_ONE.hint });
                 return this.importStandard(path.v);
+            }
+            case "intrinsics.runFile": {
+                const path = this.force(args[0]);
+                if (path.kind !== "string") throw new APNError("runtime", "load runs one file, named by a path string");
+                return this.runFile(path.v);
             }
             case "toString":
                 return mkStr(this.renderString(a));

@@ -300,11 +300,14 @@ Deno.test("namespaced import does not open conflicting exports", () => {
     run(i, 'html.text "hello"');
     if (run(i, 'span') !== '123' || i.env.get('button')) throw new Error('namespace leaked');
 });
-Deno.test("load checks dependencies with the lexical caller scope", () => {
-    const i = session();
-    const file = new URL('fixtures/static-checking/local', import.meta.url).pathname;
-    const actual = run(i, `f localValue = {\n    module <- load "${file}"\n    return module.answer\n}\nanswer <- f 41\nanswer`);
+// A load runs its file in a scope of its own, yielding the file's value: the
+// caller's names do not reach it.
+Deno.test("load yields the file's value, checked in a scope of its own", () => {
+    const local = new URL('fixtures/static-checking/local', import.meta.url).pathname;
+    const actual = run(session(), `f localValue = {\n    module <- load "${local}"\n    return module.answer\n}\nanswer <- f 41\nanswer`);
     if (actual !== '42') throw new Error(actual);
+    const caller = new URL('fixtures/static-checking/caller', import.meta.url).pathname;
+    rejected(session(), `f localValue = {\n    module <- load "${caller}"\n    return module.answer\n}\nanswer <- f 41`);
 });
 Deno.test("invalid loaded source is rejected before any output", () => {
     const file = new URL('fixtures/static-checking/invalid', import.meta.url).pathname;

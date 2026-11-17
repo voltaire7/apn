@@ -526,7 +526,7 @@ block only. So a statement that binds nothing is an action (or another
 monadic value), and once one ran, the last is too: `print 1` then `5` is the
 error a block reports, since the 5 would be dropped (see
 [blocks are do-blocks](#blocks-are-do-blocks)). `load "file"` runs a file and
-gives its names, the module it defines. The REPL is a block still being
+gives its value, its last statement's (see [module imports](#module-imports)). The REPL is a block still being
 written: each input is its next statement, and the last value of one is shown
 instead of dropped.
 
@@ -881,8 +881,7 @@ Actions run in exactly two places:
   `a = print 3; a; a` prints twice; `a` alone names the action.
 - **`<-` bindings.** `x <- action` runs the action now and binds its result:
   `text <- readFile "input.txt"`. The right side must be an action: `x <- 2 + 3`
-  is an error (bind a value with `=`). The one exception is `load`, which runs
-  a file: `module <- load "file"` binds its exports.
+  is an error (bind a value with `=`).
 
 `repl` opens a REPL session where it runs, on the names visible there, a
 function's parameters and local names among them. A top-level name as the
@@ -1603,14 +1602,24 @@ variable, as in `(x : t) (y : t)`, requires both arguments to have the same type
 
 ## Module imports
 
-`import "name"` is an action yielding the module: a record of what its file's
-top level binds or opens with `use` (as a record literal's `use` spreads),
-except the modules it imports for itself. `import` is a prelude function
-(`import = intrinsics.import`), not syntax; the check follows a path written
-as a literal, and another is decided by the run (`Dynamic`). Running it
-evaluates the file once per interpreter; later imports yield the cached
-record. Like any action, it is run by `<-` or as a statement, and it opens
+A file is code whose value is its last statement's, as a block's is: a module
+ends in the record of what it gives, and what comes before the record stays its
+own. `import "name"` is an action yielding a module's value: it runs the file
+once per interpreter, in a scope of its own (the prelude and what the file
+imports; the caller's bindings do not reach it), and a later import yields the
+same value. Like any action, it is run by `<-` or as a statement, and it opens
 nothing: `use` opens a record.
+
+```
+# shapes.apn
+std <- import "std"            # the file's own: an importer does not get it
+use std.number
+_turn = 2 * pi                 # its own too, a helper the record reads
+[
+    circumference r = _turn * r
+    area r = pi * sq r
+]
+```
 
 ```
 std <- import "std"            # the standard library, a record of its modules
@@ -1621,34 +1630,35 @@ option <- import "std/option"  # one module: option.withDefault, option.Some
 [halt] <- import "std/system"  # one name, by a record pattern
 ```
 
+A module's record is a record as any is (see [records](#records)): its fields
+are in scope for all of it, a function's clauses join, a type's constructors
+are fields, and `use r` in it passes `r`'s names on, which nothing else does.
+A file ending in a binding gives `[]`. One ending in a function gives the
+function, a module that takes parameters: after `make <- import "counter"`,
+`make 10` is a module of its own. `import` is a prelude function (`import =
+intrinsics.import`), not syntax; the check follows a path written as a
+literal, and another is decided by the run (`Dynamic`).
+
 `std` is the library's folder; `std/name` one of its modules. Any other name
 is looked up next to the importing file (the current directory in the REPL)
 as `name.apn`, else as a `name/` folder, then the same way in each parent
-folder up to the program's folder (the nearest match wins). A folder is a
-record of its entries, each `.apn` file or subfolder a module of its own
-(`shapes.solid.box`), all imported when the folder is: reading a field never
+folder up to the program's folder (the nearest match wins). A folder is the
+record of its entries' values, each `.apn` file or subfolder a module of its
+own (`shapes.solid.box`), all imported when the folder is: reading a field never
 runs a module. A file wins over a folder of the same name, whose folder is
 then reached by path (`import "report/lines"`). A module importing a folder
 that holds it is a cycle, an error like any other import cycle: a library
 module imports the modules beside it (`import "std/option"`), not `std`.
-Inside the library, a bare name is a module beside the file. A module is evaluated in a
-scope of its own, with the prelude and what it imports; the caller's bindings
-do not reach it. Clauses it defines for its own types join their functions
-from the moment it runs, opened or not (see [functions travel with
-types](#functions-travel-with-types)).
-`load` is the prelude's `load file = map parse (intrinsics.readFileFrom (file ++
-".apn"))`: an action reading `file.apn` beside the running file (again each time
-it runs), yielding its [code](#code). `parse source` is the code source writes,
-its statements as items, in the scope `parse` runs in. Running a load runs none
-of the file: `m.x` reads a binding the code makes, `do m` runs it, and `use m`,
-as a statement, runs the file's statements where it stands, in that scope, as
-if written there, and binds what they bind (its imports, definitions and
-effects), so `m <- load "f"; use m` includes a file. Code a file wrote reads
-files beside that file. The check follows a load with a literal path outside
-`Dynamic`, in the caller's scope; `use` of its code rebinds the file's
-definitions as a definition would, even names the program rebound in between,
-while a `Dynamic` load's may replace only what the same file (with unchanged
-text) published, plus what its usual write checks allow.
+Inside the library, a bare name is a module beside the file. Clauses a module
+defines for its own types join their functions from the moment it runs, opened
+or not (see [functions travel with types](#functions-travel-with-types)).
+`load` is the prelude's `load file = intrinsics.runFile (file ++ ".apn")`: an
+action running `file.apn` beside the running file as an import runs a module,
+but again each time it runs, yielding its value. A file is so a function of no
+arguments, and `m <- load "f"; use m` opens what it gives; a file loading itself
+is a cycle. The check follows a load with a literal path outside `Dynamic`, as
+an import's. To read a file as [code](#code) instead, which `use` runs where it
+stands, write `parse` of what `readFileFrom` reads (`std.io`'s).
 See [the standard library reference](standard-library.md) for APIs and limits.
 
 ## REPL clauses
@@ -1725,13 +1735,8 @@ compute an accumulator on each iteration when appropriate. So does an
 expression nested deeply, as a chain of hundreds of operators is: past what the
 stack holds it is a call stack overflow (a parse error for parsing it).
 
-Code a `use` runs may end with another `use` of code, a file loading itself
-(`again <- load "itself"; use again`): that use runs in place of the last
-statement, as a tail call, so it repeats without growing the host call stack;
-Ctrl+C stops it and restores the REPL's scope and source directory. What each
-file binds joins what the one before bound, each in a scope over the one
-before, so recursive loading is stack-safe but not constant-memory. Circular
-loads are not rejected.
+Code a `use` runs may end with another `use` of code: that use runs in place of
+the last statement, as a tail call, so it does not grow the host call stack.
 
 ## Sequencing expression lists
 

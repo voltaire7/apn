@@ -1,75 +1,77 @@
 # HTML is ordinary APN data. Browser code only interprets this tree.
 # A sketch node holds a p5 sketch's callbacks (see the p5 module's canvas).
-Html = HtmlText Dynamic | HtmlElement String Dynamic Dynamic | HtmlSketch Dynamic
-# HtmlOn name handler prevent: handler takes the event record; prevent stops
-# the browser's default action (a drop opening the file).
-HtmlAttribute =
-    | HtmlAttr String Dynamic
-    | HtmlStyle String Dynamic
-    | HtmlClick Dynamic
-    | HtmlInput Dynamic
-    | HtmlSubmit Dynamic
-    | HtmlOn String Dynamic Bool
-text value = HtmlText value
-node tag attributes children = HtmlElement tag attributes children
-div = node "div"
-span = node "span"
-p = node "p"
-h1 = node "h1"
-h2 = node "h2"
-h3 = node "h3"
-h4 = node "h4"
-button = node "button"
-input = node "input"
-textarea = node "textarea"
-label = node "label"
-form = node "form"
-select = node "select"
-option = node "option"
-ul = node "ul"
-ol = node "ol"
-li = node "li"
-a = node "a"
-img = node "img"
-pre = node "pre"
-code = node "code"
-blockquote = node "blockquote"
-cite = node "cite"
-strong = node "strong"
-em = node "em"
-br = node "br"
-hr = node "hr"
-table = node "table"
-tr = node "tr"
-td = node "td"
-th = node "th"
-section = node "section"
-header = node "header"
-footer = node "footer"
-nav = node "nav"
-article = node "article"
-mainElement = node "main"
-attribute name value = HtmlAttr name value
-style name value = HtmlStyle name value
-className value = attribute "class" value
-idAttribute value = attribute "id" value
-value content = attribute "value" content
-placeholder content = attribute "placeholder" content
-typeAttribute kind = attribute "type" kind
-href url = attribute "href" url
-src url = attribute "src" url
-alt description = attribute "alt" description
-title description = attribute "title" description
-target name = attribute "target" name
-disabled flag = attribute "disabled" flag
-checked flag = attribute "checked" flag
-multiple flag = attribute "multiple" flag
-accept kinds = attribute "accept" kinds
-onClick message = HtmlClick message
-onInput toMessage = HtmlInput toMessage
-onSubmit message = HtmlSubmit message
-# onEvent name f (Elm's on): f gets the event as a record: value (the
-# target's), checked, key, pageX, pageY, and files (the target's or a drop's:
-# each a record of name, size, mime and url).
-onEvent name handler = HtmlOn name handler False
-preventDefaultOn name handler = HtmlOn name handler True
+[
+    Html = HtmlText Dynamic | HtmlElement String Dynamic Dynamic | HtmlSketch Dynamic
+    # HtmlOn name handler prevent: handler takes the event record; prevent stops
+    # the browser's default action (a drop opening the file).
+    HtmlAttribute =
+        | HtmlAttr String Dynamic
+        | HtmlStyle String Dynamic
+        | HtmlClick Dynamic
+        | HtmlInput Dynamic
+        | HtmlSubmit Dynamic
+        | HtmlOn String Dynamic Bool
+    text value = HtmlText value
+    node tag attributes children = HtmlElement tag attributes children
+    div = node "div"
+    span = node "span"
+    p = node "p"
+    h1 = node "h1"
+    h2 = node "h2"
+    h3 = node "h3"
+    h4 = node "h4"
+    button = node "button"
+    input = node "input"
+    textarea = node "textarea"
+    label = node "label"
+    form = node "form"
+    select = node "select"
+    option = node "option"
+    ul = node "ul"
+    ol = node "ol"
+    li = node "li"
+    a = node "a"
+    img = node "img"
+    pre = node "pre"
+    code = node "code"
+    blockquote = node "blockquote"
+    cite = node "cite"
+    strong = node "strong"
+    em = node "em"
+    br = node "br"
+    hr = node "hr"
+    table = node "table"
+    tr = node "tr"
+    td = node "td"
+    th = node "th"
+    section = node "section"
+    header = node "header"
+    footer = node "footer"
+    nav = node "nav"
+    article = node "article"
+    mainElement = node "main"
+    attribute name value = HtmlAttr name value
+    style name value = HtmlStyle name value
+    className value = attribute "class" value
+    idAttribute value = attribute "id" value
+    value content = attribute "value" content
+    placeholder content = attribute "placeholder" content
+    typeAttribute kind = attribute "type" kind
+    href url = attribute "href" url
+    src url = attribute "src" url
+    alt description = attribute "alt" description
+    title description = attribute "title" description
+    target name = attribute "target" name
+    disabled flag = attribute "disabled" flag
+    checked flag = attribute "checked" flag
+    multiple flag = attribute "multiple" flag
+    accept kinds = attribute "accept" kinds
+    onClick message = HtmlClick message
+    onInput toMessage = HtmlInput toMessage
+    onSubmit message = HtmlSubmit message
+    # onEvent name f (Elm's on): f gets the event as a record: value (the
+    # target's), checked, key, pageX, pageY, and files (the target's or a drop's:
+    # each a record of name, size, mime and url).
+    onEvent name handler = HtmlOn name handler False
+    preventDefaultOn name handler = HtmlOn name handler True
+]

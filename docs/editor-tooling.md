@@ -77,8 +77,9 @@ the program's and those its `use` statements open, where `use` opens a record
 bound to an import or a load (`opt <- import "std/option"; use opt`,
 `f <- (load "f" : Dynamic); use f`, or `use std.option`), written in
 place, or a list of them: it resolves each from the file's folder as the
-interpreter does and reads (never runs) it, so a file it cannot read declares
-nothing. It warns
+interpreter does and reads (never runs) it, the types its final record declares
+and what that record's `use` items pass on included, so a file it cannot read
+declares nothing. It warns
 about a literal zero divisor (`x / 0`, `x % 0`, `quotient x 0`, `remainder x 0`,
 `modulo x 0`), which fails when demanded; `/` with a Float on either side is IEEE
 division and is not reported. Laziness keeps these warnings rather than errors:

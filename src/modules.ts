@@ -13,7 +13,7 @@
 
 import { parse, parseDocument } from "./parser.ts";
 import { NATIVE_EXPORTS } from "./natives.ts";
-import { type Expr, importedPath, isForTypes, METHOD_INTRINSICS, readsModule } from "./ast.ts";
+import { type Expr, importedPath, isForTypes, METHOD_INTRINSICS } from "./ast.ts";
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
 
 export const STD_DIRECTORY = new URL("../lib/std/", import.meta.url);
@@ -307,15 +307,17 @@ export function standardExports(): Map<string, string[]> {
         const module = file.slice(0, -".apn".length);
         if (["prelude", "do"].includes(module) || QUALIFIED_MODULES.has(module)) continue;
         try {
-            const items = parseDocument(Deno.readTextFileSync(new URL(file, STD_DIRECTORY)));
+            // A module's names are its value's: the record it ends in.
+            const program = parseDocument(Deno.readTextFileSync(new URL(file, STD_DIRECTORY)));
+            const last = program[program.length - 1];
+            const items = last?.t === "expr" && last.value.t === "record" ? last.value.items ?? [] : [];
             const prelude = preludeNames ??= new Set([...METHOD_INTRINSICS.values(), ...parseDocument(preludeSource).flatMap(item => item.t === "def" ? [item.name] : [])]);
             // A definition for the module's own types extends the function it
             // is named after, defining no name (map f (Some x) = ...).
-            const declared = new Set(items.flatMap(item => item.t === "type" ? [item.def.name, ...item.def.variants.map(v => v.tag)] : []));
+            const declared = new Set(items.flatMap(item => item.t === "typeDef" ? [item.def.name, ...item.def.variants.map(v => v.tag)] : []));
             for (const item of items) {
-                if (item.t === "def" && !(prelude.has(item.name) && isForTypes(item.clauses, name => declared.has(name), true))) add(item.name, module);
-                if (item.t === "patDef" && item.pattern.p === "var" && !readsModule(item.value)) add(item.pattern.name, module);
-                if (item.t === "type") { add(item.def.name, module); item.def.variants.forEach(v => add(v.tag, module)); }
+                if (item.t === "stmDef" && !(prelude.has(item.name) && isForTypes(item.clauses, name => declared.has(name), true))) add(item.name, module);
+                if (item.t === "typeDef") { add(item.def.name, module); item.def.variants.forEach(v => add(v.tag, module)); }
             }
         } catch { /* a module that does not parse alone offers nothing */ }
     }

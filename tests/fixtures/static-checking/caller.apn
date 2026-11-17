@@ -1,0 +1,2 @@
+# Reads a name only its caller binds: a load runs in a scope of its own.
+[answer = localValue + 1]

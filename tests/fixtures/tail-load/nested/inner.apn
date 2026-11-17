@@ -1,4 +1,0 @@
-innerValue = 20
-set counter $ counter - 1
-again <- counter > 0 ? load "../outer" : return []
-use again

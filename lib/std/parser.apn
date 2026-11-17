@@ -8,87 +8,90 @@
 # program using both imports one qualified (parser <- import "std/parser").
 _option <- import "std/option"
 _sequence <- import "std/sequence"
-use [_option,_sequence]
-Parser a = | Parser (input -> Result [a,input] String)
-_parserRun (Parser p) input = p input
-_parserInput text = isType String text ? to (List Char) text : text
+_functions <- import "std/function"
+use [_option,_sequence,_functions]
+[
+    Parser a = | Parser (input -> Result [a,input] String)
+    _parserRun (Parser p) input = p input
+    _parserInput text = isType String text ? to (List Char) text : text
 
-# Ok of the value a parser reads from all of the input, or Err.
-parse parser text = _parserRun parser (_parserInput text) ~ [
-    Ok [value,[]] -> Ok value
-    Ok [_, next :: _] -> Err ("unexpected " ++ _parserShown next)
-    Err message -> Err message
-]
-_parserShown x = isType Char x ? "'" ++ from (List Char) [x] ++ "'" : to String x
+    # Ok of the value a parser reads from all of the input, or Err.
+    parse parser text = _parserRun parser (_parserInput text) ~ [
+        Ok [value,[]] -> Ok value
+        Ok [_, next :: _] -> Err ("unexpected " ++ _parserShown next)
+        Err message -> Err message
+    ]
+    _parserShown x = isType Char x ? "'" ++ from (List Char) [x] ++ "'" : to String x
 
-map f (Parser p) = Parser (input -> p input ~ [
-    Ok [value,rest] -> Ok [f value, rest]
-    Err message -> Err message
-])
-Parser p >>= f = Parser (input -> p input ~ [
-    Ok [value,rest] -> _parserRun (f value) rest
-    Err message -> Err message
-])
-return x = Parser (input -> Ok [x,input])
+    map f (Parser p) = Parser (input -> p input ~ [
+        Ok [value,rest] -> Ok [f value, rest]
+        Err message -> Err message
+    ])
+    Parser p >>= f = Parser (input -> p input ~ [
+        Ok [value,rest] -> _parserRun (f value) rest
+        Err message -> Err message
+    ])
+    return x = Parser (input -> Ok [x,input])
 
-# One item, if test accepts it.
-satisfy what test = Parser (input -> input ~ [
-    x :: rest | test x -> Ok [x,rest]
-    x :: _ -> Err ("expected " ++ what ++ ", got " ++ _parserShown x)
-    [] -> Err ("expected " ++ what ++ ", got the end")
-])
-item = satisfy "an item" (_ -> True)
-char c = satisfy (_parserShown c) (== c)
-oneOf cs = satisfy ("one of " ++ cs) (c -> contains c (to (List Char) cs))
-string text = _parserString text (to (List Char) text)
-_parserString text [] = return text
-_parserString text (c :: cs) = {
-    char c
-    _parserString text cs
-}
-digit = oneOf "0123456789"
-letter = satisfy "a letter" (c -> c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z')
-space = oneOf " \t\n\r"
-end = Parser (input -> null input ? Ok [[],input]
-    : Err ("expected the end, got " ++ _parserShown (head input)))
-
-# p, or q if p fails.
-infixr 3 <|>
-Parser p <|> q = Parser (input -> p input ~ [
-    Ok result -> Ok result
-    Err _ -> _parserRun q input
-])
-# p read as many times as it can (some: at least once).
-# They read in a loop, in constant stack, so long input parses.
-many p = Parser (input -> {
-    read = _parserMany p input []
-    Ok [read.items,read.rest]
-})
-some p = Parser (input -> _parserRun p input ~ [
-    Ok [x,rest] -> {
-        read = _parserMany p rest [x]
-        Ok [read.items,read.rest]
+    # One item, if test accepts it.
+    satisfy what test = Parser (input -> input ~ [
+        x :: rest | test x -> Ok [x,rest]
+        x :: _ -> Err ("expected " ++ what ++ ", got " ++ _parserShown x)
+        [] -> Err ("expected " ++ what ++ ", got the end")
+    ])
+    item = satisfy "an item" (_ -> True)
+    char c = satisfy (_parserShown c) (== c)
+    oneOf cs = satisfy ("one of " ++ cs) (c -> contains c (to (List Char) cs))
+    string text = _parserString text (to (List Char) text)
+    _parserString text [] = return text
+    _parserString text (c :: cs) = {
+        char c
+        _parserString text cs
     }
-    Err message -> Err message
-])
-_parserMany p input items = _parserNext p (_parserRun p input) input items
-_parserNext p (Ok [x,rest]) _ items = _parserMany p rest (x :: items)
-_parserNext _ (Err _) input items = [items = reverse items, rest = input]
-optional p = map Some p <|> return None
-# p's, separated by sep's.
-sepBy p sep = sepBy1 p sep <|> return []
-sepBy1 p sep = {
-    x <- p
-    xs <- many { sep; p }
-    return (x :: xs)
-}
-spaces = many space
-# A whole number, from its digits.
-number = map (ds -> foldl (n, d -> n * 10 + _parserDigit d) 0 ds) (some digit)
-_parserDigit d = length (takeWhile (!= d) (to (List Char) "0123456789"))
-# p, and the spaces after it.
-token p = {
-    x <- p
-    spaces
-    return x
-}
+    digit = oneOf "0123456789"
+    letter = satisfy "a letter" (c -> c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z')
+    space = oneOf " \t\n\r"
+    end = Parser (input -> null input ? Ok [[],input]
+        : Err ("expected the end, got " ++ _parserShown (head input)))
+
+    # p, or q if p fails.
+    infixr 3 <|>
+    Parser p <|> q = Parser (input -> p input ~ [
+        Ok result -> Ok result
+        Err _ -> _parserRun q input
+    ])
+    # p read as many times as it can (some: at least once).
+    # They read in a loop, in constant stack, so long input parses.
+    many p = Parser (input -> {
+        read = _parserMany p input []
+        Ok [read.items,read.rest]
+    })
+    some p = Parser (input -> _parserRun p input ~ [
+        Ok [x,rest] -> {
+            read = _parserMany p rest [x]
+            Ok [read.items,read.rest]
+        }
+        Err message -> Err message
+    ])
+    _parserMany p input items = _parserNext p (_parserRun p input) input items
+    _parserNext p (Ok [x,rest]) _ items = _parserMany p rest (x :: items)
+    _parserNext _ (Err _) input items = [items = reverse items, rest = input]
+    optional p = map Some p <|> return None
+    # p's, separated by sep's.
+    sepBy p sep = sepBy1 p sep <|> return []
+    sepBy1 p sep = {
+        x <- p
+        xs <- many { sep; p }
+        return (x :: xs)
+    }
+    spaces = many space
+    # A whole number, from its digits.
+    number = map (ds -> foldl (n, d -> n * 10 + _parserDigit d) 0 ds) (some digit)
+    _parserDigit d = length (takeWhile (!= d) (to (List Char) "0123456789"))
+    # p, and the spaces after it.
+    token p = {
+        x <- p
+        spaces
+        return x
+    }
+]

@@ -2,40 +2,45 @@
 # p5.strands writes it in JavaScript): arithmetic and the math functions on
 # them write GLSL. A number joins in as a float, and a list as a vector.
 _text <- import "std/text"
-use _text
-Glsl = | Glsl String
+_sequence <- import "std/sequence"
+_functions <- import "std/function"
+_option <- import "std/option"
+use [_text,_sequence,_functions,_option]
+[
+    Glsl = | Glsl String
 
-# A value's GLSL code.
-glsl (Glsl code) = code
-glsl (items : List _) = "vec" ++ to String (length items) ++ "(" ++ joinWith ", " (map glsl items)
-    ++ ")"
-glsl (n : Number) = to String (n : Float)
+    # A value's GLSL code.
+    glsl (Glsl code) = code
+    glsl (items : List _) = "vec" ++ to String (length items) ++ "(" ++ joinWith ", " (map glsl items)
+        ++ ")"
+    glsl (n : Number) = to String (n : Float)
 
-# A list as one GLSL vector, for arithmetic as a whole: vec [x,y] * 0.5.
-vec items = Glsl (glsl items)
-# A GLSL function applied to its arguments: call "mix" [a,b,0.5].
-call name arguments = Glsl (name ++ "(" ++ joinWith ", " (map glsl arguments) ++ ")")
-_binary operator a b = Glsl ("(" ++ glsl a ++ " " ++ operator ++ " " ++ glsl b ++ ")")
-Glsl a + b = _binary "+" (Glsl a) b
-a + Glsl b = _binary "+" a (Glsl b)
-Glsl a - b = _binary "-" (Glsl a) b
-a - Glsl b = _binary "-" a (Glsl b)
-Glsl a * b = _binary "*" (Glsl a) b
-a * Glsl b = _binary "*" a (Glsl b)
-Glsl a / b = _binary "/" (Glsl a) b
-a / Glsl b = _binary "/" a (Glsl b)
-sin (Glsl x) = call "sin" [Glsl x]
-cos (Glsl x) = call "cos" [Glsl x]
-sqrt (Glsl x) = call "sqrt" [Glsl x]
-abs (Glsl x) = call "abs" [Glsl x]
-floor (Glsl x) = call "floor" [Glsl x]
-min (Glsl a) b = call "min" [Glsl a, b]
-max (Glsl a) b = call "max" [Glsl a, b]
-# GLSL's own functions.
-fract x = call "fract" [x]
-distance a b = call "distance" [a,b]
-mix a b amount = call "mix" [a,b,amount]
-# Some of a vector's components: swizzle "r" color, swizzle "xy" position.
-swizzle components vector = Glsl (glsl vector ++ "." ++ components)
-# A texture's color at a point (sampler is a texture's name).
-getTexture sampler point = call "TEXTURE" [sampler,point]
+    # A list as one GLSL vector, for arithmetic as a whole: vec [x,y] * 0.5.
+    vec items = Glsl (glsl items)
+    # A GLSL function applied to its arguments: call "mix" [a,b,0.5].
+    call name arguments = Glsl (name ++ "(" ++ joinWith ", " (map glsl arguments) ++ ")")
+    _binary operator a b = Glsl ("(" ++ glsl a ++ " " ++ operator ++ " " ++ glsl b ++ ")")
+    Glsl a + b = _binary "+" (Glsl a) b
+    a + Glsl b = _binary "+" a (Glsl b)
+    Glsl a - b = _binary "-" (Glsl a) b
+    a - Glsl b = _binary "-" a (Glsl b)
+    Glsl a * b = _binary "*" (Glsl a) b
+    a * Glsl b = _binary "*" a (Glsl b)
+    Glsl a / b = _binary "/" (Glsl a) b
+    a / Glsl b = _binary "/" a (Glsl b)
+    sin (Glsl x) = call "sin" [Glsl x]
+    cos (Glsl x) = call "cos" [Glsl x]
+    sqrt (Glsl x) = call "sqrt" [Glsl x]
+    abs (Glsl x) = call "abs" [Glsl x]
+    floor (Glsl x) = call "floor" [Glsl x]
+    min (Glsl a) b = call "min" [Glsl a, b]
+    max (Glsl a) b = call "max" [Glsl a, b]
+    # GLSL's own functions.
+    fract x = call "fract" [x]
+    distance a b = call "distance" [a,b]
+    mix a b amount = call "mix" [a,b,amount]
+    # Some of a vector's components: swizzle "r" color, swizzle "xy" position.
+    swizzle components vector = Glsl (glsl vector ++ "." ++ components)
+    # A texture's color at a point (sampler is a texture's name).
+    getTexture sampler point = call "TEXTURE" [sampler,point]
+]

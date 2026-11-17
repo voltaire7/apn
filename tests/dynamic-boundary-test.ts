@@ -76,7 +76,7 @@ for (const module of ['"std/function"']) {
         const source = `x = "old"; m <- (import ${module} : Dynamic); use m; x`;
         requireChecked(source);
         const i = new Interpreter(); i.checkedExecution = true;
-        i.moduleSources = { "/lib/function.apn": 'x = 123', "/lib/type.apn": '' };
+        i.moduleSources = { "/lib/function.apn": '[x = 123]', "/lib/type.apn": '' };
         i.sourceDir = "/app/";
         try { i.run(parseDocument(source)); } catch (error) {
             if (!String(error).includes('cannot replace string with int')) throw error;

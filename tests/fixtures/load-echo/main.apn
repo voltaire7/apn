@@ -1,5 +1,8 @@
-v = [x = 1, y = 2, z = 3]
 [halt] <- import "std/system"
-infinite = [0..]
-unused = missing
 print "loaded"
+[
+    v = [x = 1, y = 2, z = 3]
+    halt = halt
+    infinite = [0..]
+    unused = missing
+]

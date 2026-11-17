@@ -2,45 +2,49 @@
 # index.apn, which apn --site FOLDER OUTPUT builds with that editor.
 _html <- import "std/html"
 _text <- import "std/text"
-use [_html,_text]
+_sequence <- import "std/sequence"
+_functions <- import "std/function"
+_option <- import "std/option"
+use [_html,_text,_sequence,_functions,_option]
+[
+    # The editor's colors: Catppuccin Latte, or Frappé in a dark system theme.
+    stylesheet = unlines [
+        ":root { --base: #eff1f5; --mantle: #e6e9ef; --crust: #dce0e8; --surface: #ccd0da;"
+        "    --text: #4c4f69; --subtext: #6c6f85; --accent: #1e66f5; color-scheme: light dark; }"
+        "@media (prefers-color-scheme: dark) { :root { --base: #303446; --mantle: #292c3c;"
+        "    --crust: #232634; --surface: #414559; --text: #c6d0f5; --subtext: #a5adce;"
+        "    --accent: #8caaee; } }"
+        "body { background: var(--base); color: var(--text); }"
+        ".page { max-width: 880px; margin: 0 auto; padding: 40px 8px 64px; }"
+        "header { margin-bottom: 32px; }"
+        "h1 { font-size: 36px; letter-spacing: -.02em; margin: 0 0 8px; }"
+        "header p { margin: 0; max-width: 560px; color: var(--subtext); font-size: 17px; }"
+        "a { color: var(--accent); }"
+        ".sections { display: grid; gap: 16px;"
+        "    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }"
+        "section { background: var(--mantle); border: 1px solid var(--crust);"
+        "    border-radius: 12px; padding: 16px 8px 8px; }"
+        "h2 { margin: 0 12px 8px; font-size: 12px; font-weight: 600; letter-spacing: .06em;"
+        "    text-transform: uppercase; color: var(--subtext); }"
+        "ul { list-style: none; margin: 0; padding: 0; }"
+        "li a { display: flex; justify-content: space-between; padding: 6px 12px;"
+        "    border-radius: 8px; color: var(--text); text-decoration: none; }"
+        "li a::after { content: '→'; color: var(--accent); opacity: 0; transition: opacity .15s; }"
+        "li a:hover, li a:focus-visible { background: var(--surface); color: var(--accent);"
+        "    outline: none; }"
+        "li a:hover::after, li a:focus-visible::after { opacity: 1; }"
+    ]
 
-# The editor's colors: Catppuccin Latte, or Frappé in a dark system theme.
-stylesheet = unlines [
-    ":root { --base: #eff1f5; --mantle: #e6e9ef; --crust: #dce0e8; --surface: #ccd0da;"
-    "    --text: #4c4f69; --subtext: #6c6f85; --accent: #1e66f5; color-scheme: light dark; }"
-    "@media (prefers-color-scheme: dark) { :root { --base: #303446; --mantle: #292c3c;"
-    "    --crust: #232634; --surface: #414559; --text: #c6d0f5; --subtext: #a5adce;"
-    "    --accent: #8caaee; } }"
-    "body { background: var(--base); color: var(--text); }"
-    ".page { max-width: 880px; margin: 0 auto; padding: 40px 8px 64px; }"
-    "header { margin-bottom: 32px; }"
-    "h1 { font-size: 36px; letter-spacing: -.02em; margin: 0 0 8px; }"
-    "header p { margin: 0; max-width: 560px; color: var(--subtext); font-size: 17px; }"
-    "a { color: var(--accent); }"
-    ".sections { display: grid; gap: 16px;"
-    "    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }"
-    "section { background: var(--mantle); border: 1px solid var(--crust);"
-    "    border-radius: 12px; padding: 16px 8px 8px; }"
-    "h2 { margin: 0 12px 8px; font-size: 12px; font-weight: 600; letter-spacing: .06em;"
-    "    text-transform: uppercase; color: var(--subtext); }"
-    "ul { list-style: none; margin: 0; padding: 0; }"
-    "li a { display: flex; justify-content: space-between; padding: 6px 12px;"
-    "    border-radius: 8px; color: var(--text); text-decoration: none; }"
-    "li a::after { content: '→'; color: var(--accent); opacity: 0; transition: opacity .15s; }"
-    "li a:hover, li a:focus-visible { background: var(--surface); color: var(--accent);"
-    "    outline: none; }"
-    "li a:hover::after, li a:focus-visible::after { opacity: 1; }"
+    # The page: its title, an introduction (a paragraph's children) and its sections.
+    page title introduction sections = div [className "page"] [
+        node "style" [] [text stylesheet]
+        header [] [h1 [] [text title], p [] introduction]
+        div [className "sections"] sections
+    ]
+
+    # A section: its title and its examples' links.
+    examples sectionTitle links = section [] [h2 [] [text sectionTitle], ul [] links]
+
+    # A link to an example: its title and its file's name (without .apn).
+    link title file = li [] [a [href ("editor.html#" ++ file)] [text title]]
 ]
-
-# The page: its title, an introduction (a paragraph's children) and its sections.
-page title introduction sections = div [className "page"] [
-    node "style" [] [text stylesheet]
-    header [] [h1 [] [text title], p [] introduction]
-    div [className "sections"] sections
-]
-
-# A section: its title and its examples' links.
-examples sectionTitle links = section [] [h2 [] [text sectionTitle], ul [] links]
-
-# A link to an example: its title and its file's name (without .apn).
-link title file = li [] [a [href ("editor.html#" ++ file)] [text title]]

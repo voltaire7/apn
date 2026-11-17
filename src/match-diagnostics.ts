@@ -70,6 +70,11 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
             const e = node.value;
             // Only use opens records.
             if (e.t === "app" && e.f.t === "var" && e.f.name === "use") open(used(e.a));
+            // A record (a module's value) declares its types, and spreads what its uses open.
+            if (e.t === "record") for (const item of e.items ?? []) {
+                if (item.t === "typeDef") add(item.def.name, item.def.parameters?.length ?? 0, item.def.variants.map(v => [v.tag, v.arity]));
+                if (item.t === "app" && item.f.t === "var" && item.f.name === "use") open(used(item.a));
+            }
         }
     };
     declare(program, directory);

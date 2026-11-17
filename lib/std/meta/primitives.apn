@@ -2,14 +2,21 @@
 # No source evaluation or syntax inspection is exposed here.
 # Types for ascription, (entries : HashMap _ _): the object language checks
 # nothing before it runs, so the any type _ is Dynamic, which takes any value.
-metaPrimitives = ([
-    ["^",(^)], ["+",(+)], ["-", (x, y -> x - y)], ["*",(*)], ["/",(/)], ["%",(%)]
-    ["==",(==)],["!=",(!=)],["<",(<)],[">",(>)],["<=",(<=)],[">=",(>=)]
-    ["++",(++)], ["::", (x, xs -> x :: xs)]
-    ["not",not],["negate",negate],["head",head],["tail",tail],["null",null]
-    ["isNumber",isNumber],["isList",isList],["length",length],["take",take],["drop",drop]
-    ["HashMap",HashMap],["_",Dynamic],["isType",isType],["typeOf",typeOf],["has",has]
-    ["lookup",lookup],["insert",insert]
-    ["fail",fail],["seq",seq],["to",to],["from",from],["List",List],["Char",Char]
-    ["Int",Int],["Float",Float],["String",String]
-] : HashMap _ _)
+_text <- import "std/text"
+_sequence <- import "std/sequence"
+_functions <- import "std/function"
+_option <- import "std/option"
+use [_text,_sequence,_functions,_option]
+[
+    metaPrimitives = ([
+        ["^",(^)], ["+",(+)], ["-", (x, y -> x - y)], ["*",(*)], ["/",(/)], ["%",(%)]
+        ["==",(==)],["!=",(!=)],["<",(<)],[">",(>)],["<=",(<=)],[">=",(>=)]
+        ["++",(++)], ["::", (x, xs -> x :: xs)]
+        ["not",not],["negate",negate],["head",head],["tail",tail],["null",null]
+        ["isNumber",isNumber],["isList",isList],["length",length],["take",take],["drop",drop]
+        ["HashMap",HashMap],["_",Dynamic],["isType",isType],["typeOf",typeOf],["has",has]
+        ["lookup",lookup],["insert",insert]
+        ["fail",fail],["seq",seq],["to",to],["from",from],["List",List],["Char",Char]
+        ["Int",Int],["Float",Float],["String",String]
+    ] : HashMap _ _)
+]

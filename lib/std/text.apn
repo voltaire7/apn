@@ -1,54 +1,64 @@
 _sequence <- import "std/sequence"
-use _sequence
-# Unicode code-point operations; to (List Char) and from (List Char) preserve astral characters.
-textLength text = length (to (List Char) text)
-textTake n text = from (List Char) (take n (to (List Char) text))
-textDrop n text = from (List Char) (drop n (to (List Char) text))
-isBlank text = trim text == ""
-lines text = splitOn "\n" text
-unlines xs = joinWith "\n" xs
-unwords xs = joinWith " " xs
-startsWith prefix text = take (textLength prefix) (to (List Char) text) == to (List Char) prefix
-endsWith suffix text = startsWith (reverse suffix) (reverse text)
+_functions <- import "std/function"
+_option <- import "std/option"
+use [_sequence,_functions,_option]
+[
+    upper = upper
+    lower = lower
+    # Strings reverse as lists do (sequence's reverse, by code point).
+    reverse = reverse
 
-# Literal splitting scans once, keeping the current field backwards.
-splitOn delimiter text = delimiter == ""
-    ? map (c -> from (List Char) [c]) (to (List Char) text)
-    : _splitOn delimiter text
-_splitOn delimiter text = {
-    marker = reverse (to (List Char) delimiter)
-    width = 0 + length marker
-    step state c = {
-        current = c :: snd state
-        take width current == marker
-            ? [_prepend (from (List Char) (reverse (drop width current))) (fst state), []]
-            : [fst state, current]
+    # Unicode code-point operations; to (List Char) and from (List Char) preserve astral characters.
+    textLength text = length (to (List Char) text)
+    textTake n text = from (List Char) (take n (to (List Char) text))
+    textDrop n text = from (List Char) (drop n (to (List Char) text))
+    isBlank text = trim text == ""
+    lines text = splitOn "\n" text
+    unlines xs = joinWith "\n" xs
+    unwords xs = joinWith " " xs
+    startsWith prefix text =
+        take (textLength prefix) (to (List Char) text) == to (List Char) prefix
+    endsWith suffix text = startsWith (reverse suffix) (reverse text)
+
+    # Literal splitting scans once, keeping the current field backwards.
+    splitOn delimiter text = delimiter == ""
+        ? map (c -> from (List Char) [c]) (to (List Char) text)
+        : _splitOn delimiter text
+    _splitOn delimiter text = {
+        marker = reverse (to (List Char) delimiter)
+        width = 0 + length marker
+        step state c = {
+            current = c :: snd state
+            take width current == marker
+                ? [_prepend (from (List Char) (reverse (drop width current))) (fst state), []]
+                : [fst state, current]
+        }
+        state = foldl step [[],[]] (to (List Char) text)
+        reverse (from (List Char) (reverse (snd state)) :: fst state)
     }
-    state = foldl step [[],[]] (to (List Char) text)
-    reverse (from (List Char) (reverse (snd state)) :: fst state)
-}
-# Joined as strings, not characters: a string's ++ is one step.
-joinWith delimiter xs = {
-    xs ~ [
-        [] -> ""
-        first :: rest -> foldl (joined, x -> joined ++ delimiter ++ x) first rest
-    ]
-} : String
-replaceAll search replacement text = joinWith replacement (splitOn search text)
+    # Joined as strings, not characters: a string's ++ is one step.
+    joinWith delimiter xs = {
+        xs ~ [
+            [] -> ""
+            first :: rest -> foldl (joined, x -> joined ++ delimiter ++ x) first rest
+        ]
+    } : String
+    replaceAll search replacement text = joinWith replacement (splitOn search text)
 
-# Unicode WhiteSpace plus line terminators (the same set as ECMAScript \s).
-_isSpace c = contains c (to (List Char) " \t\n\r\v\f                 　﻿")
-words text = filter (x -> x != "")
-    (splitOn " " (from (List Char) (map (c -> _isSpace c ? ' ' : c) (to (List Char) text))))
-trim text = from (List Char)
-    (reverse (dropWhile _isSpace (reverse (dropWhile _isSpace (to (List Char) text)))))
+    # Unicode WhiteSpace plus line terminators (the same set as ECMAScript \s).
+    _isSpace c = contains c (to (List Char) " \t\n\r\v\f                 　﻿")
+    words text = filter (x -> x != "")
+        (splitOn " " (from (List Char) (map (c -> _isSpace c ? ' ' : c) (to (List Char) text))))
+    trim text = from (List Char)
+        (reverse (dropWhile _isSpace (reverse (dropWhile _isSpace (to (List Char) text)))))
 
-# Common puzzle-input shapes; CRLF and trailing blank lines are accepted.
-nonEmptyLines text = filter (line -> line != "") (map trim (lines text))
-parseInt (text : String) = {
-    [value] = [(from String text : Dynamic)]
-    isInteger value && isExact (value : Number)
-        ? (value : Int)
-        : fail "parseInt expects an exact integer"
-}
-integers text = map parseInt (words text)
+    # Common puzzle-input shapes; CRLF and trailing blank lines are accepted.
+    nonEmptyLines text = filter (line -> line != "") (map trim (lines text))
+    parseInt (text : String) = {
+        [value] = [(from String text : Dynamic)]
+        isInteger value && isExact (value : Number)
+            ? (value : Int)
+            : fail "parseInt expects an exact integer"
+    }
+    integers text = map parseInt (words text)
+]

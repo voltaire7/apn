@@ -1,3 +1,5 @@
 # A file module: import "greetings" reads this file; its definitions are the
 # fields of the record it yields.
-greet name = "Hello, " ++ name ++ "!"
+[
+    greet name = "Hello, " ++ name ++ "!"
+]

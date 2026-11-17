@@ -8,265 +8,268 @@ use [numbers,_html,_time]
 strings <- import "std/text"
 svg <- import "std/svg"
 browser <- import "std/browser"
+[
+    # A shape is what it is, placed: where it is, its angle, size and opacity
+    # (Placed, whose shape is never itself Placed). A color is its red, green and
+    # blue, each 0 to 255.
+    Color = | Rgb Number Number Number
+    Shape =
+        | Circle Color Number
+        | Oval Color Number Number
+        | Rectangle Color Number Number
+        | Ngon Color Int Number
+        | Polygon Color String
+        | Image Number Number String
+        | Words Color String
+        | Group (List Shape)
+        | Placed Number Number Number Number Number Shape
+    circle color radius = Circle color radius
+    oval color width height = Oval color width height
+    square color n = Rectangle color n n
+    rectangle color width height = Rectangle color width height
+    triangle color radius = Ngon color 3 radius
+    pentagon color radius = Ngon color 5 radius
+    hexagon color radius = Ngon color 6 radius
+    octagon color radius = Ngon color 8 radius
+    polygon color points = Polygon color (strings.unwords (map ([x,y] -> _point x (0 - y)) points))
+    image width height source = Image width height source
+    words color text = Words color text
+    group shapes = Group shapes
 
-# A shape is what it is, placed: where it is, its angle, size and opacity
-# (Placed, whose shape is never itself Placed). A color is its red, green and
-# blue, each 0 to 255.
-Color = | Rgb Number Number Number
-Shape =
-    | Circle Color Number
-    | Oval Color Number Number
-    | Rectangle Color Number Number
-    | Ngon Color Int Number
-    | Polygon Color String
-    | Image Number Number String
-    | Words Color String
-    | Group (List Shape)
-    | Placed Number Number Number Number Number Shape
-circle color radius = Circle color radius
-oval color width height = Oval color width height
-square color n = Rectangle color n n
-rectangle color width height = Rectangle color width height
-triangle color radius = Ngon color 3 radius
-pentagon color radius = Ngon color 5 radius
-hexagon color radius = Ngon color 6 radius
-octagon color radius = Ngon color 8 radius
-polygon color points = Polygon color (strings.unwords (map ([x,y] -> _point x (0 - y)) points))
-image width height source = Image width height source
-words color text = Words color text
-group shapes = Group shapes
+    # Moving, rotating, scaling and fading a shape.
+    move dx dy (Placed x y angle size alpha shape) =
+        Placed (x + dx) (y + dy) angle size alpha shape
+    move dx dy shape = Placed dx dy 0 1 1 shape
+    moveUp d s = move 0 d s
+    moveDown d s = move 0 (0 - d) s
+    moveLeft d s = move (0 - d) 0 s
+    moveRight d s = move d 0 s
+    moveX d s = move d 0 s
+    moveY d s = move 0 d s
+    scale factor (Placed x y angle size alpha shape) = Placed x y angle (size * factor) alpha shape
+    scale factor shape = Placed 0 0 0 factor 1 shape
+    rotate degrees (Placed x y angle size alpha shape) =
+        Placed x y (angle + degrees) size alpha shape
+    rotate degrees shape = Placed 0 0 degrees 1 1 shape
+    fade opacity (Placed x y angle size _ shape) = Placed x y angle size opacity shape
+    fade opacity shape = Placed 0 0 0 1 opacity shape
 
-# Moving, rotating, scaling and fading a shape.
-move dx dy (Placed x y angle size alpha shape) = Placed (x + dx) (y + dy) angle size alpha shape
-move dx dy shape = Placed dx dy 0 1 1 shape
-moveUp d s = move 0 d s
-moveDown d s = move 0 (0 - d) s
-moveLeft d s = move (0 - d) 0 s
-moveRight d s = move d 0 s
-moveX d s = move d 0 s
-moveY d s = move 0 d s
-scale factor (Placed x y angle size alpha shape) = Placed x y angle (size * factor) alpha shape
-scale factor shape = Placed 0 0 0 factor 1 shape
-rotate degrees (Placed x y angle size alpha shape) = Placed x y (angle + degrees) size alpha shape
-rotate degrees shape = Placed 0 0 degrees 1 1 shape
-fade opacity (Placed x y angle size _ shape) = Placed x y angle size opacity shape
-fade opacity shape = Placed 0 0 0 1 opacity shape
+    # Colors (the Tango palette Elm's Playground uses), and rgb for any other.
+    rgb r g b = Rgb (clamp 0 255 (round r)) (clamp 0 255 (round g)) (clamp 0 255 (round b))
+    lightYellow = Rgb 252 233 79
+    yellow = Rgb 237 212 0
+    darkYellow = Rgb 196 160 0
+    lightOrange = Rgb 252 175 62
+    orange = Rgb 245 121 0
+    darkOrange = Rgb 206 92 0
+    lightBrown = Rgb 233 185 110
+    brown = Rgb 193 125 17
+    darkBrown = Rgb 143 89 2
+    lightGreen = Rgb 138 226 52
+    green = Rgb 115 210 22
+    darkGreen = Rgb 78 154 6
+    lightBlue = Rgb 114 159 207
+    blue = Rgb 52 101 164
+    darkBlue = Rgb 32 74 135
+    lightPurple = Rgb 173 127 168
+    purple = Rgb 117 80 123
+    darkPurple = Rgb 92 53 102
+    lightRed = Rgb 239 41 41
+    red = Rgb 204 0 0
+    darkRed = Rgb 164 0 0
+    lightGrey = Rgb 238 238 236
+    grey = Rgb 211 215 207
+    darkGrey = Rgb 186 189 182
+    lightGray = lightGrey
+    gray = grey
+    darkGray = darkGrey
+    lightCharcoal = Rgb 136 138 133
+    charcoal = Rgb 85 87 83
+    darkCharcoal = Rgb 46 52 54
+    white = Rgb 255 255 255
+    black = Rgb 0 0 0
 
-# Colors (the Tango palette Elm's Playground uses), and rgb for any other.
-rgb r g b = Rgb (clamp 0 255 (round r)) (clamp 0 255 (round g)) (clamp 0 255 (round b))
-lightYellow = Rgb 252 233 79
-yellow = Rgb 237 212 0
-darkYellow = Rgb 196 160 0
-lightOrange = Rgb 252 175 62
-orange = Rgb 245 121 0
-darkOrange = Rgb 206 92 0
-lightBrown = Rgb 233 185 110
-brown = Rgb 193 125 17
-darkBrown = Rgb 143 89 2
-lightGreen = Rgb 138 226 52
-green = Rgb 115 210 22
-darkGreen = Rgb 78 154 6
-lightBlue = Rgb 114 159 207
-blue = Rgb 52 101 164
-darkBlue = Rgb 32 74 135
-lightPurple = Rgb 173 127 168
-purple = Rgb 117 80 123
-darkPurple = Rgb 92 53 102
-lightRed = Rgb 239 41 41
-red = Rgb 204 0 0
-darkRed = Rgb 164 0 0
-lightGrey = Rgb 238 238 236
-grey = Rgb 211 215 207
-darkGrey = Rgb 186 189 182
-lightGray = lightGrey
-gray = grey
-darkGray = darkGrey
-lightCharcoal = Rgb 136 138 133
-charcoal = Rgb 85 87 83
-darkCharcoal = Rgb 46 52 54
-white = Rgb 255 255 255
-black = Rgb 0 0 0
+    # Time, in milliseconds: spin turns once per period (in seconds), wave and
+    # zigzag go between lo and hi and back once per period.
+    _fraction period time = inexact
+        (modulo (round time : Int) (round (period * 1000) : Int) / (period * 1000))
+    spin period time = 360 * _fraction period time
+    wave lo hi period time = lo + (hi - lo) * (1 + cos (turns (_fraction period time))) / 2
+    zigzag lo hi period time = lo + (hi - lo) * abs (2 * _fraction period time - 1)
 
-# Time, in milliseconds: spin turns once per period (in seconds), wave and
-# zigzag go between lo and hi and back once per period.
-_fraction period time = inexact
-    (modulo (round time : Int) (round (period * 1000) : Int) / (period * 1000))
-spin period time = 360 * _fraction period time
-wave lo hi period time = lo + (hi - lo) * (1 + cos (turns (_fraction period time))) / 2
-zigzag lo hi period time = lo + (hi - lo) * abs (2 * _fraction period time - 1)
+    # The arrow keys as numbers: right and up are 1, left and down -1.
+    toX keyboard = (keyboard.right ? 1 : 0) - (keyboard.left ? 1 : 0)
+    toY keyboard = (keyboard.up ? 1 : 0) - (keyboard.down ? 1 : 0)
+    toXY keyboard = {
+        x = toX keyboard
+        y = toY keyboard
+        x != 0 && y != 0 ? [x / sqrt 2, y / sqrt 2] : [x,y]
+    }
 
-# The arrow keys as numbers: right and up are 1, left and down -1.
-toX keyboard = (keyboard.right ? 1 : 0) - (keyboard.left ? 1 : 0)
-toY keyboard = (keyboard.up ? 1 : 0) - (keyboard.down ? 1 : 0)
-toXY keyboard = {
-    x = toX keyboard
-    y = toY keyboard
-    x != 0 && y != 0 ? [x / sqrt 2, y / sqrt 2] : [x,y]
-}
-
-# Shapes as SVG, as Elm's Playground draws them.
-_number x = isInteger x ? to String (round x : Int) : to String (inexact x)
-_point x y = _number x ++ "," ++ _number y
-_colorText (Rgb r g b) = "rgb(" ++ strings.joinWith "," (map (to String) [r,g,b]) ++ ")"
-_corner radius angle = _point (radius * cos angle) (radius * sin angle)
-_ngonPoints n radius = strings.unwords
-    (map (k -> _corner radius (turns (k / n - 1 / 4))) [0..n - 1])
-_translate x y = "translate(" ++ _point x y ++ ")"
-_centered width height = svg.transform (_translate (0 - width / 2) (0 - height / 2))
-_placing x y angle size = _translate x (0 - y)
-    ++ " rotate(" ++ _number (0 - angle) ++ ") scale(" ++ _number size ++ ")"
-_render shape = shape ~ [
-    Placed x y angle size alpha inner -> svg.g [
-        svg.transform (_placing x y angle size)
-        svg.opacity (_number (clamp 0 1 alpha))
-    ] [_render inner]
-    Circle color radius -> svg.circle [svg.r (_number radius), svg.fill (_colorText color)] []
-    Oval color width height -> svg.ellipse [
-        svg.rx (_number (width / 2))
-        svg.ry (_number (height / 2))
-        svg.fill (_colorText color)
-    ] []
-    Rectangle color width height -> svg.rect [
-        svg.width (_number width)
-        svg.height (_number height)
-        svg.fill (_colorText color)
-        _centered width height
-    ] []
-    Ngon color n radius -> svg.polygon [
-        svg.points (_ngonPoints n radius)
-        svg.fill (_colorText color)
-    ] []
-    Polygon color points -> svg.polygon [svg.points points, svg.fill (_colorText color)] []
-    Image width height source -> svg.image [
-        href source
-        svg.width (_number width)
-        svg.height (_number height)
-        _centered width height
-    ] []
-    Words color string -> svg.text_ [
-        svg.textAnchor "middle"
-        svg.dominantBaseline "central"
-        svg.fill (_colorText color)
-    ] [text string]
-    Group shapes -> svg.g [] (map _render shapes)
-]
-_view screen shapes = svg.svg [
-    svg.viewBox (strings.unwords
-        (map _number [screen.left,screen.bottom,screen.width,screen.height]))
-    style "position" "fixed"
-    style "top" "0"
-    style "left" "0"
-    svg.width "100%"
-    svg.height "100%"
-] (map _render shapes)
-
-# The computer: the mouse, the keyboard, the screen and the time (milliseconds).
-_toScreen width height = [
-    width = width
-    height = height
-    top = height / 2
-    left = 0 - width / 2
-    right = width / 2
-    bottom = 0 - height / 2
-]
-_noKeys = [
-    up = False, down = False, left = False, right = False
-    space = False, enter = False, shift = False, backspace = False
-    keys = ([] : List String)
-]
-_computer = [
-    mouse = [x = 0.0, y = 0.0, down = False, click = False]
-    keyboard = _noKeys
-    screen = _toScreen 600 600
-    time = 0
-]
-GameMsg =
-    | GameTick Posix
-    | GameViewport browser.Viewport
-    | GameResized Number Number
-    | GameKey Bool String
-    | GameMouseMove Number Number
-    | GameClick
-    | GameButton Bool
-    | GameVisibility browser.Visibility
-_updateKeyboard isDown key keyboard = {
-    others = filter (k -> k != key) keyboard.keys
-    keyboard.keys = isDown ? key :: others : others
-    key ~ [
-        " " -> keyboard [space = isDown]
-        "Enter" -> keyboard [enter = isDown]
-        "Shift" -> keyboard [shift = isDown]
-        "Backspace" -> keyboard [backspace = isDown]
-        "ArrowUp" -> keyboard [up = isDown]
-        "ArrowDown" -> keyboard [down = isDown]
-        "ArrowLeft" -> keyboard [left = isDown]
-        "ArrowRight" -> keyboard [right = isDown]
-        _ -> keyboard
+    # Shapes as SVG, as Elm's Playground draws them.
+    _number x = isInteger x ? to String (round x : Int) : to String (inexact x)
+    _point x y = _number x ++ "," ++ _number y
+    _colorText (Rgb r g b) = "rgb(" ++ strings.joinWith "," (map (to String) [r,g,b]) ++ ")"
+    _corner radius angle = _point (radius * cos angle) (radius * sin angle)
+    _ngonPoints n radius = strings.unwords
+        (map (k -> _corner radius (turns (k / n - 1 / 4))) [0..n - 1])
+    _translate x y = "translate(" ++ _point x y ++ ")"
+    _centered width height = svg.transform (_translate (0 - width / 2) (0 - height / 2))
+    _placing x y angle size = _translate x (0 - y)
+        ++ " rotate(" ++ _number (0 - angle) ++ ") scale(" ++ _number size ++ ")"
+    _render shape = shape ~ [
+        Placed x y angle size alpha inner -> svg.g [
+            svg.transform (_placing x y angle size)
+            svg.opacity (_number (clamp 0 1 alpha))
+        ] [_render inner]
+        Circle color radius -> svg.circle [svg.r (_number radius), svg.fill (_colorText color)] []
+        Oval color width height -> svg.ellipse [
+            svg.rx (_number (width / 2))
+            svg.ry (_number (height / 2))
+            svg.fill (_colorText color)
+        ] []
+        Rectangle color width height -> svg.rect [
+            svg.width (_number width)
+            svg.height (_number height)
+            svg.fill (_colorText color)
+            _centered width height
+        ] []
+        Ngon color n radius -> svg.polygon [
+            svg.points (_ngonPoints n radius)
+            svg.fill (_colorText color)
+        ] []
+        Polygon color points -> svg.polygon [svg.points points, svg.fill (_colorText color)] []
+        Image width height source -> svg.image [
+            href source
+            svg.width (_number width)
+            svg.height (_number height)
+            _centered width height
+        ] []
+        Words color string -> svg.text_ [
+            svg.textAnchor "middle"
+            svg.dominantBaseline "central"
+            svg.fill (_colorText color)
+        ] [text string]
+        Group shapes -> svg.g [] (map _render shapes)
     ]
-}
-_advance updateMemory msg game = {
-    computer = game.computer
-    msg ~ [
-        GameTick time -> {
-            game.memory = updateMemory computer game.memory
-            computer.time = posixToMillis time
-            computer.mouse.click = False
-            game.computer = computer
-            [game,browser.none]
-        }
-        GameViewport viewport -> {
-            game.computer.screen = _toScreen viewport.width viewport.height
-            [game,browser.none]
-        }
-        GameResized width height -> {
-            game.computer.screen = _toScreen width height
-            [game,browser.none]
-        }
-        # Compared, the keyboard is computed now, as Elm computes it, so no
-        # chain of pending updates builds up; a held key's repeats change nothing.
-        GameKey isDown key -> {
-            keyboard = _updateKeyboard isDown key computer.keyboard
-            keyboard == computer.keyboard ? [game,browser.none] : {
-                game.computer.keyboard = keyboard
+    _view screen shapes = svg.svg [
+        svg.viewBox (strings.unwords
+            (map _number [screen.left,screen.bottom,screen.width,screen.height]))
+        style "position" "fixed"
+        style "top" "0"
+        style "left" "0"
+        svg.width "100%"
+        svg.height "100%"
+    ] (map _render shapes)
+
+    # The computer: the mouse, the keyboard, the screen and the time (milliseconds).
+    _toScreen width height = [
+        width = width
+        height = height
+        top = height / 2
+        left = 0 - width / 2
+        right = width / 2
+        bottom = 0 - height / 2
+    ]
+    _noKeys = [
+        up = False, down = False, left = False, right = False
+        space = False, enter = False, shift = False, backspace = False
+        keys = ([] : List String)
+    ]
+    _computer = [
+        mouse = [x = 0.0, y = 0.0, down = False, click = False]
+        keyboard = _noKeys
+        screen = _toScreen 600 600
+        time = 0
+    ]
+    GameMsg =
+        | GameTick Posix
+        | GameViewport browser.Viewport
+        | GameResized Number Number
+        | GameKey Bool String
+        | GameMouseMove Number Number
+        | GameClick
+        | GameButton Bool
+        | GameVisibility browser.Visibility
+    _updateKeyboard isDown key keyboard = {
+        others = filter (k -> k != key) keyboard.keys
+        keyboard.keys = isDown ? key :: others : others
+        key ~ [
+            " " -> keyboard [space = isDown]
+            "Enter" -> keyboard [enter = isDown]
+            "Shift" -> keyboard [shift = isDown]
+            "Backspace" -> keyboard [backspace = isDown]
+            "ArrowUp" -> keyboard [up = isDown]
+            "ArrowDown" -> keyboard [down = isDown]
+            "ArrowLeft" -> keyboard [left = isDown]
+            "ArrowRight" -> keyboard [right = isDown]
+            _ -> keyboard
+        ]
+    }
+    _advance updateMemory msg game = {
+        computer = game.computer
+        msg ~ [
+            GameTick time -> {
+                game.memory = updateMemory computer game.memory
+                computer.time = posixToMillis time
+                computer.mouse.click = False
+                game.computer = computer
                 [game,browser.none]
             }
-        }
-        GameMouseMove pageX pageY -> {
-            game.computer.mouse.[x, y] = [
-                computer.screen.left + pageX
-                computer.screen.top - pageY
-            ]
-            [game,browser.none]
-        }
-        GameClick -> { game.computer.mouse.click = True; [game,browser.none] }
-        GameButton isDown -> { game.computer.mouse.down = isDown; [game,browser.none] }
-        GameVisibility _ -> {
-            game.computer.keyboard = _noKeys
-            game.computer.mouse.[down,click] = [False,False]
-            [game,browser.none]
-        }
+            GameViewport viewport -> {
+                game.computer.screen = _toScreen viewport.width viewport.height
+                [game,browser.none]
+            }
+            GameResized width height -> {
+                game.computer.screen = _toScreen width height
+                [game,browser.none]
+            }
+            # Compared, the keyboard is computed now, as Elm computes it, so no
+            # chain of pending updates builds up; a held key's repeats change nothing.
+            GameKey isDown key -> {
+                keyboard = _updateKeyboard isDown key computer.keyboard
+                keyboard == computer.keyboard ? [game,browser.none] : {
+                    game.computer.keyboard = keyboard
+                    [game,browser.none]
+                }
+            }
+            GameMouseMove pageX pageY -> {
+                game.computer.mouse.[x, y] = [
+                    computer.screen.left + pageX
+                    computer.screen.top - pageY
+                ]
+                [game,browser.none]
+            }
+            GameClick -> { game.computer.mouse.click = True; [game,browser.none] }
+            GameButton isDown -> { game.computer.mouse.down = isDown; [game,browser.none] }
+            GameVisibility _ -> {
+                game.computer.keyboard = _noKeys
+                game.computer.mouse.[down,click] = [False,False]
+                [game,browser.none]
+            }
+        ]
+    }
+    _subscriptions = browser.batch [
+        browser.onAnimationFrame GameTick
+        browser.onVisibilityChange GameVisibility
+        browser.onKeyUp (GameKey False)
+        browser.onKeyDown (GameKey True)
+        browser.onResize GameResized
+        browser.onMouseMove GameMouseMove
+        browser.onMouseClick (_, _ -> GameClick)
+        browser.onMouseDown (_, _ -> GameButton True)
+        browser.onMouseUp (_, _ -> GameButton False)
     ]
-}
-_subscriptions = browser.batch [
-    browser.onAnimationFrame GameTick
-    browser.onVisibilityChange GameVisibility
-    browser.onKeyUp (GameKey False)
-    browser.onKeyDown (GameKey True)
-    browser.onResize GameResized
-    browser.onMouseMove GameMouseMove
-    browser.onMouseClick (_, _ -> GameClick)
-    browser.onMouseDown (_, _ -> GameButton True)
-    browser.onMouseUp (_, _ -> GameButton False)
-]
 
-# A game: view computer memory gives the shapes, update computer memory the
-# next memory, every frame. A picture never changes; an animation is a view
-# of the time.
-game viewMemory updateMemory memory = browser.element [
-    init = [[memory = memory, computer = _computer], browser.getViewport GameViewport]
-    update = _advance updateMemory
-    view = g -> _view g.computer.screen (viewMemory g.computer g.memory)
-    subscriptions = _ -> _subscriptions
+    # A game: view computer memory gives the shapes, update computer memory the
+    # next memory, every frame. A picture never changes; an animation is a view
+    # of the time.
+    game viewMemory updateMemory memory = browser.element [
+        init = [[memory = memory, computer = _computer], browser.getViewport GameViewport]
+        update = _advance updateMemory
+        view = g -> _view g.computer.screen (viewMemory g.computer g.memory)
+        subscriptions = _ -> _subscriptions
+    ]
+    picture shapes = game (_, _ -> shapes) (_, memory -> memory) []
+    animation viewTime = game (computer, _ -> viewTime computer.time) (_, memory -> memory) []
 ]
-picture shapes = game (_, _ -> shapes) (_, memory -> memory) []
-animation viewTime = game (computer, _ -> viewTime computer.time) (_, memory -> memory) []

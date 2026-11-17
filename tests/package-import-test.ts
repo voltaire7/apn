@@ -23,6 +23,11 @@ for (const checked of [false, true]) {
         if (result(i, 'sh <- import "shapes"; sh.square.square 4') !== "16") throw new Error("namespaced");
         if (result(interpreter(checked), 'sh <- import "shapes"; map head (pairs sh)') !== '["cube","solid","square"]') throw new Error("entries");
     });
+    // A module's value is its file's last statement's: a function is a module taking parameters.
+    Deno.test(`a module ending in a function takes parameters (checked=${checked})`, () => {
+        const actual = result(interpreter(checked), 'make <- import "counter"\nten = make 10\nuse (make 5)\n[ten.value,ten.next,next]');
+        if (actual !== "[10,11,6]") throw new Error(actual);
+    });
     // A folder's modules run when it is imported, each once: reading a field runs nothing.
     Deno.test(`importing a folder runs its modules (checked=${checked})`, () => {
         const output: string[] = [], log = console.log;
