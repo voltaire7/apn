@@ -479,6 +479,10 @@ failure("a clause takes no more parameters than declared", "f : Int -> Int\nf a 
 // for the result and the pieces after it.
 example("a declared parameter's name is bound", "f : (k : Int) -> List Int\nf n = [n,k]\nprint (f 2)\n" +
     "g : (n : Int) -> Vect n Int\ng 2 = [1,2]\nprint (g 2)", ["[2,2]", "[1,2]"]);
+// f : T = x -> e is f : T then f x = e: T's type variables are bound in e.
+example("a declared lambda is the declared clause", "func : t -> IO [] = x -> print [x,t]\nfunc 5\n" +
+    "add : Int -> Int -> Int = x, y -> x + y\nprint (add 2 3)", ["[5,Int]", "5"]);
+failure("a declared lambda's parameters are typed", "inc : Int -> Int = x -> x + 1\nprint (inc \"a\")", "no clause of 'inc' matches");
 failure("a named declared parameter keeps its type", "f : (n : Int) -> List Int\nf n = [n]\nprint (f \"a\")", "no clause of 'f' matches");
 failure("a named declared parameter types the result", "g : (n : Int) -> Vect n Int\ng 2 = [1]\nprint (g 2)", "length mismatch");
 failure("an ascribed ternary is parenthesized", "x = True ? 1 : 2 : Int\nprint x", "parenthesize a ternary");

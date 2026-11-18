@@ -2036,6 +2036,7 @@ class Parser {
         while (this.startsParam(this.peek()) || this.negativeLiteral()) params.push(this.parameter());
         // f x : T = e: T is the type of f x, what its = gives, as x : T = v
         // is v's (f x : Int -> Int = ... gives a function).
+        const typeAt = this.isSym(":") ? this.i + 1 : undefined;
         const result = this.eatSym(":") ? this.typeExpr(this.typeEnd("statement").end) : undefined;
         // f x | guard = body, or f x [: T] with a line for each | guard = body:
         // clauses of the same parameters (and type), tried as written.
@@ -2046,6 +2047,18 @@ class Parser {
                 hint: `${name} = Int names a type; ${name} (Int x) = _ declares a new one` });
         }
         let body = this.parseDefBody(equals.v);
+        // f : T = x -> e is f : T then f x = e: the same clause, typed as the
+        // declaration types it (T's type variables bound in e, as there).
+        const declaredLambda = result && typeAt !== undefined && !params.length && /^[a-z]/.test(name) ? curried(name, body) : undefined;
+        if (declaredLambda && declaredLambda.params.length) {
+            const at = this.i;
+            this.i = typeAt!;
+            const { end, arrows } = this.typeEnd("statement");
+            const { pieces, rest } = this.declarationPieces(typeAt!, end, arrows);
+            this.i = at;
+            const clause = this.declaredClause({ name, pos: equals.pos, pieces, rest }, { params: declaredLambda.params, body: declaredLambda.body, ...declaredLambda.guard ? { guard: declaredLambda.guard } : {} });
+            return { name, clauses: [clause] };
+        }
         if (result) return { name, clauses: [{ params, body }], result };
         // f = Int x -> ... is the curried spelling of f (Int x) = ...: the
         // same clause, so another one overloads it the same way.
@@ -2230,17 +2243,9 @@ class Parser {
         const nameToken = this.next() as Extract<Token, { k: "ident" }>, name = nameToken.v;
         this.next();
         const start = this.i, { end, arrows } = this.typeEnd("statement");
-        const pieces = [start, ...arrows.map(a => a + 1)].map((from, n) => {
-            this.i = from;
-            return this.typeExpr(n < arrows.length ? arrows[n] : end);
-        });
+        const { pieces, rest } = this.declarationPieces(start, end, arrows);
+        this.i = end;
         const marker: Extract<TopLevel, { t: "expr" }> = { t: "expr", value: { t: "placeholder" } };
-        // The function type after the first k pieces, for a clause with k parameters.
-        const rest = (k: number): Expr => {
-            const at = this.i;
-            this.i = k ? arrows[k - 1] + 1 : start;
-            try { return this.typeExpr(end); } finally { this.i = at; }
-        };
         // (A block keeps the marker's value as its statement.)
         const declaration = { name, pos: nameToken.pos, pieces, rest, marker };
         this.declarations.set(marker, declaration);
@@ -2272,29 +2277,50 @@ class Parser {
             items.splice(n, 1);
             for (let m = n; defines(items[m]); m++) {
                 const item = items[m] as Extract<TopLevel, { t: "def" }>;
-                item.clauses = item.clauses.map(clause => {
-                    const k = clause.params.length;
-                    if (k > arity) throw new APNError("parse", `${name} is declared with ${arity} parameter${arity === 1 ? "" : "s"}, but a clause takes ${k}`, { pos, len: name.length });
-                    // A named piece, (k : T), types the parameter with T and binds
-                    // k too, for the pieces and result after it (Vect k Int).
-                    const params = clause.params.map((p, i) => {
-                        const piece = bareType(pieces[i]);
-                        const named = piece.t === "app" && piece.ascribed && piece.a.t === "var" ? piece.a.name : undefined;
-                        const typed = typedPattern(p, named ? (piece as Extract<Expr, { t: "app" }>).f : pieces[i]);
-                        return named && !(p.p === "var" && p.name === named) ? { p: "as", left: { p: "var", name: named }, right: typed } as Pattern : typed;
-                    });
-                    const result = k === arity ? pieces[arity] : declaration.rest(k);
-                    // A result naming a type variable no parameter binds, or _
-                    // (any), is checked by inference, not by a claim the clause
-                    // can read.
-                    const bound = new Set(params.flatMap(typedNames));
-                    const free = freeLowercase(result).filter(x => !bound.has(x));
-                    const body = k < arity || isFunctionType(result) ? ascribed(clause.body, result, this.freshName())
-                        : free.length || result.t === "placeholder" ? clause.body : { t: "app" as const, f: result, a: clause.body, ascribed: true as const };
-                    return { ...clause, params, body };
-                });
+                item.clauses = item.clauses.map(clause => this.declaredClause(declaration, clause));
             }
         }
+    }
+
+    // A clause as its declaration types it: its parameters typed patterns, its
+    // body the claim of the result (see applyDeclarations).
+    declaredClause(declaration: { name: string; pos: number; pieces: Expr[]; rest: (k: number) => Expr }, clause: DefClause): DefClause {
+        const { name, pos, pieces } = declaration, arity = pieces.length - 1;
+        const k = clause.params.length;
+        if (k > arity) throw new APNError("parse", `${name} is declared with ${arity} parameter${arity === 1 ? "" : "s"}, but a clause takes ${k}`, { pos, len: name.length });
+        // A named piece, (k : T), types the parameter with T and binds k too,
+        // for the pieces and result after it (Vect k Int).
+        const params = clause.params.map((p, i) => {
+            const piece = bareType(pieces[i]);
+            const named = piece.t === "app" && piece.ascribed && piece.a.t === "var" ? piece.a.name : undefined;
+            const typed = typedPattern(p, named ? (piece as Extract<Expr, { t: "app" }>).f : pieces[i]);
+            return named && !(p.p === "var" && p.name === named) ? { p: "as", left: { p: "var", name: named }, right: typed } as Pattern : typed;
+        });
+        const result = k === arity ? pieces[arity] : declaration.rest(k);
+        // A result naming a type variable no parameter binds, or _ (any), is
+        // checked by inference, not by a claim the clause can read.
+        const bound = new Set(params.flatMap(typedNames));
+        const free = freeLowercase(result).filter(x => !bound.has(x));
+        const body = k < arity || isFunctionType(result) ? ascribed(clause.body, result, this.freshName())
+            : free.length || result.t === "placeholder" ? clause.body : { t: "app" as const, f: result, a: clause.body, ascribed: true as const };
+        return { ...clause, params, body };
+    }
+    // A declaration's pieces, the types between its arrows, from start to end.
+    declarationPieces(start: number, end: number, arrows: number[]): { pieces: Expr[]; rest: (k: number) => Expr } {
+        const at = this.i;
+        try {
+            const pieces = [start, ...arrows.map(a => a + 1)].map((from, n) => {
+                this.i = from;
+                return this.typeExpr(n < arrows.length ? arrows[n] : end);
+            });
+            // The function type after the first k pieces, for a clause with k parameters.
+            const rest = (k: number): Expr => {
+                const back = this.i;
+                this.i = k ? arrows[k - 1] + 1 : start;
+                try { return this.typeExpr(end); } finally { this.i = back; }
+            };
+            return { pieces, rest };
+        } finally { this.i = at; }
     }
 
     // A declaration's constructors, after its '=' (or inside the ( ) of the

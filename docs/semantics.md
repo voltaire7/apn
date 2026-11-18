@@ -346,7 +346,10 @@ left is the function applied to them, so `T` is the type of its result:
 `adder n : Int -> Int = x -> x + n` gives a function. A piece of the type may name its
 parameter, `(k : T)`: each clause's parameter takes a `T`, and `k` names it for
 the result and the pieces after it, whatever the clause calls it
-(`g : (n : Int) -> Vect n Int` then `g 2 = [1,2]`). The left is a pattern, so
+(`g : (n : Int) -> Vect n Int` then `g 2 = [1,2]`). A lambda defined with its type,
+`func : t -> IO [] = x -> print [x,t]`, is that declaration of the lambda's
+clause, as `func : t -> IO []` then `func x = print [x,t]` is: `t` is bound in
+its body. The left is a pattern, so
 `f Int Int : Int = 123` is the clause for the types `Int`, `Int` themselves,
 not a signature. A declaration no definition follows defines the name as its
 type's zero, as a record slot does
