@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, type Binding, clausePlaces, walkObjects, type Contains, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, OPEN, opening, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, type Binding, clausePlaces, walkObjects, type Contains, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, givesValue, isUse, OPEN, opening, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { EVALUATED_NATIVES, nativeArity, READS_CODE, RETIRED_NATIVES, SHOWS, STANDARD_NATIVES, STRICT_NATIVES } from "./natives.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -8515,7 +8515,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             else if (statement.t === "type") declare(statement.def, scope);
             else if (statement.t === "expr") {
                 executeTopLevel(statement.value, scope);
-                const type = value = infer(statement.value, scope);
+                const type = infer(statement.value, scope);
+                // ([..] = r binds, and gives no value.)
+                value = givesValue(statement) ? type : undefined;
                 validate(type);
                 // The top level is a block: what binds nothing is an action.
                 const last = index === program.length - 1;

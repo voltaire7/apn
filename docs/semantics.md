@@ -944,9 +944,9 @@ that runs its statements in order, and a discarded `Err e` or `None` stops it.
 Each such statement is in the block's monad, an action in an IO block; a plain
 value (`{ 123; print "x" }`) would be computed and dropped, so it is an error
 (check a condition with `guard c`, or `assert c x`, which is `x` once `c`
-holds, as Haskell's). Two statements are dropped instead: `[]`, the unit (what
-`print` yields; inside a list do-block it is chained), and one opening a
-module. What the check cannot decide (a parameter's result) is checked when
+holds, as Haskell's). One statement is dropped instead: `[]`, the unit (what
+`print` yields; inside a list do-block it is chained). (A binding, `[..] = r`
+among them, is no statement value at all.) What the check cannot decide (a parameter's result) is checked when
 the statement runs. A do-block's last statement must itself be an action,
 whose result the block yields: end with `return x` to yield a plain value. The
 unit ends an action too (`print 1 >> []` prints and yields `[]`), so a block

@@ -1,5 +1,6 @@
 import { Interpreter } from "../src/interp.ts";
 import { parseDocument } from "../src/parser.ts";
+import { givesValue } from "../src/ast.ts";
 function result(i: Interpreter, source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
@@ -44,3 +45,9 @@ for (const source of ['[..] = 1', '[..] = [[x = 2], 3]', '[..] = [x = 1, [..] = 
         throw new Error('expected rejection');
     });
 }
+// [..] = r binds, as every = does: it gives no value (the REPL echoes none,
+// and a file ending in it gives []).
+Deno.test("[..] = r gives no value", () => {
+    if (givesValue(parseDocument("[..] = [a = 1]")[0]) || !givesValue(parseDocument("1 + 1")[0])) throw new Error("givesValue");
+    if (givesValue(parseDocument("s.[..] = [a = 1]").at(-1))) throw new Error("s.[..]");
+});

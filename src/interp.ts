@@ -21,7 +21,7 @@ import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { type Alternative, type Binding, clausePlaces, listRole, readPatterns, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, declaresNames, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
-import { enumerationPositions, isUse, OPEN, opening } from "./ast.ts";
+import { enumerationPositions, givesValue, isUse, OPEN, opening } from "./ast.ts";
 import { canonicalTypeText, ioTypeText, compoundArgument, slotField, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
@@ -397,13 +397,13 @@ export class Interpreter {
             const last = program[program.length - 1];
             try {
                 // (A tail's action runs after the file returns, in the scope its closures keep.)
-                if (tail && last?.t === "expr") {
+                if (tail && givesValue(last)) {
                     this.run(program.slice(0, -1));
                     const value = this.demand(this.eval(last.value));
                     return value.kind === "io" || value.kind === "pending" ? new IOTail(value) : value;
                 }
                 const value = this.run(program);
-                return last?.t === "expr" ? value : mkList([]);
+                return givesValue(last) ? value : mkList([]);
             } finally { this.runDepth--; this.moduleDepth--; }
         } finally {
             this.env = caller;

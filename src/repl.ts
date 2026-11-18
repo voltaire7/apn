@@ -5,6 +5,7 @@ import { APNError } from "./errors.ts";
 import { NATIVE_NAMES, envNames, dirname, Interpreter, setInterruptFlag, resetInterrupt } from "./interp.ts";
 import type { Value, Env } from "./types.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
+import { givesValue } from "./ast.ts";
 import { highlightTokens, PALETTES } from "./highlight.ts";
 import { forwardWordEnd, moveWord, type Style } from "./word-motion.ts";
 
@@ -82,9 +83,9 @@ function runSourceValue(src: string, interp: Interpreter, binding = false, file 
     // it could force infinite lists or failing lazy bindings. Print and field
     // reads still show its parts.
     const last = program[program.length - 1];
-    if (last?.t === "expr" && interp.isModule(val)) return null;
+    if (givesValue(last) && interp.isModule(val)) return null;
     val = interp.force(val);
-    if (last?.t === "expr" && interp.ranAction && val.kind === "list" && val.v.length === 0) return null;
+    if (givesValue(last) && interp.ranAction && val.kind === "list" && val.v.length === 0) return null;
     return val;
 }
 
@@ -117,7 +118,7 @@ function lastIsBinding(src: string): boolean {
     try {
         const prog = parse(src);
         const last = prog[prog.length - 1];
-        return last !== undefined && last.t !== "expr";
+        return last !== undefined && !givesValue(last);
     } catch {
         return false;
     }

@@ -891,6 +891,11 @@ export function opening(value: Expr): Expr {
 export function isUse(e: Expr): e is Extract<Expr, { t: "app" }> {
     return e.t === "app" && e.f.t === "var" && e.f.name === OPEN;
 }
+// Whether a top-level statement gives a value: an expression, not a binding
+// ([..] = r binds, as every = does, and gives nothing).
+export function givesValue(statement: TopLevel | undefined): statement is Extract<TopLevel, { t: "expr" }> {
+    return statement?.t === "expr" && !isUse(statement.value);
+}
 // The path an import written with a literal one reads (import "std/text").
 export function importedPath(e: Expr): string | undefined {
     if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return importedPath(e.stmts[0]);
