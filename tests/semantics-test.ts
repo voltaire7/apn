@@ -475,6 +475,12 @@ for (const source of ["x: Int = 5", "f x: Int = x", "f (x: Int) = x", "g = (x: I
 failure("a call typed without a definition", "f x y : Int\nprint 1", "f with parameters is typed in its definition");
 example("a definition's : T is the type of its left side", "f x y : Int = x + y\nprint (f 2 3)", ["5"]);
 failure("a clause takes no more parameters than declared", "f : Int -> Int\nf a b = a\nprint 1", "declared with 1 parameter");
+// A named parameter, (k : T), types the clause's parameter with T and binds k
+// for the result and the pieces after it.
+example("a declared parameter's name is bound", "f : (k : Int) -> List Int\nf n = [n,k]\nprint (f 2)\n" +
+    "g : (n : Int) -> Vect n Int\ng 2 = [1,2]\nprint (g 2)", ["[2,2]", "[1,2]"]);
+failure("a named declared parameter keeps its type", "f : (n : Int) -> List Int\nf n = [n]\nprint (f \"a\")", "no clause of 'f' matches");
+failure("a named declared parameter types the result", "g : (n : Int) -> Vect n Int\ng 2 = [1]\nprint (g 2)", "length mismatch");
 failure("an ascribed ternary is parenthesized", "x = True ? 1 : 2 : Int\nprint x", "parenthesize a ternary");
 failure("a declared result is proved per clause", "app : Vect n a -> Vect m a -> Vect (n + m + 1) a\n" +
     "app [] ys = ys\napp (x :: xs) ys = x :: app xs ys\nprint (app [1] [2])", "length mismatch");

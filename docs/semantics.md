@@ -343,7 +343,10 @@ Every definition is `left : T = body`, both `: T` and the body optional, and
 block; `name : T = value` declares and defines at once. With parameters, the
 left is the function applied to them, so `T` is the type of its result:
 `f (x : Int) : Int = x + x` is `f : Int -> Int` with `f x = x + x`, and
-`adder n : Int -> Int = x -> x + n` gives a function. The left is a pattern, so
+`adder n : Int -> Int = x -> x + n` gives a function. A piece of the type may name its
+parameter, `(k : T)`: each clause's parameter takes a `T`, and `k` names it for
+the result and the pieces after it, whatever the clause calls it
+(`g : (n : Int) -> Vect n Int` then `g 2 = [1,2]`). The left is a pattern, so
 `f Int Int : Int = 123` is the clause for the types `Int`, `Int` themselves,
 not a signature. A declaration no definition follows defines the name as its
 type's zero, as a record slot does

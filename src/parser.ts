@@ -2275,7 +2275,14 @@ class Parser {
                 item.clauses = item.clauses.map(clause => {
                     const k = clause.params.length;
                     if (k > arity) throw new APNError("parse", `${name} is declared with ${arity} parameter${arity === 1 ? "" : "s"}, but a clause takes ${k}`, { pos, len: name.length });
-                    const params = clause.params.map((p, i) => typedPattern(p, pieces[i]));
+                    // A named piece, (k : T), types the parameter with T and binds
+                    // k too, for the pieces and result after it (Vect k Int).
+                    const params = clause.params.map((p, i) => {
+                        const piece = bareType(pieces[i]);
+                        const named = piece.t === "app" && piece.ascribed && piece.a.t === "var" ? piece.a.name : undefined;
+                        const typed = typedPattern(p, named ? (piece as Extract<Expr, { t: "app" }>).f : pieces[i]);
+                        return named && !(p.p === "var" && p.name === named) ? { p: "as", left: { p: "var", name: named }, right: typed } as Pattern : typed;
+                    });
                     const result = k === arity ? pieces[arity] : declaration.rest(k);
                     // A result naming a type variable no parameter binds, or _
                     // (any), is checked by inference, not by a claim the clause
