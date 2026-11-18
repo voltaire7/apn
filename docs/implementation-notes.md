@@ -385,7 +385,12 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   its root (`functionRoot`, through aliases and scoped extensions), and
   `joinedCall` tries them (newest first, by a probing apply) before the
   function's own clauses or builtin, so the operator and range fast paths
-  step aside (`joins`). The checker overloads the function with them
+  step aside (`joins`). The argument they would force first (`firstForced`:
+  every clause an evaluated argument does not already reject forces it first)
+  is forced by their caller, `evalBinop` for an operator, as the builtin's
+  operands are, so recursion through it (`1 + count (n - 1)` with `glsl`
+  loaded) is as deep and as lazy as through the builtin. Tests:
+  `tests/operators-test.ts`. The checker overloads the function with them
   (`travels`, `overloaded`), and with a scope's own extension of what it
   bound otherwise (`ownDefinitions`).
 - Monads: `instanceFamilies` records the types instances

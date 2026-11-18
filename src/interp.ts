@@ -1980,6 +1980,10 @@ export class Interpreter {
         if (op && !LAZY_OPERATORS.has(op)) return this.operate(op, this.eval(e.l), this.eval(e.r));
         const l = this.delay(e.l), r = this.delay(e.r);
         if (op) return this.operate(op, l, r);
+        // (An operand the joined clauses force first is forced here, as the
+        // builtin's are: see firstForced.)
+        const first = f.kind === "native" && this.attachments.size ? this.joinedFirst(f, [l, r]) : undefined;
+        if (first) this.force(first);
         return this.apply(this.apply(f, l), r);
     }
 
@@ -6304,6 +6308,8 @@ export class Interpreter {
         const joined = this.attachments.get(this.functionKey(f));
         if (!joined) return undefined;
         next: for (let n = joined.length - 1; n >= 0; n--) {
+            const first = this.firstForced(joined[n].fn, args);
+            if (first) this.force(first);
             let g = joined[n].fn;
             for (const x of args) {
                 g = this.apply(g, x, true);
@@ -6312,6 +6318,41 @@ export class Interpreter {
             return g;
         }
         return undefined;
+    }
+
+    // The argument a function joined to another (Glsl a + b = ..., a + Glsl b =
+    // ...) would force first, for its caller to force before its clauses are
+    // tried: the same value, in a shallower stack, so a recursion through the
+    // operator (1 + count (n - 1)) goes as deep as through the builtin. A clause
+    // an evaluated argument already rejects (1 is no Glsl) forces nothing; the
+    // argument is one only when every other clause would force it first.
+    private firstForced(fn: Value, args: Value[]): Value | undefined {
+        const f = this.reference(fn);
+        if (f.kind !== "clauseFn" || f.applied.length || f.arity !== args.length) return;
+        const plain = (p: Pattern) => p.p === "var" || p.p === "wildcard";
+        const settled = (x: Value) => x.kind === "thunk" ? x.value !== undefined || ["int", "float", "string", "char", "bool"].includes(x.body.t)
+            : x.kind !== "deferred" || x.value !== undefined;
+        let first: number | undefined;
+        for (const clause of f.clauses) {
+            let forces: number | undefined, rejected = false;
+            for (let i = 0; i < clause.params.length && forces === undefined && !rejected; i++) {
+                const p = clause.params[i];
+                if (plain(p)) continue;
+                if (!settled(args[i])) { forces = i; break; }
+                // (Only a constructor around names is told apart without forcing more.)
+                if (p.p !== "constr" || !p.args.every(plain)) return;
+                rejected = !this.matchPattern(p, this.force(args[i]), new Map());
+            }
+            if (rejected) continue;
+            if (forces === undefined || first !== undefined && first !== forces) return;
+            first = forces;
+        }
+        return first === undefined ? undefined : args[first];
+    }
+    // That argument for an operator's newest joined clauses (see joinedCall).
+    private joinedFirst(f: Value, args: Value[]): Value | undefined {
+        const joined = this.attachments.get(this.functionKey(this.functionRoot(f) ?? f));
+        return joined && this.firstForced(joined[joined.length - 1].fn, args);
     }
 
     // A constructor the name is bound to here (a later Rect w h = r
