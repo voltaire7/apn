@@ -2,7 +2,7 @@
 
 ```apn
 std <- import "std"
-use std.meta
+[..] = std.meta
 metaEval "fact n = n == 0 ? 1 : n * fact (n - 1); fact 5"  # 120
 metaEval "x = 1 :: x; take 6 x"                          # [1,1,1,1,1,1]
 ```

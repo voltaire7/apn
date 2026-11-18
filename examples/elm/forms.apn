@@ -1,7 +1,7 @@
 # Forms, from https://elm-lang.org/examples/forms
 # Input a user name and password. Make sure the password matches.
 std <- import "std"
-use std.html
+[..] = std.html
 [browser] = std
 
 Msg = Name String | Password String | PasswordAgain String

@@ -3,7 +3,7 @@
 # https://elm-lang.org/images/wood-crate.jpg, an image WebGL cannot use from
 # another site, so this crate's wood is drawn once into a p5 graphic.
 std <- import "std"
-use std.html
+[..] = std.html
 [browser,p5] = std
 
 Msg = | TimeDelta Number

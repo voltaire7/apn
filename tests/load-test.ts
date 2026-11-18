@@ -18,7 +18,7 @@ for (const name of ["number"]) {
 Deno.test("a library file loaded through .. shares the library's modules", () => {
     const i = new Interpreter();
     i.sourceDir = new URL("fixtures", import.meta.url).pathname;
-    i.run(parse('std <- import "std"; use std.option\nsix = { numbers <- load "../../lib/std/number"; return (numbers.sq 6) }\nsix'));
+    i.run(parse('std <- import "std"; [..] = std.option\nsix = { numbers <- load "../../lib/std/number"; return (numbers.sq 6) }\nsix'));
     if (i.renderString(i.run(parse("({ return 1 } : Option Int)"))) !== "Some 1") throw new Error("a second Option");
 });
 Deno.test("extensionless load reports the resolved APN path", () => {
@@ -44,17 +44,17 @@ Deno.test("system exposes halt as a deferred action", () => {
 // A module (an import's or a load's) opens its names only by use, which opens
 // them in its own block; a field of it, a binding of it or running it opens none.
 for (const [source, opened] of [
-    ['system <- import "std/system"\nuse system', true],
-    ['std <- import "std"\nuse std.system', true],
-    ['std <- import "std"\nuse std.[system,option]', true],
-    ['system <- import "std/system"\n{ use system; 1 }', false],
+    ['system <- import "std/system"\n[..] = system', true],
+    ['std <- import "std"\n[..] = std.system', true],
+    ['std <- import "std"\n[..] = std.system\n[..] = std.option', true],
+    ['system <- import "std/system"\n{ [..] = system; 1 }', false],
     ['system <- import "std/system"\nhaltAction = system.halt', false],
     ['system <- import "std/system"\nmodule _ = system\nm = module []', false],
-    ['numbers <- load "../lib/std/number"\nuse numbers', true],
+    ['numbers <- load "../lib/std/number"\n[..] = numbers', true],
     ['numbers = load "../lib/std/number"\nnumbers', false],
     ['load "../lib/std/number"', false],
     ['numbers <- load "../lib/std/number"\nnumbers.sq 2', false],
-] as const) Deno.test(`use opens a module: ${JSON.stringify(source)}`, () => {
+] as const) Deno.test(`[..] opens a module: ${JSON.stringify(source)}`, () => {
     // Checked, as programs run: the check finds a result return keeps unevaluated.
     const i = new Interpreter();
     i.enableChecking();

@@ -73,13 +73,13 @@ are exempt. It warns about a `match` alternative that never runs because one
 tried before it takes every value it does (`x -> 0` then `y -> 1`; clauses are
 [tried most specific first](semantics.md#clause-ranking), and a function's
 equivalent clause replaces the earlier one instead). The constructors it knows are
-the program's and those its `use` statements open, where `use` opens a record
-bound to an import or a load (`opt <- import "std/option"; use opt`,
-`f <- (load "f" : Dynamic); use f`, or `use std.option`), written in
-place, or a list of them: it resolves each from the file's folder as the
-interpreter does and reads (never runs) it, the types its final record declares
-and what that record's `use` items pass on included, so a file it cannot read
-declares nothing. It warns
+the program's and those its `[..]` statements open, where `[..]` opens a record
+bound to an import or a load (`[..] <- import "std/option"`,
+`f <- (load "f" : Dynamic); [..] = f`, or `[..] = std.option`), or one written
+in place: it resolves each from the file's folder as the interpreter does and
+reads (never runs) it, the types its final record declares and what that
+record's `[..]` items pass on included, so a file it cannot read declares
+nothing. It warns
 about a literal zero divisor (`x / 0`, `x % 0`, `quotient x 0`, `remainder x 0`,
 `modulo x 0`), which fails when demanded; `/` with a Float on either side is IEEE
 division and is not reported. Laziness keeps these warnings rather than errors:
@@ -104,10 +104,9 @@ completion offers only the standard natives. Standard output is reserved for LSP
 - Diagnostics on opening or changing a document; closing clears them.
 - Completion for built-ins, type constructors, keywords, identifiers in the
   current document, and the standard library's exports. Accepting a standard
-  name whose module is not opened yet opens it: into the first `use std.`
-  line, which becomes a list (`use std.io` becomes `use std.[io,sequence]`),
-  else as `use std.sequence` after `std <- import "std"`, else as both lines
-  at the top, followed by a blank line.
+  name whose module is not opened yet opens it: `[..] = std.sequence` after
+  the last line opening a standard module, else after `std <- import "std"`,
+  else both lines at the top, followed by a blank line.
   Document identifiers are lexical suggestions, not validated scope
   resolution. On invalid source, built-in completion remains available.
 - APN applies functions without parentheses, so the Neovim integration adds

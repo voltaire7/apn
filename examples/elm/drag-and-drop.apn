@@ -1,7 +1,7 @@
 # Drag-and-Drop, from https://elm-lang.org/examples/drag-and-drop
 # Image upload with a drag and drop zone.
 std <- import "std"
-use std.html
+[..] = std.html
 [browser,file] = std
 
 Msg = Pick | DragEnter | DragLeave | GotFiles file.File (List file.File)

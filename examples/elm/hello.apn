@@ -1,5 +1,5 @@
 # Hello, from https://elm-lang.org/examples/hello
 std <- import "std"
-use std.html
+[..] = std.html
 
 main = text "Hello!"

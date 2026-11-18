@@ -2,7 +2,8 @@
 # The page listing these examples. apn --site examples/elm OUTPUT builds it,
 # with an editor for each example.
 std <- import "std"
-use std.[html,text]
+[..] = std.html
+[..] = std.text
 [gallery] = std
 
 main = gallery.page "Examples" [

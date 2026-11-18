@@ -1,7 +1,7 @@
 # Rotate, from https://p5js.org/examples/transformation-rotate/
 # Rotate the coordinate system.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 setup (p : Sketch) = {
     p.createCanvas 720 400

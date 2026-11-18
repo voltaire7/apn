@@ -135,7 +135,7 @@ other process-level effects, forced process termination cannot run APN cleanup.
 
 ```apn
 std <- import "std"
-use std.function
+[..] = std.function
 released = Mutable False
 answer <- bracket 42 (_ -> set released True) (n -> [n, n + 1])
 # answer is [42,43]; released is True
@@ -153,7 +153,7 @@ resource implementations must enforce their own lifetime.
 
 ```apn
 std <- import "std"
-use std.io
+[..] = std.io
 text <- withFile "input.txt" (file -> file.read)
 ```
 

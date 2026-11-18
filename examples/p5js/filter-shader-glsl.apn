@@ -1,7 +1,7 @@
 # Filter Shader (GLSL), from https://p5js.org/examples/3d-filter-shader/
 # Manipulate imagery with a shader.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 video = createVideo "assets/DiagonalCrosswalkYongeDundas.mp4"
 

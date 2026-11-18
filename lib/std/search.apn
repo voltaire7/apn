@@ -1,8 +1,7 @@
-maps <- import "std/map"
-sequences <- import "std/sequence"
-functions <- import "std/function"
-option <- import "std/option"
-use [maps,sequences,functions,option]
+[..] <- import "std/map"
+[..] <- import "std/sequence"
+[..] <- import "std/function"
+[..] <- import "std/option"
 [
     # Breadth-first traversal with level frontiers; keys must be HashMap scalar keys.
     # Mark on insertion so cycles and duplicate edges cannot enqueue a node twice.

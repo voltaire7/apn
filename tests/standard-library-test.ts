@@ -4,7 +4,7 @@ import { isForTypes } from "../src/ast.ts";
 import { QUALIFIED_MODULES } from "../src/modules.ts";
 
 const decoded = (type: string, json: string) =>
-    `std <- import "std"; use std.[option,decode]\njson = from JSON ${JSON.stringify(json)}\ndecodeValue ${type} json`;
+    `std <- import "std"\n[..] = std.option\n[..] = std.decode\njson = from JSON ${JSON.stringify(json)}\ndecodeValue ${type} json`;
 const cases: [string, string][] = [
     // A type decodes each field by name, as it says, wherever a decoder goes.
     [decoded("(list [n : Int])", '[{"n": 1}, {"n": 2}]'), "Ok [[n = 1], [n = 2]]"],
@@ -18,16 +18,16 @@ const cases: [string, string][] = [
     [decoded("(fromType [tags = list string])", '{"tags": ["a", 1]}'), 'Err "Expecting a STRING"'],
     [decoded("Bool", "true"), "Ok True"],
     // Parsers read their input in order, as do-blocks (Parsec's way).
-    ['std <- import "std"; use std.parser\ndate = {\n    y <- number\n    char \'-\'\n    m <- number\n    return [y,m]\n}\nparse date "2026-10"', "Ok [2026,10]"],
-    ['std <- import "std"; use std.parser\nparse number "12x"', 'Err "unexpected \'x\'"'],
-    ['std <- import "std"; use std.parser\nparse (sepBy number (char \',\')) "1,22,333"', "Ok [1,22,333]"],
-    ['std <- import "std"; use std.parser\nparse (string "hi" <|> string "ho") "ho"', 'Ok "ho"'],
-    ['std <- import "std"; use std.parser\nparse (some digit) ""', 'Err "expected one of 0123456789, got the end"'],
-    ['std <- import "std"; use std.parser\nparse (many (token (some letter))) "ab cd"', "Ok [['a','b'],['c','d']]"],
+    ['std <- import "std"; [..] = std.parser\ndate = {\n    y <- number\n    char \'-\'\n    m <- number\n    return [y,m]\n}\nparse date "2026-10"', "Ok [2026,10]"],
+    ['std <- import "std"; [..] = std.parser\nparse number "12x"', 'Err "unexpected \'x\'"'],
+    ['std <- import "std"; [..] = std.parser\nparse (sepBy number (char \',\')) "1,22,333"', "Ok [1,22,333]"],
+    ['std <- import "std"; [..] = std.parser\nparse (string "hi" <|> string "ho") "ho"', 'Ok "ho"'],
+    ['std <- import "std"; [..] = std.parser\nparse (some digit) ""', 'Err "expected one of 0123456789, got the end"'],
+    ['std <- import "std"; [..] = std.parser\nparse (many (token (some letter))) "ab cd"', "Ok [['a','b'],['c','d']]"],
     // many reads in a loop: long input parses in constant stack.
-    ['std <- import "std"; use std.parser\nvalue (Ok x) = x\nlength (value (parse (many digit) (replicate 20000 (head (to (List Char) "7")))))', "20000"],
+    ['std <- import "std"; [..] = std.parser\nvalue (Ok x) = x\nlength (value (parse (many digit) (replicate 20000 (head (to (List Char) "7")))))', "20000"],
     // Any list parses, code included.
-    ['std <- import "std"; use std.parser\nparse (some (satisfy "an even number" (n -> n % 2 == 0))) [2,4,5]', 'Err "unexpected 5"'],
+    ['std <- import "std"; [..] = std.parser\nparse (some (satisfy "an even number" (n -> n % 2 == 0))) [2,4,5]', 'Err "unexpected 5"'],
     ["takeWhile (x -> 1) [1]", "[1]"],
     ['head (reverse [1..10000])', '10000'],
     ['length (reverse [1..10000])', '10000'],
@@ -106,7 +106,7 @@ const cases: [string, string][] = [
 ];
 for (const [source, expected] of cases) Deno.test(`std: ${source}`, () => {
     const i = new Interpreter();
-    i.run(parse('std <- import "std"; use std.[function,option,sequence,number,text,map]'));
+    i.run(parse('std <- import "std"\n[..] = std.function\n[..] = std.option\n[..] = std.sequence\n[..] = std.number\n[..] = std.text\n[..] = std.map'));
     const actual = i.renderString(i.run(parse(source)));
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
 });
@@ -119,7 +119,7 @@ for (const [source, message] of [
     ['import 123', 'string'],
 ]) Deno.test(`std rejects: ${source}`, () => {
     const i = new Interpreter();
-    i.run(parse('std <- import "std"; use std.[sequence,number,text]'));
+    i.run(parse('std <- import "std"\n[..] = std.sequence\n[..] = std.number\n[..] = std.text'));
     try { i.renderString(i.run(parse(source))); }
     catch (error) {
         if (error instanceof Error && error.message.includes(message)) return;
@@ -136,7 +136,7 @@ for (const [source, message] of [
     ['f n = { Some x = safeDiv 6 n; x }; f 0', 'binding pattern did not match'],
 ]) Deno.test(`std fails: ${source}`, () => {
     const i = new Interpreter();
-    i.run(parse('std <- import "std"; use std.[option,number]'));
+    i.run(parse('std <- import "std"\n[..] = std.option\n[..] = std.number'));
     try { i.renderString(i.run(parse(source))); }
     catch (error) {
         if (error instanceof Error && error.message.includes(message)) return;
@@ -147,7 +147,7 @@ for (const [source, message] of [
 Deno.test("imports are cached, isolated from caller bindings, and independent of source directory", () => {
     const i = new Interpreter();
     i.sourceDir = "/unrelated/directory";
-    i.run(parse('sum xs = 999\nstd <- import "std"; use std.number'));
+    i.run(parse('sum xs = 999\nstd <- import "std"; [..] = std.number'));
     if (i.renderString(i.run(parse('mean [1,2]'))) !== 'Some 3/2') throw new Error("caller leaked into module");
     const first = i.importStandard("std/sequence");
     if (i.importStandard("std/sequence") !== first) throw new Error("import did not reuse module");
@@ -157,19 +157,19 @@ Deno.test("imports are cached, isolated from caller bindings, and independent of
 
 Deno.test("a bare import does not echo an infinite export record", () => {
     const i = new Interpreter();
-    if (i.run(parse('std <- import "std"; use std.function')).kind !== "list") throw new Error("import must be quiet");
+    if (i.run(parse('std <- import "std"; [..] = std.function')).kind !== "list") throw new Error("import must be quiet");
 });
 Deno.test("standard natives require importing their module", () => {
     const i = new Interpreter();
     if (i.env.get("words") !== undefined) throw new Error("stdlib leaked into builtins");
-    i.run(parse('std <- import "std"; use std.text'));
+    i.run(parse('std <- import "std"; [..] = std.text'));
     if (i.renderString(i.run(parse('words "a b"'))) !== '["a","b"]') throw new Error("missing export");
 });
 
 Deno.test("reverse uses APN typed clauses and is available from either module", () => {
     for (const module of ["sequence", "text"]) {
         const i = new Interpreter();
-        i.run(parse(`std <- import "std"; use std.${module}`));
+        i.run(parse(`std <- import "std"; [..] = std.${module}`));
         const fn = i.demand(i.env.get("reverse")!);
         if (fn.kind !== "clauseFn") throw new Error("reverse must use typed APN overloads");
         if (i.renderString(i.run(parse('reverse "a😀b"'))) !== '"b😀a"') throw new Error(module);
@@ -187,8 +187,8 @@ for (const cached of [false, true]) {
         const added = [...i.env.map.keys()].filter(name => !before.has(name));
         if (JSON.stringify(added) !== '["halt"]') throw new Error(`leaked exports: ${added}`);
         if (!i.env.get('halt')) throw new Error('missing selected export');
-        i.run(parse('std <- import "std"; use std.number'));
-        if (!i.env.get('fibonacci')) throw new Error('use must still open exports');
+        i.run(parse('std <- import "std"; [..] = std.number'));
+        if (!i.env.get('fibonacci')) throw new Error('[..] must still open exports');
     });
 }
 Deno.test('selective imports rename fields and preserve unselected bindings', () => {
@@ -235,7 +235,7 @@ Deno.test("no two standard modules define the same name", () => {
     }
 });
 Deno.test("html and text import together, in either order", () => {
-    for (const source of ['std <- import "std"\nuse std.[html,text]', 'std <- import "std"\nuse std.[text,html]']) {
+    for (const source of ['std <- import "std"\n[..] = std.html\n[..] = std.text', 'std <- import "std"\n[..] = std.text\n[..] = std.html']) {
         const i = new Interpreter();
         i.enableChecking();
         i.run(parse(source));

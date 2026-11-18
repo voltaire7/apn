@@ -1,7 +1,7 @@
 # Image Previews, from https://elm-lang.org/examples/image-previews
 # Image upload with a drag and drop zone. See image previews!
 std <- import "std"
-use std.html
+[..] = std.html
 [browser,file,task] = std
 
 Msg =

@@ -8,7 +8,7 @@
 #    constructor `Some` wraps a value; bare `None` is a tag.
 # ---------------------------------------------------------
 std <- import "std"
-use std.option
+[..] = std.option
 
 print (Some 42)        # => Some 42
 print None             # => None
@@ -529,7 +529,7 @@ print (spanEnd (Span2 1 3))         # => 3
 byteField (r : [x : UInt8]) = r.x   # record fields are checked by value too
 scaled v = byteField [x = v * 100]  # scaled 3 is a static range error
 print (scaled 1)                    # => 100, a UInt8
-print (byteField [x = 300, use [x = 3]]) # => 3, a UInt8 (a later spread wins, as at runtime)
+print (byteField [x = 300, [..] = [x = 3]]) # => 3, a UInt8 (a later spread wins, as at runtime)
 print ([1,2] :: [3,4])            # => [[1,2], 3, 4]  ('::' adds one element; joining is ++)
 tailOf (_ :: rest) = rest           # '::' in a pattern is cons too
 print [0 :: []]                     # => [[0]]  (no parentheses needed in a list)
@@ -650,7 +650,7 @@ print (toAST [f x "y"])       # => ["[]", ["f","x","\"y\""]]
 print (toAST [x -> x, 2])     # => ["[]", ["->", ["x"], "x"], 2]
 # import "std/syntax": fromAST writes such data back; eval runs it at the top level.
 std <- import "std"
-use std.syntax
+[..] = std.syntax
 print (fromAST (toAST [n -> n * 2 + 1]))  # => [n -> n * 2 + 1]
 doubled e = ["*", e, 2]         # building code is building a list
 print (fromAST (doubled (toAST [x + 1] 1)))  # => (x + 1) * 2
@@ -856,7 +856,7 @@ print (foldl (_, b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 #    load p    runs a file RELATIVE TO THE CURRENT FILE in a scope of its own
 #              (an action, as import is), yielding its value, the record it
 #              ends in: numbers <- load "../../lib/std/number"; numbers.sq 4,
-#              and use numbers opens its names. Inside a { } block, use binds
+#              and [..] = numbers opens its names. Inside a { } block, [..] = binds
 #              in that block alone.
 #    halt      is NOT a builtin. It is defined in system — the standard
 #              library — as  `halt = exit 0`. Expression 0-arg defs are LAZY, so
@@ -868,20 +868,20 @@ print (foldl (_, b -> b) 0 (take 101 fibs)) # => 354224848179261915075 (F100)
 # selectedHalt is available; other exports are not introduced by this binding.
 {
     numbers <- load "../../lib/std/number"   # extensionless name
-    use numbers                    # sq joins this block
+    [..] = numbers                    # sq joins this block
     print (sq 5)                   # => 25
 }
 # In the REPL, a statement running a load or an import does not echo its module.
 std <- import "std"
-use std.system               # halt is a deferred action
+[..] = std.system               # halt is a deferred action
 
 numbers <- load "../../lib/std/number"     # the module record
 print (numbers.sq 4)           # => 16
 print (numbers.cube 2)         # => 8
 {
-    use numbers
+    [..] = numbers
     sq x = x + 1                   # rebinding an opened name ...
-    use numbers                    # ... does not stop opening it again from replacing it
+    [..] = numbers                    # ... does not stop opening it again from replacing it
     print (sq 3)                   # => 9
 }
 # A value never changes: a rebinding is a new version from there on, and
@@ -909,9 +909,9 @@ debug $ step 1 halt          # => exit 0
 # print RUNS the level, so this terminates the program:
 #   print $ step 1 halt
 
-# a use inside a { } block stays in the block's scope
+# [..] = inside a { } block stays in the block's scope
 scoped <- {
-    use numbers
+    [..] = numbers
     return (sq 6)
 }
 print scoped                # => 36
@@ -1342,7 +1342,8 @@ myTypeOf (5 : Int32) # => Int32
 #       body = to JSON [["ids", ["jawed"]]]
 #   ]
 std <- import "std"
-use std.[http,json]
+[..] = std.http
+[..] = std.json
 reply <- fetch "data:application/json,{\"ids\":[\"jawed\"]}" [method = "GET"]
 print [reply.status,reply.ok]               # => [200, True]
 print (from JSON reply.body "ids")           # => ["jawed"]  (an object is its pairs)
@@ -1353,11 +1354,21 @@ decoded <- fetchJson "data:application/json,[1,2.5,null]" []
 print decoded                                 # => [1, 2.5, []]
 
 # The standard library is the folder lib/std/: std <- import "std" names its
-# record, whose fields are its modules, all imported with it, and use
-# opens them (use std.option one, use std.[option,text] several). import
+# record, whose fields are its modules, all imported with it, and [..]
+# opens one ([..] = std.option). import
 # "std/option" reads one module alone. Using a standard export before its module
 # is opened (fail, upper, okOr) is a static error at the name naming the module.
-use std.[function,option,sequence,array,number,text,map,combinator,io,system,search]
+[..] = std.function
+[..] = std.option
+[..] = std.sequence
+[..] = std.array
+[..] = std.number
+[..] = std.text
+[..] = std.map
+[..] = std.combinator
+[..] = std.io
+[..] = std.system
+[..] = std.search
 print (to (List Char) "hello" : String) # => "hello"
 # reverse is implemented in APN with a linear-time accumulator fold.
 print (head (reverse [1..10000]))   # 10000
@@ -1400,7 +1411,7 @@ print [perItem 300 2, perItem 300 3]  # [Err "share too large", Ok 200]
 
 # The language evaluates source through its APN-written reader and evaluator.
 std <- import "std"
-use std.meta
+[..] = std.meta
 print (metaEval "id x = x; id 42")                 # 42
 print (metaEval "x = 1 :: x; take 4 x")           # [1,1,1,1]
 print (metaEval "True ? 7 : missing")              # 7
@@ -1621,7 +1632,7 @@ print (decode.decodeValue (decode.list Pixel) [pixelJson])  # Ok [[x = 1, y = 2,
 print (to Pixel [lit = True])                  # [x = 0, y = 0, lit = True] (as [...] : Pixel)
 lamp = [] : Pixel
 lamp.lit = True
-print [use lamp, size = 2]                     # [x = 0, y = 0, lit = True, size = 2] (a copy)
+print [[..] = lamp, size = 2]                     # [x = 0, y = 0, lit = True, size = 2] (a copy)
 asPixel value = value : Pixel                  # converted when it runs
 print (asPixel [lit = True]).lit               # True
 clock <- import "std/time"
@@ -1751,12 +1762,12 @@ print ((+ 1) \ (* 2) $ 3)                 # => 7
 numberModule <- import "std/number"
 print (numberModule.sq 7)                 # => 49
 
-# REPL/Neovim: load and use share import's keyword color.
-# Open namespace records (or a list of them) in the current scope.
-standardNamespace <- import "std/combinator"
-use standardNamespace
+# REPL/Neovim: load shares import's keyword color.
+# Open a namespace record in the current scope.
+[..] <- import "std/combinator"
 print (identity 123)                     # => 123
-use [[useFirst = 10], [useSecond = 20]]
+[..] = [useFirst = 10]
+[..] = [useSecond = 20]
 print (useFirst + useSecond)              # => 30
 
 # Record-template patterns accept positional lists just like template application.
@@ -1788,7 +1799,7 @@ ArrayVector = [x : Float, y : Float, z : Float]
 print (([1,2,3] : ArrayVector) * 2)     # => [x = 2.0, y = 4.0, z = 6.0]
 print ([1,2] ++ [3,4])                 # => [1,2,3,4]
 std <- import "std"
-use std.array
+[..] = std.array
 print (shape [[1,2],[3,4]])            # => [2,2]
 print (dot [1,2,3] [4,5,6])           # => 32
 print (transpose [[1,2,3],[4,5,6]])  # => [[1,4],[2,5],[3,6]]
@@ -1885,13 +1896,13 @@ print (assert (compassName Up == "up") "up")  # => up (assert c x is x once c ho
 
 # Scoped cleanup runs after returned lazy data has been evaluated.
 std <- import "std"
-use std.function
+[..] = std.function
 released = Mutable False
 bracketed <- bracket 42 (_ -> set released True) (n -> [n, n + 1])
 print bracketed                    # => [42,43]
 print released                     # => True
 std <- import "std"
-use std.io
+[..] = std.io
 # A read-only OS device keeps this program independent of its working directory.
 nothing <- withFile "/dev/null" (file -> file.read)
 print nothing                      # => empty line
@@ -2063,7 +2074,7 @@ print ([x = 1, y = 2, z = 3].[x,y] ^ 10) # => [1,1024]
 print (.1 : Float32)                  # => 0.1, a Float32
 print ((.1 : Float32) + .2)           # => 0.3, a Float32
 print ((.1 : Float32) + (.2 : Float32)) # => 0.3, a Float32
-# Int .2 still errors; use Int (floor .2) to choose integer rounding.
+# Int .2 still errors; [..] = Int (floor .2) to choose integer rounding.
 
 # Float is flexible; Float32 and Float64 commit to a precision.
 flexibleValue = .2
@@ -2179,8 +2190,8 @@ print updateRecord                       # => [x = 1]
 
 # Anonymous record entries merge fields; later entries replace earlier values.
 baseRecord = [x = 1]
-print [use baseRecord, y = 2, z = 3]     # => [x = 1, y = 2, z = 3]
-print [use baseRecord, x = "new"]        # => [x = "new"]
+print [[..] = baseRecord, y = 2, z = 3]     # => [x = 1, y = 2, z = 3]
+print [[..] = baseRecord, x = "new"]        # => [x = "new"]
 updateRecord._ = [y = 2]
 print updateRecord                       # => [x = 1, y = 2]
 

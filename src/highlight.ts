@@ -10,7 +10,7 @@ export const PALETTES: Record<"dark" | "light", Record<string, string>> = {
     light: { number: "#df8e1d", string: "#40a02b", comment: "#9ca0b0", keyword: "#8839ef", function: "#1e66f5", type: "#04a5e5", operator: "#fe640b", punctuation: "#8c8fa1" },
 };
 export interface HighlightToken { line: number; start: number; length: number; type: string; }
-const KEYWORDS = new Set(["import", "load", "use", "do", "return", "else", "loop", "for", "while", "True", "False"]);
+const KEYWORDS = new Set(["import", "load", "do", "return", "else", "loop", "for", "while", "True", "False"]);
 // A name is a function where it is applied: at the head of an application
 // (after what starts an expression, a line's start, ( [ { , ; = or an
 // operator), with an argument after it on its line: map and add in

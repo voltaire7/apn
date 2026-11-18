@@ -1,7 +1,7 @@
 # Numbers, from https://elm-lang.org/examples/numbers
 # Press a button to generate a random number between 1 and 6.
 std <- import "std"
-use std.html
+[..] = std.html
 [browser,random] = std
 
 Msg = Roll | NewFace Int

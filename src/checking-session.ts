@@ -90,7 +90,7 @@ export class CheckingSession {
             loads: path => this.load(path, directory),
             result: (bound, published, last) => { scope = bound; exports = published; value = last; },
         });
-        // A module's use opens names in its own scope, which no other program shares.
+        // A module's [..] opens names in its own scope, which no other program shares.
         if (result.opaqueUse && !library) this.opaqueUses.add(program);
         if (result.issues.length) {
             const issue = result.issues[0];

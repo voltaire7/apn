@@ -881,10 +881,15 @@ export function isLoadCall(e: Expr): boolean {
     if (e.t === "block" && e.style === "(" && e.stmts.length === 1) return isLoadCall(e.stmts[0]);
     return (e.t === "app" || e.t === "pipe") && e.f.t === "var" && e.f.name === "load";
 }
-// A use (use r): it binds the names it opens and yields nothing, as = does,
-// so in code it is a binding's item.
+// [..] = r opens r: it binds each of r's fields under its own name and yields
+// nothing, as = does, so in code it is a binding's item. The parser writes it
+// as this name, which no program can, applied to r.
+export const OPEN = "[..]";
+export function opening(value: Expr): Expr {
+    return { t: "app", f: { t: "var", name: OPEN }, a: value };
+}
 export function isUse(e: Expr): e is Extract<Expr, { t: "app" }> {
-    return e.t === "app" && e.f.t === "var" && e.f.name === "use";
+    return e.t === "app" && e.f.t === "var" && e.f.name === OPEN;
 }
 // The path an import written with a literal one reads (import "std/text").
 export function importedPath(e: Expr): string | undefined {

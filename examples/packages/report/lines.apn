@@ -1,8 +1,7 @@
 # From report/, import "units" finds the package beside report.apn.
 std <- import "std"
-units <- import "units"
-use std.text
-use units
+[..] <- import "units"
+[..] = std.text
 [
     describe [name,area] = name ++ ": " ++ squareMetres area
     joinLines xs = joinWith "\n" xs

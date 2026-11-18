@@ -3,7 +3,7 @@
 # WebGL shaders; here a p5 WEBGL canvas in the view draws it each frame,
 # with the camera the model's time puts it at.
 std <- import "std"
-use std.html
+[..] = std.html
 [browser,p5] = std
 
 Msg = | TimeDelta Number

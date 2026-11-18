@@ -77,18 +77,21 @@ print (to (List Char) "hi")              # => ['h','i']
 # A file's value is its last statement's: a module ends in the record of what
 # it gives, and what comes before stays its own. import "path" is an action
 # yielding a module's value (std, the library, is a record of its modules), and
-# use opens a record's names into the block it is in. Your own files and
-# folders import the same way; load "file" runs a file again each time, as a
-# call, and a file ending in a function is a module that takes parameters.
+# [..] = r binds each of r's fields under its own name in the block it is in.
+# Your own files and folders import the same way; load "file" runs a file again
+# each time, as a call, and a file ending in a function is a module that takes
+# parameters.
 std <- import "std"
-use std.[option,number,syntax]
+[..] = std.option
+[..] = std.number
+[..] = std.syntax
 [parser] = std
 print (sq 12)                            # => 144
 print (parser.parse parser.number "12")  # => Ok 12
 {
     text <- import "std/text"
     print (text.words "a b")             # => ["a","b"]
-    use text
+    [..] = text
     print (unwords ["c","d"])            # => c d
 }
 

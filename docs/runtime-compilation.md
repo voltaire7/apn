@@ -81,7 +81,7 @@ writes a snapshot (`src/snapshot.ts`) with the interpreter that runs it
 
 ```apn
 std <- import "std"
-use std.io
+[..] = std.io
 greeting <- return "made before compile ran"
 count = Mutable 10
 set count 42

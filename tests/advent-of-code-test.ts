@@ -5,8 +5,8 @@ function interpreter(): Interpreter {
     const i = new Interpreter();
     i.sourceDir = new URL("../examples/advent-of-code/", import.meta.url).pathname;
     // (A loaded file runs in a scope of its own: the library names the stress cases use are opened here.)
-    i.run(parse('std <- import "std"; use std.[text,search,sequence]\n' +
-        'sonar <- load "sonar-sweep"; fish <- load "lanternfish"; hill <- load "hill-climbing"\nuse [sonar,fish,hill]'));
+    i.run(parse('std <- import "std"\n[..] = std.text\n[..] = std.search\n[..] = std.sequence\n' +
+        'sonar <- load "sonar-sweep"; fish <- load "lanternfish"; hill <- load "hill-climbing"\n[..] = sonar\n[..] = fish\n[..] = hill'));
     return i;
 }
 function result(i: Interpreter, source: string): string { return i.renderString(i.run(parse(source))); }
@@ -45,14 +45,14 @@ for (const source of ['parseInt "1.5"', 'parseInt "1/2"', 'solveFish "9"', 'solv
     });
 }
 Deno.test("readInput uses program arguments and reads UTF-8 from cwd-relative or absolute paths", () => {
-    const i = new Interpreter(); i.run(parse('std <- import "std"; use std.io'));
+    const i = new Interpreter(); i.run(parse('std <- import "std"; [..] = std.io'));
     const file = new URL("../examples/advent-of-code/samples/sonar.input", import.meta.url).pathname;
     i.programArgs = [file];
     const actual = i.demand(i.run(parse('readInput')));
     if (actual.kind !== "string" || actual.v !== Deno.readTextFileSync(file)) throw new Error("readInput failed");
 });
 Deno.test("file read failures identify the operation", () => {
-    const i = new Interpreter(); i.run(parse('std <- import "std"; use std.io'));
+    const i = new Interpreter(); i.run(parse('std <- import "std"; [..] = std.io'));
     try { result(i, 'readFile "/__apn_missing_input__/missing.input"'); }
     catch (error) { if (error instanceof Error && error.message.startsWith("readFile:")) return; throw error; }
     throw new Error("expected a read error");

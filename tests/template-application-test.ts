@@ -49,7 +49,7 @@ for (const [source, expected] of [
     ['([x = 1] : [x = Float])', '[x = 1]'],
     ['[[x = Float], [x : Float]]', '[[x = Float], [x : Float]]'],
     ['[isType Type [x = Float], isType Type [x : Float]]', '[False,True]'],
-    ['[use [x : Int], y = Int]', '[x : Int, y = Int]'],
+    ['[[..] = [x : Int], y = Int]', '[x : Int, y = Int]'],
     ['v = [x = Float]\nv.x = Int\nv', '[x = Int]'],
     ['([type : Int] : [type : Type])', '[type = Int]'],
     ['xs = [0,missing]\nxs 0 = 1\nxs 0', '1'],

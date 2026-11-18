@@ -130,14 +130,14 @@ export function resolveModule(spec: string, directory: string, bundle?: Record<s
 /** import given anything but one module's path (a list of them, say). */
 export const IMPORT_ONE = {
     message: "import reads one module, named by a path string",
-    hint: 'name the library and open its modules: std <- import "std"; use std.[option,text]',
+    hint: 'import each module in turn: [..] <- import "std/option"; [..] <- import "std/text"',
 };
 
 /** Why an import could not be resolved, with a hint. */
 export function unknownModule(spec: string, bundled = false): { message: string; hint: string } {
     if (spec.startsWith("std/")) return { message: `unknown module '${spec}'`, hint: `the standard library has no module '${spec.slice(4)}'` };
     if (bundled) return { message: `module '${spec}' is not bundled`, hint: "a browser build bundles the standard library and the local modules the program imports" };
-    const standard = !spec.includes("/") && resolveModule(`std/${spec}`, ".") ? `; a standard module is std.${spec}: \`std <- import "std"; use std.${spec}\`` : "";
+    const standard = !spec.includes("/") && resolveModule(`std/${spec}`, ".") ? `; a standard module is std/${spec}: \`[..] <- import "std/${spec}"\`` : "";
     return { message: `unknown module '${spec}'`, hint: `no ${spec}.apn or ${spec}/ here or in a parent folder of the program${standard}` };
 }
 

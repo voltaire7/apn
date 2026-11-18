@@ -76,7 +76,7 @@ for (const [source, error] of [
 });
 
 Deno.test("the checker runs the runtime's text functions", () => {
-    const source = 'std <- import "std"; use std.text; (to (List Char) "a😀" : Vect 3 Char)';
+    const source = 'std <- import "std"; [..] = std.text; (to (List Char) "a😀" : Vect 3 Char)';
     const i = new Interpreter();
     i.enableChecking();
     let message = "";
@@ -84,7 +84,7 @@ Deno.test("the checker runs the runtime's text functions", () => {
     if (!message.includes("length mismatch: expected 3, got 2")) throw new Error(message);
     const ok = new Interpreter();
     ok.enableChecking();
-    const shown = ok.renderString(ok.run(parseDocument('std <- import "std"; use std.text; [upper "straße", (to (List Char) "a😀" : Vect 2 Char)]')));
+    const shown = ok.renderString(ok.run(parseDocument('std <- import "std"; [..] = std.text; [upper "straße", (to (List Char) "a😀" : Vect 2 Char)]')));
     if (shown !== '["STRASSE", [\'a\',\'😀\']]') throw new Error(shown);
 });
 

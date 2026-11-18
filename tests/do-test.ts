@@ -13,7 +13,7 @@ for (const [source, expected, effects] of [
     ['do (map return [1..10000])', '10000', []],
     ['v <- do [print "hi", return [42,missing]]; head v', '42', ['hi']],
     ['f <- import "std/function"; f.do [return 1, return 42]', '42', []],
-    ['std <- import "std"; use std.function; do [return 42]', '42', []],
+    ['std <- import "std"; [..] = std.function; do [return 42]', '42', []],
     ['apply f x = f x; apply do [return 42]', '42', []],
 ] as const) Deno.test(`do: ${source}`, () => {
     const i = new Interpreter();
@@ -56,8 +56,8 @@ for (const [form, block] of [
     ['do [print "hi", return 42]', '{ print "hi"; return 42 }'],
     ['x <- do []', 'x <- {}'],
     ['x = do [print 1, 2]', 'x = { print 1; 2 }'],
-    ['std <- import "std"; use std.option; do [Some 1, Some 2]', 'std <- import "std"; use std.option; { Some 1; Some 2 }'],
-    ['std <- import "std"; use std.option; do [Some 1, None, Some 2]', 'std <- import "std"; use std.option; { Some 1; None; Some 2 }'],
+    ['std <- import "std"; [..] = std.option; do [Some 1, Some 2]', 'std <- import "std"; [..] = std.option; { Some 1; Some 2 }'],
+    ['std <- import "std"; [..] = std.option; do [Some 1, None, Some 2]', 'std <- import "std"; [..] = std.option; { Some 1; None; Some 2 }'],
     ['do [[1,2],[3]]', '{ [1,2]; [3] }'],
 ] as const) Deno.test(`do is its block: ${form}`, () => {
     const outcome = (source: string, checked: boolean) => {

@@ -1,5 +1,5 @@
 extra <- load "parts/extra"
 [
     caption n = "clicked " ++ to String n
-    use extra
+    [..] = extra
 ]

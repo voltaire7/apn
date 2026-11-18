@@ -1,7 +1,7 @@
 # Local Storage, from https://p5js.org/examples/loading-and-saving-data-local-storage/
 # Save data in the browser, so it is there when the page opens again.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 # Bubbles, each a circle with a name; and the press a new one starts from.
 Bubble = [x : Float, y : Float, radius : Float, name : String]

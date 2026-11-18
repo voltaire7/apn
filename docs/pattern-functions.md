@@ -5,7 +5,7 @@ like any other function:
 
 ```apn
 std <- import "std"
-use std.option
+[..] = std.option
 (Some x -> print x) (Some 123)  # prints 123
 (None -> print "no") None      # prints no
 ```
@@ -102,9 +102,9 @@ accepts `g (P2 1 3)` and rejects `g (P2 1 300)`, and with
 `g (MkPair 1 300)`. Record literals are checked by field the same way: for
 `g ([x : UInt8] r)`, `g [x = 300]` is a static range error, as are
 `k = [x = 300]; g k`, `h r = g r; h [x = 300]` and `h v = g [x = v * 100]; h 3`,
-while `h 1` passes. A spread (`use other`) contributes its fields in order, as
-at runtime, so `g [x = 300, use [x = 3]]` passes (the spread's `x` wins) and
-`g [x = 3, use [x = 300]]` is rejected; with `h b = g [use b, x = 3]`, a field of
+while `h 1` passes. A spread (`[..] = other`) contributes its fields in order, as
+at runtime, so `g [x = 300, [..] = [x = 3]]` passes (the spread's `x` wins) and
+`g [x = 3, [..] = [x = 300]]` is rejected; with `h b = g [[..] = b, x = 3]`, a field of
 `b` is checked at each call of `h`.
 
 For records, the bare-name pattern
@@ -437,11 +437,11 @@ field `x`, and `_ = x` takes `x` and discards it):
 
 withoutX [first = x, rest = _] = rest
 withoutX [x = 1, y = 2]            # [y = 2]
-[use rest, x = first]              # rebuild: [y = 2, z = 3, x = 1]
+[[..] = rest, x = first]              # rebuild: [y = 2, z = 3, x = 1]
 ```
 
 There may be one remainder entry, anywhere in the pattern. Explicit fields must
 exist. The remainder is a record (including when empty), preserves source order,
 and shares untouched lazy fields and references. This works in bindings,
 function parameters, and pattern lambdas used by `match`. Its meaning is the
-counterpart of `use` spreading a record in a record literal.
+counterpart of `[..] = r` spreading a record in a record literal.

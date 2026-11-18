@@ -1,6 +1,5 @@
-hello <- import "hello"
-greetings <- import "greeting"
-use [hello,greetings]
+[..] <- import "hello"
+[..] <- import "greeting"
 [
     inner = [greet "deep", greeting]
 ]

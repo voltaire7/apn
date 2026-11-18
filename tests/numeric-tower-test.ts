@@ -93,7 +93,7 @@ for (const source of ["0x", "0b102", "0o8", "0xFG", "1e+", ".1e"]) {
 Deno.test("a long product of fractions is exact and quick", () => {
     const i = new Interpreter();
     const started = performance.now();
-    const shown = i.renderString(i.run(parse('std <- import "std"\nuse std.sequence\n' +
+    const shown = i.renderString(i.run(parse('std <- import "std"\n[..] = std.sequence\n' +
         "t n = 4 * n^2 / (4 * n^2 - 1)\n[product (map (n -> n / (n + 1)) [1..20000]), numerator (product (map t [1..3]))]")));
     if (shown !== "[1/20001,256]") throw new Error(shown);
     if (performance.now() - started > 20000) throw new Error("slow");

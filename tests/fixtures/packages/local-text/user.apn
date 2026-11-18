@@ -1,5 +1,4 @@
-text <- import "text"
-use text
+[..] <- import "text"
 [
     result = upper "x"
 ]

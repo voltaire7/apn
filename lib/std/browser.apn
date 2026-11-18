@@ -2,8 +2,7 @@
 # is [init,update,view,subscriptions]: init is [model,command], update msg
 # model returns [model,command], and subscriptions model names the events the
 # program listens to. Creating either has no effects; the browser runs it.
-time <- import "std/time"
-use time
+[..] <- import "std/time"
 [
     BrowserProgram = BrowserSandbox Dynamic | BrowserElement Dynamic
     sandbox specification = BrowserSandbox specification

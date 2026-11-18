@@ -1,5 +1,5 @@
 std <- import "std"
-use std.function
+[..] = std.function
 [
     double n = n * 2
     count = Mutable 0

@@ -1,7 +1,7 @@
 # Positions, from https://elm-lang.org/examples/positions
 # A button that moves to random positions when pressed.
 std <- import "std"
-use std.html
+[..] = std.html
 [browser,random] = std
 
 Msg = Clicked | NewPosition Int Int

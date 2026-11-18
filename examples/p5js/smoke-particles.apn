@@ -1,7 +1,7 @@
 # Smoke Particles, from https://p5js.org/examples/math-and-physics-smoke-particle-system/
 # Simulate smoke with a system of particles that the wind blows.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 texture = loadImage "assets/particle_texture.png"
 # A particle: where it is, its velocity, its life left and its hue.

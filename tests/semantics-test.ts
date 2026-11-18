@@ -482,7 +482,7 @@ failure("':' is not cons", "print (1 : [2])", "cons is '::'");
 // A type is given a value only ascribed (e : T), and a typed pattern writes
 // its type after the value ((x : Int)); the old spellings are errors.
 for (const source of ["print (Int 5)", "print (Dynamic 1)", "print (Int $ 1.0)", "print (List [1])",
-        "f t = t 1\nprint (f Int)", "std <- import \"std\"; use std.option\nprint (Option Int None)"]) {
+        "f t = t 1\nprint (f Int)", "std <- import \"std\"; [..] = std.option\nprint (Option Int None)"]) {
     failure(`a type is not a function: ${source}`, source, "is a type, not a function");
 }
 for (const source of ["f (Int x) = x\nprint (f 1)", "f ((Int) x) = x\nprint 1", "f (t x) = t\nprint 1",
@@ -521,7 +521,7 @@ example("literal pattern bindings", `
 "x" = "x"
 [a,1] = [5,1]
 print a`, ["5"]);
-for (const source of ["1 = 2", "[a,1] = [5,2]", 'std <- import "std"; use std.option\nNone = Some 1']) {
+for (const source of ["1 = 2", "[a,1] = [5,2]", 'std <- import "std"; [..] = std.option\nNone = Some 1']) {
     failure(`a binding that does not match: ${source}`, source, "binding pattern did not match its value");
 }
 
@@ -531,7 +531,7 @@ q = [] : Quote
 q.year = 3
 q "quote" = "x"
 print q
-r = [use q, more = 1]
+r = [[..] = q, more = 1]
 r.again = 2
 print r
 Line = [from : [x : Int, y : Int], to : [x : Int, y : Int]]
@@ -559,7 +559,7 @@ for (const source of [
     'h = {\n    describe 0 = "zero"\n    label x = describe x\n    describe 1 = "one"\n    label 1\n}\nprint h',
 ]) failure(`a function keeps the clauses it saw: ${source}`, source, "no clause of 'describe' matches");
 example("a definition's parameters read as arguments", `
-std <- import "std"; use std.option
+std <- import "std"; [..] = std.option
 f Int x = x
 g x Float = x
 to Option (Ok x) = Some x

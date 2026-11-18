@@ -1,7 +1,7 @@
 # Buttons, from https://elm-lang.org/examples/buttons
 # Press buttons to increment and decrement a counter.
 std <- import "std"
-use std.html
+[..] = std.html
 [browser] = std
 
 Msg = Increment | Decrement

@@ -290,7 +290,7 @@ print m           # 2
 ```
 
 The top level and every block follow this rule, as do updates (`r.x = v`,
-`xs i = v`), more clauses for a function, imports, loads and `use`; a
+`xs i = v`), more clauses for a function, imports, loads and `[..]`; a
 rebinding may have another type. The left side may be a pattern:
 `[a,b] = [1,2]`, a cons pattern `x::xs = [1,2,3,4]` (or `x :: y :: rest`),
 `Some x = optionValue` (parentheses optional, also for an imported
@@ -423,8 +423,8 @@ print [1 + 1, 2]            # [2,2]
 
 A list item may be a binding, as a group's statement may: it binds for the
 items after it and, as in a block, yields no value of its own (`print [x = 1,
-x + 1]` prints `[2]`, and `do [x = 1, x + 1]` is 2). A `use r` item is one,
-binding `r`'s fields (`print [use [a = 1], a]` prints `[1]`); one whose record
+x + 1]` prints `[2]`, and `do [x = 1, x + 1]` is 2). A `[..] = r` item is one,
+binding `r`'s fields (`print [[..] = [a = 1], a]` prints `[1]`); one whose record
 an `x <- m` item before it binds opens it when the code runs. A list of bindings alone
 is a [record](#records), which keeps them as its code. An `x <- m` item is a
 statement too: its value is the action `m`, and `do` runs it, binding `x` for
@@ -598,7 +598,7 @@ xs +++ ys = xs ++ [0] ++ ys  # an infix definition; (+++) = f binds a function
 
 A fixity declaration stands on its own line, anywhere at the top level of the
 file defining the operator; it applies to the whole file, and travels with the
-operator's value: a program that opens it with `use` (`infixr 3 <|>` is
+operator's value: a program that opens it with `[..]` (`infixr 3 <|>` is
 `std.parser`'s), an alias of it, clauses added to it and later REPL input group
 its chains by it. An operator without one is `infixl 9`. `infix` operators do not chain:
 `a == b == c` is fine (`==` is `infixl`), but two `infix` operators of the
@@ -694,7 +694,7 @@ error; ordinary recursive list spines such as `x = 1::x` still stream.
 A list literal whose items are all fields is a record. A field is a binding
 (`x = 1`, or a function, `f n = n * 2`), a declaration (`x : Float`, a field
 holding the type, or `x : Float = 1`, a typed value), a type declaration (its
-type and constructors are fields), or `use r`, which spreads `r`'s fields.
+type and constructors are fields), or `[..] = r`, which spreads `r`'s fields.
 Fields are code, run as a block's statements are (see [bindings](#bindings-and-output)):
 a name a field binds is in scope for the whole record (`[f n = g n, g n = n + 1]`),
 a function's clauses join, `x = x + 1` reads the `x` before it, so
@@ -774,13 +774,13 @@ A record a record schema made (`[...] : Quote` or `[] : Quote` for
 schema's field) keeps the schema's fields: adding one, by `.` or a string
 key, is an error (`[quote : String, year : Int] has no field 'yaer'`), before
 the run when the checker knows the record, otherwise when the assignment runs.
-An update's copy keeps the type; a literal copy (`[use q, extra = 1]`) is an
+An update's copy keeps the type; a literal copy (`[[..] = q, extra = 1]`) is an
 ordinary record, open to new fields.
 
 A typed entry declares its field anew, as `x : T = e` does in a literal, so
 the field's type becomes `T` (`v.[x : Float] = [3]` makes `x` the Float
 `3.0`, where `v.x = 3.0` keeps an Int field an Int): `v.[x : T, y] = [a, b]`
-is `v = [use v, x : T = a].[y] = [b]`, the untyped entries assigned as usual,
+is `v = [[..] = v, x : T = a].[y] = [b]`, the untyped entries assigned as usual,
 renamed ones too (`v.[x : T = a] = r`), and `T` is any type expression.
 
 A record applied to fields is the same update: `r [f = v, g = w]` is
@@ -1612,12 +1612,16 @@ own. `import "name"` is an action yielding a module's value: it runs the file
 once per interpreter, in a scope of its own (the prelude and what the file
 imports; the caller's bindings do not reach it), and a later import yields the
 same value. Like any action, it is run by `<-` or as a statement, and it opens
-nothing: `use` opens a record.
+nothing: a pattern does. `[..]` binds each of a record's fields under its own
+name, as Haskell's `{..}` does: `[..] = r` opens `r`, `[..] <- import "name"` a
+module, and `r.[..] = e` binds `r` and opens it, as any dotted pattern binds
+both its parts. Its names must be known where it stands (a record the check
+reads; `Dynamic` for one only the run knows), and it opens one record: `[]`,
+the empty record, opens nothing, and a list of records is an error.
 
 ```
 # shapes.apn
-std <- import "std"            # the file's own: an importer does not get it
-use std.number
+[..] <- import "std/number"    # the file's own: an importer does not get it
 turn = 2 * pi                  # its own too, a helper the record reads
 [
     circumference r = turn * r
@@ -1627,19 +1631,21 @@ turn = 2 * pi                  # its own too, a helper the record reads
 
 ```
 std <- import "std"            # the standard library, a record of its modules
-use std.[function,option]      # opens both modules' names
-use std.text                   # opens one module's names
+[..] = std.function            # opens one module's names
+[..] <- import "std/text"      # imports and opens a module
 option <- import "std/option"  # one module: option.withDefault, option.Some
+text.[..] <- import "std/text" # both: text.words, and words
 [browser,task] = std           # modules of std, by a record pattern
 [halt] <- import "std/system"  # one name, by a record pattern
 ```
 
 A module's record is a record as any is (see [records](#records)): its fields
 are in scope for all of it, a function's clauses join, a type's constructors
-are fields, and `use r` in it passes `r`'s names on, which nothing else does.
-So what both the record and a helper above it need is a record of its own,
-opened by each: `shared = [Glsl = | Glsl String]`, `use shared` before the
-helpers, and `use shared` in the module's record.
+are fields, and `[..] = r` in it makes `r`'s names fields, which passes them
+on. So what both the record and a helper above it need is a record of its own,
+opened where it is defined and in the module's record:
+`shared.[..] = [Glsl = | Glsl String]` before the helpers, and `[..] = shared`
+in the record.
 A file ending in a binding gives `[]`. One ending in a function gives the
 function, a module that takes parameters: after `make <- import "counter"`,
 `make 10` is a module of its own. `import` is a prelude function (`import =
@@ -1662,12 +1668,12 @@ or not (see [functions travel with types](#functions-travel-with-types)).
 `load` is the prelude's `load file = intrinsics.runFile (file ++ ".apn")`: an
 action running `file.apn` beside the running file as an import runs a module,
 but again each time it runs, yielding its value. A file is so a function of no
-arguments, and `m <- load "f"; use m` opens what it gives. A file may load
+arguments, and `[..] <- load "f"` opens what it gives. A file may load
 itself, as a function calls itself: a load as its last statement is a tail call,
 which loops without growing the stack (`print "again"`, then `load "again"`,
 runs until Ctrl+C), and one before the end nests, as a call that is not last
 does. The check follows a load with a literal path outside `Dynamic`, as
-an import's. To read a file as [code](#code) instead, which `use` runs where it
+an import's. To read a file as [code](#code) instead, which `[..] =` runs where it
 stands, write `parse` of what `readFileFrom` reads (`std.io`'s).
 See [the standard library reference](standard-library.md) for APIs and limits.
 
@@ -1714,7 +1720,7 @@ equations; partially applied functions include their bound arguments without
 forcing them. Captured environments are not expanded. A method (`map`, `return`,
 `>>=`, `<*>`, `to`, `from`) displays like an overloaded function: its builtin's name (what
 IO and other built-in values do), then each instance's clauses, one per line. After
-`use std.option`, `print return` shows `return`, `Some` and `Ok`.
+`[..] = std.option`, `print return` shows `return`, `Some` and `Ok`.
 
 ## Pattern functions
 
@@ -1745,7 +1751,7 @@ compute an accumulator on each iteration when appropriate. So does an
 expression nested deeply, as a chain of hundreds of operators is: past what the
 stack holds it is a call stack overflow (a parse error for parsing it).
 
-Code a `use` runs may end with another `use` of code: that use runs in place of
+Code `[..] =` runs may end with another `[..] =` of code: that one runs in place of
 the last statement, as a tail call, so it does not grow the host call stack.
 
 ## Sequencing expression lists

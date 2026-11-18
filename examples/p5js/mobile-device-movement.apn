@@ -2,7 +2,7 @@
 # https://p5js.org/examples/animation-and-variables-mobile-device-movement/
 # Animate based on device motion.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 setup (p : Sketch) = {
     p.describe ("Available on mobile devices only: a white circle on a black background "

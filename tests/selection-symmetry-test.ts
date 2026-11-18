@@ -34,7 +34,7 @@ for (const checked of [false, true]) {
             ["[rest = _, first = x] = [x = 1, y = 2]; [first,rest]", "[1, [y = 2]]"],
             ["[first = x, rest = _] = [x = 1]; rest", "[]"],
             [
-                "f [first = x, rest = _] = [use rest, x = first]; f [x = 1, y = 2]",
+                "f [first = x, rest = _] = [[..] = rest, x = first]; f [x = 1, y = 2]",
                 "[y = 2, x = 1]",
             ],
             ["[y = 2] ~ [[a = x, r = _] -> a, _ -> 0]", "0"],
@@ -49,7 +49,7 @@ for (const checked of [false, true]) {
                 "unused = missing : Dynamic; [first = x, rest = _] = [x = 1, y = unused]; first",
                 "1",
             ],
-            ["[first = x, rest = _] = [x = 1, y = 2]; [use rest, x = first]", "[y = 2, x = 1]"],
+            ["[first = x, rest = _] = [x = 1, y = 2]; [[..] = rest, x = first]", "[y = 2, x = 1]"],
         ]
     ) {
         Deno.test(`selection symmetry checked=${checked}: ${source}`, () => {

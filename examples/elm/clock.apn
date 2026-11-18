@@ -1,7 +1,9 @@
 # Clock, from https://elm-lang.org/examples/clock
 # Show an analog clock for your time zone.
 std <- import "std"
-use std.[html,time,number]
+[..] = std.html
+[..] = std.time
+[..] = std.number
 [browser,task,svg] = std
 
 Msg = Tick Posix | AdjustTimeZone Zone

@@ -690,13 +690,13 @@ Equally matching record templates retain source-order dispatch.
 
 ## Flattening record fields
 
-A `use record` field merges that record's fields into the literal:
+A `[..] = record` item merges that record's fields into the literal:
 
 ```apn
 base = [x = 1]
-v = [use base, y = 2, z = 3]      # [x = 1, y = 2, z = 3]
-[use base, x = "new"]            # [x = "new"]
-[x = "new", use base]            # [x = 1]
+v = [[..] = base, y = 2, z = 3]      # [x = 1, y = 2, z = 3]
+[[..] = base, x = "new"]            # [x = "new"]
+[x = "new", [..] = base]            # [x = 1]
 ```
 
 Entries are processed in source order. New names are appended at that point;
@@ -704,11 +704,11 @@ later entries replace duplicate values without moving the existing key's
 position. This is a shallow merge, without type conversion. Named nested records
 stay nested. Field values and reference cells are shared normally; the outer
 record has no parent link to the source. The spread expression must produce a
-record; lists and scalars are errors. Multiple `_:` entries are supported.
+record; lists and scalars are errors. Several `[..] =` items are supported.
 
 For an existing record, `v._ = other` merges `other` into a new scoped copy of
 `v` using the same replacement rules. No field names are introduced into the
-surrounding scope; `use v` remains the explicit way to do that.
+surrounding scope; `[..] = v` is the explicit way to do that.
 
 An unbound root in `v.x = value` instead starts a dotted pattern binding; see
 [dotted patterns](pattern-functions.md#dotted-patterns-keep-the-whole-value).

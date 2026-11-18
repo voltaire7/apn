@@ -19,7 +19,7 @@ const definitions = [blocks("Lists")[0], blocks("Maps")[0], ...blocks("Truth, op
 const names = [...new Set([...definitions.matchAll(/^([a-z][A-Za-z]*) /gm)].map(m => m[1]))];
 const own = new RegExp(`(?<![\\w.])(${names.join("|")})\\b`, "g");
 const renamed = (source: string) => source.replace(own, (_, n: string) => `my${n[0].toUpperCase()}${n.slice(1)}`);
-const header = 'std <- import "std"\nuse std.function\n';
+const header = 'std <- import "std"\n[..] = std.function\n';
 const run = (source: string): string => {
     try { const i = new Interpreter(); return i.renderString(i.run(parseDocument(source))); }
     catch (error) { return `error: ${(error as Error).message.split("\n")[0]}`; }

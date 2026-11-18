@@ -30,7 +30,10 @@ folders the same way, see [the standard library](docs/standard-library.md)):
 
 ```apn
 std <- import "std"
-use std.[sequence,number,text,map]
+[..] = std.sequence
+[..] = std.number
+[..] = std.text
+[..] = std.map
 take 10 primes
 mean [1,2]                        # Some 3/2
 frequencies $ words $ "one two one"

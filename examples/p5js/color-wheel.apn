@@ -1,7 +1,7 @@
 # Color Wheel, from https://p5js.org/examples/repetition-color-wheel/
 # Create a visualization of the color spectrum.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 setup (p : Sketch) = {
     p.createCanvas 400 400

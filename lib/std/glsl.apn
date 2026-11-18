@@ -1,13 +1,13 @@
 # GLSL expressions as values, for writing a shader's code in APN (as
 # p5.strands writes it in JavaScript): arithmetic and the math functions on
 # them write GLSL. A number joins in as a float, and a list as a vector.
-strings <- import "std/text"
-sequences <- import "std/sequence"
-functions <- import "std/function"
-option <- import "std/option"
-use [strings,sequences,functions,option]
-# What the module's names share with the operators' helper, which use passes on.
-shared = [
+[..] <- import "std/text"
+[..] <- import "std/sequence"
+[..] <- import "std/function"
+[..] <- import "std/option"
+# What the module's names share with the operators' helper: opened here, and passed on
+# by the record's [..] = shared.
+shared.[..] = [
     Glsl = | Glsl String
     # A value's GLSL code.
     glsl (Glsl code) = code
@@ -15,10 +15,9 @@ shared = [
         ++ ")"
     glsl (n : Number) = to String (n : Float)
 ]
-use shared
 binary operator a b = Glsl ("(" ++ glsl a ++ " " ++ operator ++ " " ++ glsl b ++ ")")
 [
-    use shared
+    [..] = shared
 
     # A list as one GLSL vector, for arithmetic as a whole: vec [x,y] * 0.5.
     vec items = Glsl (glsl items)

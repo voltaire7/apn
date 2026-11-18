@@ -1,7 +1,7 @@
 # Orbit Control, from https://p5js.org/examples/3d-orbit-control/
 # Move the camera with the mouse.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 setup (p : Sketch) = {
     p.call "createCanvas" [710,400,p.WEBGL]

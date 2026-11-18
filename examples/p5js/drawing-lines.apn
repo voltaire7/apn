@@ -1,7 +1,7 @@
 # Drawing Lines, from https://p5js.org/examples/animation-and-variables-drawing-lines/
 # Draw with the mouse.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 setup (p : Sketch) = {
     p.createCanvas 710 400

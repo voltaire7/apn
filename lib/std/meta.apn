@@ -1,16 +1,12 @@
-strings <- import "std/text"
-sequences <- import "std/sequence"
-functions <- import "std/function"
-option <- import "std/option"
-use [strings,sequences,functions,option]
-parser <- (load "meta/parser" : Dynamic)
-use parser
-primitives <- (load "meta/primitives" : Dynamic)
-use primitives
+[..] <- import "std/text"
+[..] <- import "std/sequence"
+[..] <- import "std/function"
+[..] <- import "std/option"
+[..] <- (load "meta/parser" : Dynamic)
+[..] <- (load "meta/primitives" : Dynamic)
 # The evaluator's source is read as code (the evaluator reads it too: see
-# metaSelfEval), and use runs it here.
-evaluator <- (map parse (intrinsics.readFileFrom "meta/evaluator.apn") : Dynamic)
-use evaluator
+# metaSelfEval), and [..] runs it here.
+[..] <- (map parse (intrinsics.readFileFrom "meta/evaluator.apn") : Dynamic)
 [
     metaPrimitives = metaPrimitives
 

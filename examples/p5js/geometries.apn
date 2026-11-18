@@ -1,7 +1,7 @@
 # Geometries, from https://p5js.org/examples/3d-geometries/
 # Draw 3D shapes, including a custom model.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 # A NASA model of an astronaut.
 astronaut = loadModel "assets/astronaut.obj"

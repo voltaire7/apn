@@ -1,7 +1,7 @@
 # Alpha Mask, from https://p5js.org/examples/imported-media-alpha-mask/
 # Use one image to cut out a section of another image.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 photo = loadImage "assets/image.jpg"
 cutout = loadImage "assets/mask.png"

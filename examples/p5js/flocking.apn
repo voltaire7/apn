@@ -2,7 +2,9 @@
 # Simulate birds flocking: each keeps apart from, heads with and stays near
 # its neighbors.
 std <- import "std"
-use std.[html,number,p5]
+[..] = std.html
+[..] = std.number
+[..] = std.p5
 
 # A boid: where it is, its velocity and its hue.
 Boid = [position : [Float,Float], velocity : [Float,Float], hue : Float]

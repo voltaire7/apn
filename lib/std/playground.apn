@@ -1,10 +1,9 @@
 # Pictures, animations and games from shapes, as in Elm's Playground: an
 # element program drawing SVG that fills the window. The origin is the
 # screen's center, y grows upward, and angles are in degrees, counterclockwise.
-numbers <- import "std/number"
-html <- import "std/html"
-clock <- import "std/time"
-use [numbers,html,clock]
+[..] <- import "std/number"
+[..] <- import "std/html"
+[..] <- import "std/time"
 strings <- import "std/text"
 svg <- import "std/svg"
 browser <- import "std/browser"
@@ -33,8 +32,9 @@ updateKeyboard isDown key keyboard = {
         _ -> keyboard
     ]
 }
-# What the module's names share with its helpers, which use passes on.
-shared = [
+# What the module's names share with its helpers: opened here, and passed on
+# by the record's [..] = shared.
+shared.[..] = [
     # A shape is what it is, placed: where it is, its angle, size and opacity
     # (Placed, whose shape is never itself Placed). A color is its red, green and
     # blue, each 0 to 255.
@@ -59,7 +59,6 @@ shared = [
         | GameButton Bool
         | GameVisibility browser.Visibility
 ]
-use shared
 # How far into its period (in seconds) the time (in milliseconds) is, 0 to 1.
 fraction period time = inexact
     (modulo (round time : Int) (round (period * 1000) : Int) / (period * 1000))
@@ -171,7 +170,7 @@ advance updateMemory msg game = {
     ]
 }
 [
-    use shared
+    [..] = shared
     circle color radius = Circle color radius
     oval color width height = Oval color width height
     square color n = Rectangle color n n

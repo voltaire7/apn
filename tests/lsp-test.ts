@@ -125,7 +125,7 @@ Deno.test("optional type diagnostics share the checker", () => {
     const result: any = server.handle({method: 'textDocument/didOpen', params: {textDocument: {uri: 'file:///types.apn', version: 1, text: source}}})[0];
     equal(result.params.diagnostics.filter((d: any) => d.code === 'type').length, 1);
 });
-Deno.test("completing a standard name adds its import, as a list beside another", () => {
+Deno.test("completing a standard name adds its import, a line after the others", () => {
     const complete = (text: string, name: string) => {
         const server = initialized();
         const uri = "file:///tmp/imports.apn";
@@ -134,25 +134,25 @@ Deno.test("completing a standard name adds its import, as a list beside another"
         const item = items.find((x: any) => x.label === name);
         return item && [item.detail, item.additionalTextEdits?.map((e: any) => [e.range.start.line, e.range.start.character, e.range.end.character, e.newText])];
     };
-    equal(complete("x = 1", "sum"), ['From std.sequence', [[0, 0, 0, 'std <- import "std"\nuse std.sequence\n\n']]]);
-    equal(complete("\nx = 1", "sum")?.[1], [[0, 0, 0, 'std <- import "std"\nuse std.sequence\n']]);
-    equal(complete('std <- import "std"\nuse std.io # files\nx = 1', "upper"), ['From std.text', [[1, 8, 10, '[io,text]']]]);
-    equal(complete('std <- import "std"\nuse std.[io,text]', "sum"), ['From std.sequence', [[1, 8, 17, '[io,text,sequence]']]]);
-    equal(complete('std <- import "std"\nx = 1', "sum")?.[1], [[1, 0, 0, 'use std.sequence\n']]);
+    equal(complete("x = 1", "sum"), ['From std.sequence', [[0, 0, 0, 'std <- import "std"\n[..] = std.sequence\n\n']]]);
+    equal(complete("\nx = 1", "sum")?.[1], [[0, 0, 0, 'std <- import "std"\n[..] = std.sequence\n']]);
+    equal(complete('std <- import "std"\n[..] = std.io # files\nx = 1', "upper"), ['From std.text', [[2, 0, 0, '[..] = std.text\n']]]);
+    equal(complete('std <- import "std"\n[..] = std.io\n[..] = std.text', "sum"), ['From std.sequence', [[3, 0, 0, '[..] = std.sequence\n']]]);
+    equal(complete('std <- import "std"\nx = 1', "sum")?.[1], [[1, 0, 0, '[..] = std.sequence\n']]);
     // Already imported, defined here, or in the prelude: nothing to add.
-    equal(complete('std <- import "std"\nuse std.[io,text]', "readFile"), ['From std.io', undefined]);
+    equal(complete('std <- import "std"\n[..] = std.io\n[..] = std.text', "readFile"), ['From std.io', undefined]);
     equal(complete("sum xs = 0", "sum")?.[1], undefined);
     equal(complete("x = 1", "print")?.[1], undefined);
     // Retired natives are not offered; a native needing an import names it.
     equal(complete("x = 1", "toString"), undefined);
-    equal(complete("x = 1", "withFile")?.[1]?.[0]?.[3], 'std <- import "std"\nuse std.io\n\n');
+    equal(complete("x = 1", "withFile")?.[1]?.[0]?.[3], 'std <- import "std"\n[..] = std.io\n\n');
 });
 Deno.test("lint reports an alternative that never runs", () => {
     const unreachable = (source: string) => lint(source).filter(d => d.code === "unreachable-clause").map(d => d.range.start.line);
     // Clauses are tried most specific first, so one after a clause taking any
     // argument still runs; an equivalent clause replaces the earlier one.
     equal(unreachable("f xs = 0\nf [a,b] = a + b\ng x = 0\ng (x :: _) = x\nk x = 0\nk y = 9"), []);
-    equal(unreachable("std <- import \"std\"; use std.option\nm _ = 0\nm (Some y) = y"), []);
+    equal(unreachable("std <- import \"std\"; [..] = std.option\nm _ = 0\nm (Some y) = y"), []);
     // A match's alternatives stay: one an earlier takes every value of never runs.
     equal(unreachable("v = 3 ~ [\n    x -> 0\n    [a] -> 5\n    y -> 1\n]"), [3]);
     equal(lint("v = 3 ~ [\n    x -> 0\n    y -> 1\n]")[0].message, "This alternative never runs: an earlier one takes every value it does.");
@@ -165,9 +165,9 @@ Deno.test("lint knows the constructors of the modules and files a program opens"
     const missing = (source: string) => lint(source, false, cards).filter(d => d.code === "non-exhaustive-match").length;
     // Imported or loaded and opened by use; a load statement or an import
     // never opened opens nothing.
-    equal(missing('cards <- import "cards"\nuse [cards]\nv = Hearts ~ [Hearts -> 1]'), 1);
-    equal(missing('c <- load "cards"\nuse c\nv = Hearts ~ [Hearts -> 1]'), 1);
+    equal(missing('cards <- import "cards"\n[..] = [cards]\nv = Hearts ~ [Hearts -> 1]'), 1);
+    equal(missing('c <- load "cards"\n[..] = c\nv = Hearts ~ [Hearts -> 1]'), 1);
     equal(missing('load "cards"\nv = Hearts ~ [Hearts -> 1]'), 0);
-    equal(missing('opt <- import "std/option"\nuse [opt]\nf = Some 1 ~ [Some x -> x]'), 1);
+    equal(missing('opt <- import "std/option"\n[..] = [opt]\nf = Some 1 ~ [Some x -> x]'), 1);
     equal(missing('opt <- import "std/option"\nf = Some 1 ~ [Some x -> x]'), 0);
 });

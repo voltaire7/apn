@@ -2,7 +2,7 @@
 # https://p5js.org/examples/loading-and-saving-data-load-multiple-images/
 # Load several images at once, and draw them once they all have loaded.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 # Three random photos from picsum.photos.
 image1 = loadImage "https://picsum.photos/100/100?random=1"

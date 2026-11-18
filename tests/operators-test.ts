@@ -102,7 +102,7 @@ for (const [source, expected] of [
 // The checker's evaluator knows an operator's result in each spelling: f
 // checks only when the take count, and so the list's length, is known, also
 // through a take written in APN, which passes the count on.
-const TK = 'std <- import "std"\nuse std.function\ntk2 0 _ = []; tk2 _ [] = []; tk2 n (x :: rest) = x :: tk2 (n - 1) rest\n' +
+const TK = 'std <- import "std"\n[..] = std.function\ntk2 0 _ = []; tk2 _ [] = []; tk2 n (x :: rest) = x :: tk2 (n - 1) rest\n' +
     'tk (n : Int) xs = n < 0 ? fail "negative" : tk2 n xs\n';
 for (const count of ["1 + 1", "(+) 1 1", "intrinsics.add 1 1", "(1 +) 1", "($) id 2", "intrinsics.apply id 2",
     "(-) 3 1", "intrinsics.sub 3 1", "length ((++) [1] [2])", "length (intrinsics.cons 1 [5])", "negate -2"]) {
@@ -119,7 +119,7 @@ for (const checked of [true, false]) Deno.test(`a fixity travels with its value 
     const i = new Interpreter();
     if (checked) i.enableChecking();
     i.sourceDir = new URL("./fixtures/fixity/", import.meta.url).pathname;
-    i.run(parse('minus <- import "minus"\nuse minus'));
+    i.run(parse('minus <- import "minus"\n[..] = minus'));
     const shown = (source: string) => i.renderString(i.run(parse(source)));
     if (shown("10 <-> 3 <-> 2") !== "9") throw new Error("a module's fixity");
     if (shown("f x = x <-> 1 <-> 1\nf 5") !== "5") throw new Error("in a function");

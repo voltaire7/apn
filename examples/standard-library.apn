@@ -1,5 +1,10 @@
 std <- import "std"
-use std.[function,option,sequence,number,text,map]
+[..] = std.function
+[..] = std.option
+[..] = std.sequence
+[..] = std.number
+[..] = std.text
+[..] = std.map
 
 # Infinite streams, finite answers.
 print (take 12 primes)

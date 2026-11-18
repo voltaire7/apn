@@ -1,7 +1,8 @@
 # Book, from https://elm-lang.org/examples/book
 # Make a GET request to load a book called "Public Opinion".
 std <- import "std"
-use std.[html,option]
+[..] = std.html
+[..] = std.option
 [browser,http] = std
 
 Model = Failure | Loading | Success String

@@ -20,9 +20,9 @@ for (const [source, expected] of [
     ['UserId (x : Int) = _\n([] : [v : UserId Int])', '[v = UserId 0]'],
     ['v = [y = 2] : [x : Int]\nv', '[x = 0, y = 2]'],
     ['assert True "kept"', '"kept"'],
-    ['std <- import "std"; use std.function\ncount = Mutable 0\nbracket 42 (_ -> set count 1) (x -> x + 1)\ncount', '1'],
-    ['std <- import "std"; use std.function\nbracket 42 (_ -> []) (x -> [x,x+1])', '[42,43]'],
-    ['std <- import "std"; use std.function\ncount = Mutable 0\nv <- bracket 1 (_ -> set count 9) (_ -> [count + 1])\n[v,count]', '[[1], 9]'],
+    ['std <- import "std"; [..] = std.function\ncount = Mutable 0\nbracket 42 (_ -> set count 1) (x -> x + 1)\ncount', '1'],
+    ['std <- import "std"; [..] = std.function\nbracket 42 (_ -> []) (x -> [x,x+1])', '[42,43]'],
+    ['std <- import "std"; [..] = std.function\ncount = Mutable 0\nv <- bracket 1 (_ -> set count 9) (_ -> [count + 1])\n[v,count]', '[[1], 9]'],
 ]) Deno.test(`Odin-inspired rule: ${source}`, () => {
     const actual = result(source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -38,9 +38,9 @@ for (const [source, error] of [
     ['Distance (x : Int8) = _\nDistance 128', 'out of range'],
     ['assert (1 == 2) 0', 'assertion failed: (1 == 2)'],
     ['check = assert\ncheck False 0', 'assertion failed: False'],
-    ['std <- import "std"; use std.function\nbracket 1 (_ -> []) (x -> y -> x)', 'must return data'],
-    ['std <- import "std"; use std.function\nbracket 1 (x, y -> []) (x -> x)', 'release must take one remaining argument'],
-    ['std <- import "std"; use std.io\nwithFile "lib/std/io.apn" 123', 'callback must take one remaining argument'],
+    ['std <- import "std"; [..] = std.function\nbracket 1 (_ -> []) (x -> y -> x)', 'must return data'],
+    ['std <- import "std"; [..] = std.function\nbracket 1 (x, y -> []) (x -> x)', 'release must take one remaining argument'],
+    ['std <- import "std"; [..] = std.io\nwithFile "lib/std/io.apn" 123', 'callback must take one remaining argument'],
 ]) Deno.test(`Odin-inspired rejection: ${source}`, () => {
     try { result(source); } catch (e) { if (String(e).includes(error)) return; throw e; }
     throw new Error('expected rejection');
@@ -56,18 +56,18 @@ Deno.test('assert captures its original source file and line', () => {
 });
 Deno.test('resource release runs when a lazy result fails', () => {
     const i = new Interpreter();
-    i.run(parseDocument('std <- import "std"; use std.function\ncount = Mutable 0'));
+    i.run(parseDocument('std <- import "std"; [..] = std.function\ncount = Mutable 0'));
     try { i.renderString(i.run(parseDocument('bracket 1 (_ -> set count 7) (_ -> [missing])'))); } catch { /* expected */ }
     if (i.renderString(i.run(parseDocument('count'))) !== '7') throw new Error('cleanup skipped');
 });
 Deno.test('withFile evaluates a lazy read before closing', () => {
-    const source = 'std <- import "std"; use std.io\nwithFile "lib/std/io.apn" (f -> f.read)';
+    const source = 'std <- import "std"; [..] = std.io\nwithFile "lib/std/io.apn" (f -> f.read)';
     const actual = result(source);
     if (!actual.includes('readInput')) throw new Error(actual);
 });
 Deno.test('withFile closes handles even when saved outside the scope', () => {
     const i = new Interpreter();
-    i.run(parseDocument('std <- import "std"; use std.io\nsaved = Mutable []\nwithFile "lib/std/io.apn" (f -> set saved f)'));
+    i.run(parseDocument('std <- import "std"; [..] = std.io\nsaved = Mutable []\nwithFile "lib/std/io.apn" (f -> set saved f)'));
     try { i.run(parseDocument('saved.read')); } catch (e) { if (String(e).includes('resource is closed')) return; throw e; }
     throw new Error('escaped live handle');
 });
@@ -80,7 +80,7 @@ for (const [code, warnings] of [
     ['Option a = Some a | None\nf (value : Option _) = value ~ [handler]', 0],
     ['Option a = Some a | None\nf (value : Option _) = value -> value ~ [Some x -> x]', 0],
     ['Option a = Some a | None\nf (value : Option _) = {\n    x ~ alternatives = 0\n    value ~ [Some x -> x]\n}', 0],
-    ['std <- import "std"; use std.option\nf (value : Option _) = value ~ [None -> 0]', 1],
+    ['std <- import "std"; [..] = std.option\nf (value : Option _) = value ~ [None -> 0]', 1],
 ] as const) Deno.test(`exhaustiveness diagnostic: ${code}`, () => {
     const ds = lint(code).filter(d => d.code !== 'unused');
     if (ds.length !== warnings || ds.some(d => d.code !== 'non-exhaustive-match' || d.severity !== 2)) throw new Error(JSON.stringify(ds));
@@ -88,7 +88,7 @@ for (const [code, warnings] of [
 
 Deno.test('bracket releases in reverse order on interruption', () => {
     const i = new Interpreter();
-    i.run(parseDocument('std <- import "std"; use std.function; order = Mutable ""'));
+    i.run(parseDocument('std <- import "std"; [..] = std.function; order = Mutable ""'));
     const signal = new Int32Array(new SharedArrayBuffer(8));
     setInterruptFlag(signal);
     i.env.setLocal('interruptNow', { kind: 'native', name: 'interruptNow', arity: 1, applied: [], invoke: () => {
@@ -105,7 +105,7 @@ Deno.test('bracket releases in reverse order on interruption', () => {
 });
 Deno.test('bracket does not release a resource that failed to acquire', () => {
     const i = new Interpreter();
-    i.run(parseDocument('std <- import "std"; use std.function; released = Mutable False'));
+    i.run(parseDocument('std <- import "std"; [..] = std.function; released = Mutable False'));
     try { i.run(parseDocument('bracket missing (_ -> set released True) (x -> x)')); } catch { /* expected */ }
     if (i.renderString(i.run(parseDocument('released'))) !== 'False') throw new Error('released absent resource');
 });

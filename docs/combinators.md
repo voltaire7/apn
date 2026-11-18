@@ -2,7 +2,7 @@
 
 ```apn
 std <- import "std"
-use std.combinator
+[..] = std.combinator
 
 selfFactorial = (self -> n -> self self n) (self -> n -> n == 0 ? 1 : n * self self (n - 1))
 selfFactorial 5  # 120

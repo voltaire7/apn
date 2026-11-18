@@ -1,20 +1,20 @@
 # Packages: run with  apn examples/packages/main.apn
 # import "name" reads name.apn, else a name/ folder, next to this file (then in
 # parent folders up to the program's): an action yielding its record. A
-# folder's record holds its entries, all imported with it. use r opens a
-# record's fields, and use [r, s] several.
-greetings <- import "greetings"
-units <- import "units"
-reporting <- import "report"
+# folder's record holds its entries, all imported with it. [..] = r binds each
+# of r's fields under its own name, and [..] <- import "name" opens a module.
+[..] <- import "greetings"
+[..] <- import "units"
+[..] <- import "report"
 shapes <- import "shapes"
-use [greetings,units,reporting]
-use shapes.[square,rectangle]
+[..] = shapes.square
+[..] = shapes.rectangle
 
 print (greet "packages")                         # Hello, packages!
 print [squareArea 3, rectangleArea 2 5]          # [9,10]
 
 # A subfolder is a record of its own entries.
-use shapes.solid.[box]
+[..] = shapes.solid.box
 print (cubicMetres (boxVolume 2 3 4))            # 24 m³
 print (shapes.square.squareArea 4)               # 16
 

@@ -1,7 +1,7 @@
 # Ping Pong, from https://p5js.org/examples/games-ping-pong/
 # Make a game inspired by Atari's Pong.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 [paddleSpeed,paddleHeight,paddleWidth,ballSize] = [2,80,10,10]
 # The paddles' heights (their x is fixed), the scores, the ball and its speed.

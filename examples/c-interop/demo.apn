@@ -1,6 +1,6 @@
 # Run ./examples/c-interop/run-demo to compile the C library and call it.
 std <- import "std"
-use std.io
+[..] = std.io
 [ffi] = std
 args <- getArgs
 ffi.withLibrary (args : head) [

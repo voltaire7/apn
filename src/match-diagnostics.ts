@@ -1,4 +1,4 @@
-import { clausePlaces, importedPath, isLoadCall, matchOperands, sourceLocations, takesAll, type Expr, type Pattern, type TopLevel } from "./ast.ts";
+import { clausePlaces, importedPath, isLoadCall, isUse, matchOperands, sourceLocations, takesAll, type Expr, type Pattern, type TopLevel } from "./ast.ts";
 import type { Diagnostic } from "./lint.ts";
 import { builtinContains } from "./type-system.ts";
 import { loadPath, readLoad, resolveModule } from "./modules.ts";
@@ -68,12 +68,12 @@ export function matchDiagnostics(program: TopLevel[], source: string, directory 
             if (bound) records.set(bound[0], { sources: sourcesOf(bound[1], from), spec: importedPath(bound[1]) });
             if (node.t !== "expr") continue;
             const e = node.value;
-            // Only use opens records.
-            if (e.t === "app" && e.f.t === "var" && e.f.name === "use") open(used(e.a));
+            // Only [..] opens records.
+            if (isUse(e)) open(used(e.a));
             // A record (a module's value) declares its types, and spreads what its uses open.
             if (e.t === "record") for (const item of e.items ?? []) {
                 if (item.t === "typeDef") add(item.def.name, item.def.parameters?.length ?? 0, item.def.variants.map(v => [v.tag, v.arity]));
-                if (item.t === "app" && item.f.t === "var" && item.f.name === "use") open(used(item.a));
+                if (isUse(item)) open(used(item.a));
             }
         }
     };

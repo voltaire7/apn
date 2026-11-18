@@ -50,7 +50,7 @@ shares its terminal setup and the input typed ahead. Interactive features:
 - **Colors** (Catppuccin Frappé palette, truecolor): input is highlighted as
   typed, by the tokenizer the language server and the web editor share
   (`src/highlight.ts`) (comments overlay0, strings/chars green, numbers yellow,
-  keywords (`import`, `load`, `use`, `do`, `return`, `else`, `loop`, `for`, `while`) and bools mauve,
+  keywords (`import`, `load`, `do`, `return`, `else`, `loop`, `for`, `while`) and bools mauve,
   a name applied to arguments blue (`map` and `add` in `map (add 1) xs`, not
   `add1` in `map add1 xs`, a value there, nor `f` in `f x = ...` or `[f x =
   ..., f 1]`, which defines it), capital idents sky,

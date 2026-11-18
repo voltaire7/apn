@@ -1,7 +1,7 @@
 # Conditions, from https://p5js.org/examples/animation-and-variables-conditions/
 # Use if and else statements to make decisions while your sketch runs.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 # The circle's position, speed and hue; its radius.
 position = Mutable [200,200]

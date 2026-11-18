@@ -1,7 +1,8 @@
 # Connected Particles, from https://p5js.org/examples/classes-and-objects-connected-particles/
 # Draw paths of particles that fade away.
 std <- import "std"
-use std.[p5,sequence]
+[..] = std.p5
+[..] = std.sequence
 
 # A particle: where it is, its velocity, its hue and the frames until it is gone.
 Particle = [position : [Float,Float], velocity : [Float,Float], hue : Int, frames : Int]

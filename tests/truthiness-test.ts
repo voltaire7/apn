@@ -20,7 +20,7 @@ for (const [source, expected] of [
     ['n = Mutable 0; test = { set n (n + 1); return 1 }; t <- test; [t && 1, n]', '[True, 1]'],
     ['filter (x -> x) [0,1,2,0]', '[1,2]'],
     ['1 ~ [x | [] -> 0, x | 1 -> x]', '1'],
-    ['std <- import "std"\nuse std.sequence\n[takeWhile (x -> x) [1,2,0,3], all (x -> x) [1,2], any (x -> x) [0,1]]', '[[1,2], True, True]'],
+    ['std <- import "std"\n[..] = std.sequence\n[takeWhile (x -> x) [1,2,0,3], all (x -> x) [1,2], any (x -> x) [0,1]]', '[[1,2], True, True]'],
     ['[1 || 0 && missing, 0 || 1 && 2]', '[True,True]'],
     ['[(0 &&) missing, (1 ||) missing]', '[False,True]'],
     ['[0 == False, [] == False]', '[False,False]'],

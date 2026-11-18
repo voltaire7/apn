@@ -3,7 +3,8 @@
 # images from elm-lang.org, which WebGL cannot use from another site, so this
 # stone block's face and sides are drawn into p5 graphics.
 std <- import "std"
-use std.[html,number]
+[..] = std.html
+[..] = std.number
 [browser,p5] = std
 
 Msg = GotViewport browser.Viewport | Resized Number Number | MouseMoved Number Number

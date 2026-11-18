@@ -1,7 +1,7 @@
 # Audio Player, from https://p5js.org/examples/imported-media-create-audio/
 # Create a player for an audio file.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 player = createAudio "assets/piano-loop.mp3"
 

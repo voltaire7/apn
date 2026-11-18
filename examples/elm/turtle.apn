@@ -2,7 +2,8 @@
 # Use arrow keys to move the turtle around.
 # Forward with UP and turn with LEFT and RIGHT.
 std <- import "std"
-use std.[playground,number]
+[..] = std.playground
+[..] = std.number
 
 view computer turtle = [
     rectangle blue computer.screen.width computer.screen.height

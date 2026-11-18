@@ -1,7 +1,7 @@
 # Cards, from https://elm-lang.org/examples/cards
 # Press a button to draw a random card.
 std <- import "std"
-use std.html
+[..] = std.html
 [browser,random] = std
 
 Card = Ace | Two | Three | Four | Five | Six | Seven | Eight | Nine | Ten | Jack | Queen | King

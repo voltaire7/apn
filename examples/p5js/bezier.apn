@@ -1,7 +1,7 @@
 # Bezier, from https://p5js.org/examples/repetition-bezier/
 # Draw a set of curves.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 setup (p : Sketch) = {
     p.createCanvas 720 400

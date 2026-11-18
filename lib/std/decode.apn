@@ -4,8 +4,7 @@
 # fromType reads it, so one stands wherever a decoder goes (field "year" Int,
 # list Quote). int, float and list are also random's names: a program using
 # both imports one qualified (decode <- import "std/decode").
-option <- import "std/option"
-use option
+[..] <- import "std/option"
 # The value an object (its [key,value] pairs) holds under name, or the error
 # saying it has none.
 fieldValue name value = {
@@ -19,8 +18,9 @@ allOk results = results ~ [
     [] -> Ok []
     result :: rest -> map2 (x, xs -> x :: xs) result (allOk rest)
 ]
-# What the module's names share with each other, which use passes on.
-shared = [
+# What the module's names share with each other: opened here, and passed on
+# by the record's [..] = shared.
+shared.[..] = [
     Decoder a = | Decoder (value -> Result a String)
     expecting what test = Decoder (value -> test value ? Ok value : Err ("Expecting " ++ what))
     string = expecting "a STRING" (isType String)
@@ -51,9 +51,8 @@ shared = [
     decodeValue (t : Type) value = decodeValue (t == String ? string : (t == Int ? int
         : (t == Float ? float : (t == Bool ? bool : expecting (to String t) (isType t))))) value
 ]
-use shared
 [
-    use shared
+    [..] = shared
     # A type's decoder, for what takes only a decoder (map f (fromType Quote)), or
     # a record's whose fields may be decoders ([name : String, tags = list string]).
     fromType t = Decoder (decodeValue t)

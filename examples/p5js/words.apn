@@ -1,7 +1,7 @@
 # Words, from https://p5js.org/examples/imported-media-words/
 # Load fonts and draw text.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 font = loadFont "assets/SourceSansPro-Regular.otf"
 

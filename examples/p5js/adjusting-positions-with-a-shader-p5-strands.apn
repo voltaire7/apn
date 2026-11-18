@@ -2,7 +2,8 @@
 # https://p5js.org/examples/3d-adjusting-positions-with-a-shader-p5strands/
 # Move a model's vertices with a shader written in APN.
 std <- import "std"
-use std.[glsl,p5]
+[..] = std.glsl
+[..] = std.p5
 
 # Each vertex moved up and down over time, a little later along the ribbon.
 wiggle inputs = {

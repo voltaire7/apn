@@ -1,5 +1,5 @@
 std <- import "std"
-use std.meta
+[..] = std.meta
 
 # These strings go through an APN lexer, parser, environment, and evaluator.
 print (metaEval "1 + 2 * 3")                             # 7

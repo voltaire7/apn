@@ -1,5 +1,8 @@
 std <- import "std"
-use std.[function,sequence,text,map]
+[..] = std.function
+[..] = std.sequence
+[..] = std.text
+[..] = std.map
 [
     # AoC 2021 day 6: keep nine timer counts, never an exponentially growing list.
     fishPopulation days text = {

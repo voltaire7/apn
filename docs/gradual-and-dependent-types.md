@@ -76,7 +76,7 @@ pattern against a `Dynamic` value (`(Got (Ok q))` for a `Got Dynamic` field) is 
 runtime check, as matching a `Dynamic` scrutinee is.
 
 A function, lambda, or lazy value reads the names it uses when it runs, so
-after a name is rebound (by a definition or a `use` of a checked load) it calls the new
+after a name is rebound (by a definition or a `[..]` opening a checked load) it calls the new
 definition. The checker follows this: code that reads a rebound name is
 checked again against the new definition, and so is code that reads that
 code in turn. A later use is checked against the result. A definition that
@@ -165,7 +165,7 @@ It preserves Mutable identity rather than copying its current contents.
 
 ### Guarded writes
 
-Checked execution protects names installed by `use`, `import`, or `load` from
+Checked execution protects names installed by `[..]`, `import`, or `load` from
 changing existing binding types. New names may be added, but using a
 runtime-created name in checked code still requires a Dynamic boundary or an
 explicitly checked projection.
@@ -501,7 +501,7 @@ existing behavior; repeated patterns do not prove function equivalence.
 
 Static checking follows literal `import` and `load` dependencies and infers their
 values, each file checked in a scope of its own. Nothing opens a record but
-`use`, which opens statically known records or lists of records. A file
+the `[..]` pattern, which opens a statically known record. A file
 loading itself is typed as recursion is, its own load giving the value the file
 turns out to have; computed loads need an explicit `Dynamic` boundary. The checker never runs a file or performs an action to discover types.
 
@@ -667,7 +667,7 @@ the checker cannot decide, code it cannot follow) leaves only the top-level
 cells and values it can reach unknown: those its names, and the definitions
 they name, refer to, including what its lazily computed values are computed
 from and what a file it loads (by a literal path) names. A name
-opened by `use` reaches the field it was opened from; one opened from a
+opened by `[..]` reaches the field it was opened from; one opened from a
 record of unknown fields reaches everything. A function held by a pattern
 binding (`h <- (x -> ...)`) runs its body where it is called. Lazily computed list elements run where the program forces
 them, as at runtime: `map`'s elements when used, `filter`'s predicate as its

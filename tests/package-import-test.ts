@@ -15,7 +15,7 @@ function result(i: Interpreter, source: string): string {
 for (const checked of [false, true]) {
     Deno.test(`import finds files and folders next to the code (checked=${checked})`, () => {
         const i = interpreter(checked);
-        const source = 'hello <- import "hello"\nshapes <- import "shapes"\nuse hello\nuse shapes.[square,cube]\nuse shapes.solid.box\n'
+        const source = 'hello <- import "hello"\nshapes <- import "shapes"\n[..] = hello\n[..] = shapes.square\n[..] = shapes.cube\n[..] = shapes.solid.box\n'
             + '[greet "you", square 3, cube 2, volume 2]';
         const actual = result(i, source);
         if (actual !== '["hi you", 9, 8, 8]') throw new Error(actual);
@@ -25,7 +25,7 @@ for (const checked of [false, true]) {
     });
     // A module's value is its file's last statement's: a function is a module taking parameters.
     Deno.test(`a module ending in a function takes parameters (checked=${checked})`, () => {
-        const actual = result(interpreter(checked), 'make <- import "counter"\nten = make 10\nuse (make 5)\n[ten.value,ten.next,next]');
+        const actual = result(interpreter(checked), 'make <- import "counter"\nten = make 10\n[..] = make 5\n[ten.value,ten.next,next]');
         if (actual !== "[10,11,6]") throw new Error(actual);
     });
     // A folder's modules run when it is imported, each once: reading a field runs nothing.
@@ -55,8 +55,8 @@ for (const checked of [false, true]) {
         if (result(interpreter(checked), 'user <- import "local-text/user"; user.result') !== '"shadowed"') throw new Error("local");
     });
     Deno.test(`std is the standard library (checked=${checked})`, () => {
-        if (result(interpreter(checked), 'std <- import "std"; use std.option; Some 1') !== "Some 1") throw new Error("std");
-        for (const [source, hint] of [['import "option"', 'a standard module is std.option'], ['import "nope"', "no nope.apn or nope/"],
+        if (result(interpreter(checked), 'std <- import "std"; [..] = std.option; Some 1') !== "Some 1") throw new Error("std");
+        for (const [source, hint] of [['import "option"', 'a standard module is std/option'], ['import "nope"', "no nope.apn or nope/"],
             ['import "std/nope"', "the standard library has no module 'nope'"]]) {
             try { result(interpreter(checked), `m <- ${source}`); } catch (error) {
                 const e = error as { message: string; hint?: string };

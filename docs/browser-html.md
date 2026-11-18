@@ -37,7 +37,7 @@ this way, and `examples/p5js` [p5.js's](https://p5js.org/examples/) (see
 
 ```apn
 std <- import "std"
-use std.html
+[..] = std.html
 [browser] = std
 
 Msg = Increment | Decrement
@@ -71,7 +71,8 @@ the program listens to:
 
 ```apn
 std <- import "std"
-use std.[html,time]
+[..] = std.html
+[..] = std.time
 [browser,task] = std
 
 Msg = Tick Posix | AdjustTimeZone Zone
@@ -181,7 +182,7 @@ These follow Elm's modules of the same names; the
   xs`, `random.weighted [w,x] pairs`, `random.list n g`; generators are
   monads (`map`, `>>=`, `return`, `map2`, ...). `random.step generator seed`
   runs one without a page; `random.initialSeed n` makes a seed.
-- `decode`: JSON decoders, as `Json.Decode` (open it, `use std.decode`, as Quotes
+- `decode`: JSON decoders, as `Json.Decode` (open it, `[..] = std.decode`, as Quotes
   does, unless the program also uses `random`, which shares `int`, `float` and `list`).
   `decode.decodeValue decoder value` is `Ok` or `Err`; `decode.string`,
   `decode.int`, `decode.float`, `decode.bool`, `decode.field name d`,
@@ -213,7 +214,7 @@ and angles are degrees, counterclockwise:
 
 ```apn
 std <- import "std"
-use std.playground
+[..] = std.playground
 main = picture [
     moveDown 80 $ rectangle brown 40 200
     moveUp 100 $ circle green 100

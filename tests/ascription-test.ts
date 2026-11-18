@@ -8,7 +8,7 @@ function result(source: string): string {
     return i.renderString(i.run(parseDocument(source)));
 }
 for (const [source, expected] of [
-    ['std <- import "std"; use std.text\n(to (List Char) "hello" : String)', '"hello"'],
+    ['std <- import "std"; [..] = std.text\n(to (List Char) "hello" : String)', '"hello"'],
     ['(to [Char,Char,Char] "a😀é" : String)', '"a😀é"'],
     ['([] : String)', '""'],
     ["(['h','i'] : String)", '"hi"'],

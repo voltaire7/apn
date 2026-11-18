@@ -6,8 +6,8 @@ function result(i: Interpreter, source: string): string {
 // import "path" is an action yielding the module's record: std is the library's
 // folder, whose fields are its modules, and use opens records.
 for (const [source, expected] of [
-    ['std <- import "std"; use std.[function,sequence]\nid (sum [1,2,3])', '6'],
-    ['std <- import "std"; use std.function\nid 7', '7'],
+    ['std <- import "std"\n[..] = std.function\n[..] = std.sequence\nid (sum [1,2,3])', '6'],
+    ['std <- import "std"; [..] = std.function\nid 7', '7'],
     ['sequence <- import "std/sequence"\nsequence.sum [1,2]', '3'],
     ['std <- import "std"\n[id] = std.function\nid 5', '5'],
     ['std <- import "std"\nstd.number.sq 4', '16'],
@@ -15,18 +15,18 @@ for (const [source, expected] of [
     const actual = result(new Interpreter(), source);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
-Deno.test('a failed use opens nothing', () => {
+Deno.test('a failed [..] opens nothing', () => {
     const i = new Interpreter();
-    try { result(i, 'std <- import "std"; use std.[function,missing]'); } catch (error) {
+    try { result(i, 'std <- import "std"\n[..] = std.missing'); } catch (error) {
         if (!String(error).includes('missing')) throw error;
-        if (i.env.get('id') !== undefined) throw new Error('partial use');
+        if (i.env.get('id') !== undefined) throw new Error('partial [..]');
         return;
     }
     throw new Error('expected error');
 });
 for (const [source, message] of [
     ['m = import "std/function"\nm.id 1', 'an action has no fields'],
-    ['import "option"', "a standard module is std.option"],
+    ['import "option"', "a standard module is std/option"],
     ['import "std/nothing"', "the standard library has no module 'nothing'"],
     // import is a prelude function of one module's path.
     ['import ["std/option"]', "import reads one module"],

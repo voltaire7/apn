@@ -28,14 +28,14 @@ for (const source of sourcePrograms) Deno.test(`metacircular agrees with host: $
     const host = new Interpreter();
     const expected = host.renderString(host.run(parse(source)));
     const meta = new Interpreter();
-    meta.run(parse('std <- import "std"; use std.meta'));
+    meta.run(parse('std <- import "std"; [..] = std.meta'));
     meta.env.setLocal("source", { kind: "string", v: source });
     const actual = meta.renderString(meta.run(parse('metaEval source')));
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
 });
 for (const source of ['["old"].["new"]', '[0].[123]', '"old" "new"', '0 123', 'foo =', '1 +', '[1, 2', '"unterminated', '1.2', '1; 2', 'missing', 'head []', '("a" : Int)', '(1 : )']) {
     Deno.test(`metacircular rejects: ${source}`, () => {
-        const i = new Interpreter(); i.run(parse('std <- import "std"; use std.meta'));
+        const i = new Interpreter(); i.run(parse('std <- import "std"; [..] = std.meta'));
         i.env.setLocal("source", { kind: "string", v: source });
         try { i.renderString(i.run(parse('metaEval source'))); }
         catch { return; }
@@ -45,7 +45,7 @@ for (const source of ['["old"].["new"]', '[0].[123]', '"old" "new"', '0 123', 'f
 for (const source of ['20 + 22', 'id x = x; id 42', 'True ? 42 : missing', 'head [x -> x * 2].[21]', 'head [c -> 42, c -> 42]."hi"',
     'lookup "a" ([["a", 42]] : HashMap _ _)']) {
     Deno.test(`evaluator evaluates its own source, then: ${source}`, () => {
-        const i = new Interpreter(); i.run(parse('std <- import "std"; use std.meta'));
+        const i = new Interpreter(); i.run(parse('std <- import "std"; [..] = std.meta'));
         i.env.setLocal("evaluatorSource", { kind: "string", v: Deno.readTextFileSync(new URL("../lib/std/meta/evaluator.apn", import.meta.url)) });
         i.env.setLocal("source", { kind: "string", v: source });
         const actual = i.renderString(i.run(parse('metaSelfEval evaluatorSource source')));
@@ -53,7 +53,7 @@ for (const source of ['20 + 22', 'id x = x; id 42', 'True ? 42 : missing', 'head
     });
 }
 Deno.test("object environment exposes no host parser or evaluator", () => {
-    const i = new Interpreter(); i.run(parse('std <- import "std"; use std.meta'));
+    const i = new Interpreter(); i.run(parse('std <- import "std"; [..] = std.meta'));
     for (const name of ["parse", "eval", "toAST", "load", "metaEval", "meEval"]) {
         i.env.setLocal("name", { kind: "string", v: name });
         if (i.renderString(i.run(parse('has name metaPrimitives'))) !== "False") throw new Error(`Leaked ${name}`);
@@ -66,7 +66,7 @@ Deno.test("record access demands action chains without forcing unrelated fields"
 });
 Deno.test("nested module loads restore the caller's source directory", () => {
     const i = new Interpreter(); i.sourceDir = "/unrelated/caller";
-    i.run(parse('std <- import "std"; use std.meta'));
+    i.run(parse('std <- import "std"; [..] = std.meta'));
     if (i.sourceDir !== "/unrelated/caller") throw new Error("module changed caller directory");
 });
 Deno.test("evaluation depth remains bounded with a language error", () => {
@@ -82,7 +82,7 @@ Deno.test("evaluation depth remains bounded with a language error", () => {
 for (const source of ['fact n = n == 0 ? 1 : n * fact (n - 1); fact 5', 'x = 1 :: x; take 6 x', '[1, 2 + 3, 7]',
     '"a\\"b" ++ "c"', '(x -> x + 1) $ 2', '-2 ^ 2', 'outer x = { inner y = x + y; inner }; outer 40 2', 'f a b = a; f 1 2']) {
     Deno.test(`metaParse reads as toAST does: ${source}`, () => {
-        const i = new Interpreter(); i.run(parse('std <- import "std"; use std.meta'));
+        const i = new Interpreter(); i.run(parse('std <- import "std"; [..] = std.meta'));
         i.env.setLocal("source", { kind: "string", v: source });
         const read = i.renderString(i.run(parse("metaParse source")));
         const block = `syntax = toAST [{\n    ${source.replaceAll("; ", "\n    ")}\n}]`;

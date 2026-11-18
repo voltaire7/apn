@@ -2,7 +2,10 @@
 
 ```apn
 std <- import "std"
-use std.[sequence,number,text,map]
+[..] = std.sequence
+[..] = std.number
+[..] = std.text
+[..] = std.map
 take 10 primes
 mean [1,2]                         # Some 3/2
 frequencies $ words $ "one two one" # ([["one", 2], ["two", 1]] : HashMap _ _)
@@ -23,10 +26,9 @@ and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
 
 The standard library is the folder `lib/std/`, imported as `std`: a record of
 its modules, all run when it is imported (each module is checked where a
-program uses it). `use std.[a,b]`
-opens several modules' names and `use std.name` one module's; `[a,b] = std`
-binds modules without opening them, and `name <- import "std/name"` binds one
-without importing `std`. Imports, their lookup and what a module's record holds
+program uses it). `[..] = std.name` opens one module's names; `[a,b] = std`
+binds modules without opening them, `name <- import "std/name"` binds one
+without importing `std`, and `[..] <- import "std/name"` opens one. Imports, their lookup and what a module's record holds
 are described in
 [module imports](semantics.md#module-imports); imports require Deno read
 permission (the `apn` launcher provides it).
@@ -42,26 +44,24 @@ library, the local modules the program imports and the files it loads (every
 `.apn` file in the program's folder once a load names a computed path), so the
 same imports and loads work in the browser.
 
-`use record` brings its fields into the current scope without forcing their
-values. `use [recordA,recordB]` opens a finite list of records in order; later
-fields replace earlier bindings. It returns `[]`. Fields must be valid binding
-identifiers (not backticked keys that are not names, or keywords). Invalid input is
-rejected before any fields are installed. Bindings inside a block stay local.
+`[..] = record` brings its fields into the current scope without forcing their
+values (see [module imports](semantics.md#module-imports)); a later opening's
+fields replace earlier bindings. Fields must be valid binding identifiers (not
+backticked keys that are not names, or keywords). Invalid input is rejected
+before any fields are installed. Bindings inside a block stay local.
 
 ```apn
-std <- import "std"
-use std.combinator
+[..] <- import "std/combinator"
 identity 123
 
-use [[first = 10], [second = 20]]
+[..] = [first = 10]
+[..] = [second = 20]
 first + second                         # 30
 ```
 
-`use` is an ordinary builtin function, so aliases and pipelines work too.
-An APN wrapper function opens the record in its own scope, not its caller's.
 A record pattern takes some names of a module and leaves the rest:
-`[halt] <- import "std/system"` binds `halt`, and `[halt = stop] <- import
-"std/system"` binds only `stop`. Each name it binds is the module's, as `use`
+`[halt] <- import "std/system"` binds `halt`, and `[stop = halt] <- import
+"std/system"` binds only `stop`. Each name it binds is the module's, as `[..]`
 opens it: `[sum] <- import "std/sequence"` sums Ints and Floats alike.
 
 `load "file"` runs `file.apn` beside the running file in a scope of its own,
@@ -247,7 +247,7 @@ Run `apn examples/standard-library.apn` for a complete example.
 ```apn
 toAST [f x + 1]                        # ["[]", ["+", ["f","x"], 1]]   (prelude)
 std <- import "std"
-use std.syntax
+[..] = std.syntax
 fromAST (toAST [n -> n * 2 + 1])       # "[n -> n * 2 + 1]"
 doubled e = ["*", e, 2]
 eval (doubled ["sqrt", 16])             # 8
@@ -313,7 +313,7 @@ as a new version of the outer `x`.
 
 ```apn
 std <- import "std"
-use std.parser
+[..] = std.parser
 date = {
     y <- number
     char '-'
@@ -403,7 +403,8 @@ error when the request is made.
 
 ```apn
 std <- import "std"
-use std.[http,json]
+[..] = std.http
+[..] = std.json
 response <- fetch "https://www.youtube-transcript.io/api/channels" [
     method = "POST"
     headers = [
@@ -437,7 +438,7 @@ looked up by [applying it](templates-and-types.md#association-list-lookup):
 
 ```apn
 std <- import "std"
-use std.json
+[..] = std.json
 reply = from JSON "{\"status\": 200, \"items\": [{\"name\": \"a\"}]}"
 reply                          # [["status", 200], ["items", [[["name","a"]]]]]
 reply "items" 0 "name"         # "a"
@@ -527,7 +528,7 @@ See [pattern functions and contracts](pattern-functions.md).
 A bare `load "file"` (or `import "path"`) in the REPL runs it without displaying
 the value it yields. This avoids forcing unused exports such as infinite lists.
 Use `module <- load "file"` to keep the value, then read selected fields, or
-`use module` to open them. Printing the whole module (`print module`) can
+`[..] = module` to open them. Printing the whole module (`print module`) can
 stream indefinitely if it holds infinite lists.
 
 ## Resource scopes and type utilities

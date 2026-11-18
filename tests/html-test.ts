@@ -29,7 +29,7 @@ Deno.test("input messages carry strings and boolean attributes update", () => {
 });
 Deno.test("event messages are lazy and failed updates leave the old model usable", () => {
     const counter = app(`std <- import "std"
-use std.[html,browser]
+[..] = std.html\n[..] = std.browser
 HtmlTestMsg = GoodEvent | BadEvent
 update msg model = msg ~ [GoodEvent -> model + 1, BadEvent -> missing]
 view model = div [] [
@@ -50,7 +50,7 @@ for (const [view, error] of [
     ['input [] [text "child"]', 'cannot have children'],
     ['42', 'view must return'],
 ]) Deno.test(`HTML rejects invalid nodes: ${view}`, () => {
-    const test = app(`std <- import "std"\nuse std.[html,browser]\nmain = sandbox [\n    init = 0\n    update = (msg, model -> model)\n    view = model -> ${view}\n]`);
+    const test = app(`std <- import "std"\n[..] = std.html\n[..] = std.browser\nmain = sandbox [\n    init = 0\n    update = (msg, model -> model)\n    view = model -> ${view}\n]`);
     try { test.render(); }
     catch (e) { if (e instanceof Error && e.message.includes(error)) return; throw e; }
     throw new Error("Expected error");
@@ -63,7 +63,7 @@ Deno.test("bundled modules load without filesystem access", () => {
         "/lib/time.apn": Deno.readTextFileSync(new URL("../lib/std/time.apn", import.meta.url)),
     };
     i.sourceDir = "/app/";
-    i.run(parse('std <- import "std"\nuse std.[html,browser]\nmain = sandbox [init = 1, update = (msg, model -> model), view = n -> text (to String n)]'));
+    i.run(parse('std <- import "std"\n[..] = std.html\n[..] = std.browser\nmain = sandbox [init = 1, update = (msg, model -> model), view = n -> text (to String n)]'));
     if (content(new BrowserApp(i, i.env.get("main")!).render()) !== '1') throw new Error("bundled app failed");
     try { i.importStandard('text'); }
     catch (error) { if (error instanceof Error && error.message.includes('not bundled')) return; throw error; }
@@ -76,7 +76,7 @@ Deno.test("nullary constructor function clauses do not consume the next paramete
 });
 Deno.test("a browser build bundles the local modules a program imports", () => {
     const directory = new URL("./fixtures/packages/", import.meta.url).pathname;
-    const source = 'u <- import "uses-hello"\nshapes <- import "shapes"\nuse u\nuse shapes.square\nanswer = [exported, square 3]';
+    const source = 'u <- import "uses-hello"\nshapes <- import "shapes"\n[..] = u\n[..] = shapes.square\nanswer = [exported, square 3]';
     const bundle = bundleProgram(source, directory);
     const local = Object.keys(bundle).filter(path => path.startsWith("/app/")).sort();
     // The imported modules (a folder's every entry) and what they import, not the rest of the folder.
@@ -98,7 +98,7 @@ Deno.test("a browser build bundles the local modules a program imports", () => {
 });
 Deno.test("a browser build bundles the files a program loads", () => {
     const directory = new URL("./fixtures/bundle-load/", import.meta.url).pathname;
-    const source = 'helpers <- load "helpers"\nuse helpers\nanswer = caption 0 ++ mark';
+    const source = 'helpers <- load "helpers"\n[..] = helpers\nanswer = caption 0 ++ mark';
     const bundle = bundleProgram(source, directory);
     const local = Object.keys(bundle).filter(path => path.startsWith("/app/")).sort();
     // Each load is relative to the loading file; unused files stay out.
@@ -139,8 +139,8 @@ Deno.test("a browser build bundles the whole folder for a computed load", () => 
 });
 Deno.test("standard modules that load their own files work from a bundle", () => {
     const i = new Interpreter();
-    i.moduleSources = bundleProgram('std <- import "std"; use std.meta', "/tmp");
+    i.moduleSources = bundleProgram('std <- import "std"; [..] = std.meta', "/tmp");
     i.sourceDir = "/app/";
-    i.run(parse('std <- import "std"; use std.meta'));
+    i.run(parse('std <- import "std"; [..] = std.meta'));
     if (i.renderString(i.run(parse('metaEval "1 + 2"'))) !== "3") throw new Error("meta from the bundle");
 });

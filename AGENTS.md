@@ -44,7 +44,7 @@ Key files:
 - `src/type-checker.ts`, `src/checking-session.ts` — static checking (evaluates pure code, never performs effects)
 - `src/errors.ts` — `APNError`, `didYouMean`
 - `src/repl.ts` — REPL editor and drivers
-- `lib/std/*.apn` — standard library (`std <- import "std"; use std.[option,map]`, ...)
+- `lib/std/*.apn` — standard library (`[..] <- import "std/option"`, `std <- import "std"`, ...)
 - `examples/features.apn` — a short tour of the language in the manner of
   Odin's overview, not a list of every feature; `tests/semantics-test.ts`
   asserts observable evaluation rules
@@ -108,8 +108,8 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   and refer to it; state a rule in one doc and link to it from others; remove
   what a change makes redundant.
 - Avoid keywords at all cost. A new form is a name the prelude defines, a
-  function or an operator (`import`, `use`, `load` and `else` are), never a
-  word the parser reserves.
+  function, an operator or a pattern (`import`, `load`, `else` and `[..]`
+  are), never a word the parser reserves.
 - Define as much of the language as possible in APN itself (`lib/prelude.apn`
   and the standard library): add a native, intrinsic or parser rule only for
   what APN cannot express, and keep it as small as it can be.
@@ -184,6 +184,6 @@ Read the relevant doc and its tests before changing an area:
 | C interop (FFI) | `docs/c-interop.md` | `tests/c-interop-test.ts`; also run `./tests/run-c-interop-tests` |
 | Runtime compilation (`compile`, prototype) | `docs/runtime-compilation.md` | `tests/compile-test.ts`; also run it with `--allow-all` |
 
-Per-feature invariants (record keys, eager `<-` binding, tail calls, `use`/
+Per-feature invariants (record keys, eager `<-` binding, tail calls, `[..]`/
 `import`, resources, dotted patterns, selection assignment, and more)
 are in `docs/implementation-notes.md`, each with the tests that guard it.

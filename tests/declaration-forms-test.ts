@@ -83,5 +83,5 @@ Deno.test("a new capitalized name with pattern parameters is a definition", () =
     if (run(pairs) !== "Pairs 2 Int") throw new Error(run(pairs));
 });
 Deno.test("a constructor pattern with a literal binds as a pattern", () => {
-    if (run('std <- import "std"; use std.option\nSome 1 = Some 1\nSome x = Some 2\nx') !== "2") throw new Error("Some 1");
+    if (run('std <- import "std"; [..] = std.option\nSome 1 = Some 1\nSome x = Some 2\nx') !== "2") throw new Error("Some 1");
 });

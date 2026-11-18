@@ -1,7 +1,7 @@
 # Linear Interpolation, from https://p5js.org/examples/calculating-values-interpolate/
 # Convert a number between 0 and 1 to another range.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 # The circle's position: each frame it goes 5% of the way to the mouse.
 x = Mutable 0.0

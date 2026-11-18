@@ -2,7 +2,9 @@
 # https://p5js.org/examples/math-and-physics-non-orthogonal-reflection/
 # Bounce a ball off a slanted surface.
 std <- import "std"
-use std.[array,number,p5]
+[..] = std.array
+[..] = std.number
+[..] = std.p5
 
 # The ball's size and speed.
 radius = 6

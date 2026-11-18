@@ -2,7 +2,7 @@
 # https://p5js.org/examples/animation-and-variables-animation-with-events/
 # Pause and resume animation.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 # The circle's horizontal position.
 x = Mutable 25

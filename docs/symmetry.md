@@ -45,7 +45,7 @@ spelling that built it (see [bindings](semantics.md#bindings-and-output) and
 | A constructed value | `Some x`, `Box 1` | `Some a = o`, `(Box n)` |
 | A typed value | `(x : Int)` | `f (n : Int) = ...` |
 | A record | `[a = x]` | `[a = x] = r` |
-| A record and its other fields | `[a = x, use rest]` | `[a = x, rest = _] = r` |
+| A record and its other fields | `[a = x, [..] = rest]` | `[a = x, rest = _] = r` |
 | A module | `[f = ..., g = ...]` at a file's end | `[f] <- import "file"` |
 
 ## Defining and calling

@@ -21,7 +21,7 @@ import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { type Alternative, type Binding, clausePlaces, listRole, readPatterns, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, declaresNames, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
-import { enumerationPositions, isUse } from "./ast.ts";
+import { enumerationPositions, isUse, OPEN } from "./ast.ts";
 import { canonicalTypeText, ioTypeText, compoundArgument, slotField, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
@@ -1708,7 +1708,7 @@ export class Interpreter {
                                     || expression.t === "block" && expression.stmts[0]?.t === "stmDef";
                                 if (key !== "_") { bind(key, now ? this.eval(expression) : this.delay(expression), !slots.has(key)); continue; }
                                 const spread = this.dataValue(this.eval(expression));
-                                if (spread.kind !== "record") throw new APNError("runtime", "use in a record opens a record");
+                                if (spread.kind !== "record") throw new APNError("runtime", "[..] opens a record");
                                 for (const [name, value] of spread.v) bind(name, value, !!spread.bound?.has(name));
                             }
                         } finally { this.env = outer; }
@@ -2379,7 +2379,7 @@ export class Interpreter {
                 const joined = this.joinedCall(f, args);
                 if (joined) return joined;
                 if (f.invoke) return f.invoke(args);
-                if (f.name === "use" && tailLoad) {
+                if (f.name === OPEN && tailLoad) {
                     const code = this.dataValue(args[0]);
                     if (this.isList(code) && this.codeItems(code)) throw new TailLoad(code, this.env);
                 }
@@ -2783,7 +2783,7 @@ export class Interpreter {
                 const [key, expression] = e.v[n++];
                 if (key === "_") {
                     const spread = this.dataValue(this.eval(expression));
-                    if (spread.kind !== "record") throw new APNError("runtime", "use in a record opens a record");
+                    if (spread.kind !== "record") throw new APNError("runtime", "[..] opens a record");
                     for (const [name, value] of spread.v) { this.bindNames([[name, value]]); field(name, !!spread.bound?.has(name)); }
                     continue;
                 }
@@ -2844,14 +2844,14 @@ export class Interpreter {
                 for (const [name, bound] of binds) { state.before.set(name, bound); state.changed.add(name); }
                 return this.writtenAs(mkList([]), { expr, env: item.env, binds, joined });
             }
-            // use r binds r's fields for the items after it, as a binding does
+            // [..] = r binds r's fields for the items after it, as a binding does
             // (one of a record an x <- m item binds runs only when the code does).
             if (isUse(expr) && !(state.running && mentions(expr.a, state.running))) {
                 const opened = this.dataValue(this.delay(expr.a));
                 const records = this.isList(opened) ? this.items(opened).map(v => this.dataValue(v)) : [opened];
                 const binds = new Map<string, Value>();
                 for (const record of records) {
-                    if (record.kind !== "record") throw new APNError("runtime", "use expects a record or a list of records");
+                    if (record.kind !== "record") throw new APNError("runtime", "[..] opens a record");
                     for (const [name, value] of record.v) binds.set(name, value);
                 }
                 for (const [name, bound] of binds) { this.env.setLocal(name, bound); state.before.set(name, bound); state.changed.add(name); }
@@ -4997,22 +4997,25 @@ export class Interpreter {
             const at = body && sourceLocations.get(body);
             return mkStr(at ? at.source.slice(at.start, at.end).trim() : body ? exprToSource(body) : this.renderString(argument));
         }
-        if (name === "use") {
+        if (name === OPEN) {
             const value = this.dataValue(argsIn[0]);
             // Code is spliced where use stands: an action running its statements.
             // (into the scope use stands in, wherever its action runs).
             if (this.isList(value) && this.codeItems(value)) { const here = this.env; return { kind: "io", result: "[]", run: () => this.spliceCode(value, here) }; }
-            const given = this.isList(value) ? this.items(value).map(v => this.dataValue(v)) : [value];
+            // ([] is the empty record too: it opens nothing.)
+            if (this.isList(value) && this.cell(value) === null) return { kind: "list", v: [] };
+            if (this.isList(value)) throw new APNError("runtime", "[..] opens one record, not a list", { hint: "open each in turn: [..] = a; [..] = b" });
+            const given = [value];
             const opened: Array<{ bindings: Array<[string, Value]>; module?: { origin?: string; checked?: boolean } }> = [];
             for (const written of given) {
                 const record = written;
-                if (this.isList(record) && this.codeItems(record)) throw new APNError("runtime", "use runs code on its own, not in a list", { hint: "use each code in turn: use a; use b" });
-                if (record.kind !== "record") throw new APNError("runtime", "use expects a record, code, or a list of records");
+                if (this.isList(record) && this.codeItems(record)) throw new APNError("runtime", "[..] opens one code, not a list", { hint: "open each in turn: [..] = a; [..] = b" });
+                if (record.kind !== "record") throw new APNError("runtime", "[..] opens a record or code");
                 const bindings: Array<[string, Value]> = [];
                 for (const [key, field] of record.v) {
                     // A field is a name or an operator (a module's <|>).
                     if (!/^[A-Za-z_][A-Za-z0-9_']*$/.test(key) && !isOperatorName(key) || key === "_" || KEYWORDS.has(key)) {
-                        throw new APNError("runtime", `use cannot bind field ${JSON.stringify(key)}: expected an identifier`);
+                        throw new APNError("runtime", `[..] cannot bind field ${JSON.stringify(key)}: expected an identifier`);
                     }
                     bindings.push([key, field]);
                 }
@@ -5435,7 +5438,7 @@ export class Interpreter {
         throw new Error(`Runtime: unknown native '${name}'`);
     }
 
-    // use code, run as a statement: the code's statements run where use stands,
+    // [..] = code, run as a statement: the code's statements run where it stands,
     // in this scope, as written there (a loaded file's imports, definitions and
     // effects), reading files beside the code's own file; then what they bound
     // is this scope's, as the file's (see moduleValues). Code whose last

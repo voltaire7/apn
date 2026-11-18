@@ -1,4 +1,4 @@
-import { countingOf, typeOperators, writtenOperators, type DataDef, extendedDeclaration, fillPlaceholders, holdsPlaceholder, patternNames, sourceLocations, walkObjects } from "./ast.ts";
+import { countingOf, isUse, opening, typeOperators, writtenOperators, type DataDef, extendedDeclaration, fillPlaceholders, holdsPlaceholder, patternNames, sourceLocations, walkObjects } from "./ast.ts";
 import { fieldSource, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -1237,6 +1237,7 @@ class Parser {
                                 for (const d of this.parseTypeDeclaration()) stmts.push(d.t === "type" ? { t: "typeDef", def: d.def } : d.t === "def" ? { t: "stmDef", name: d.name, clauses: d.clauses } : d.value);
                                 continue;
                             }
+                            if (this.isOpening()) { stmts.push(...this.parseOpening()); continue; }
                             const paired = this.pairedDefs();
                             if (paired) {
                                 for (const d of paired) stmts.push({ t: "stmDef", ...d });
@@ -1277,7 +1278,7 @@ class Parser {
                         // RANGE (speculative): [a..b] [a..] [a,b..c] [a,b..] — Haskell-style; the
                         // first two elements give the STEP; bounds may be runtime expressions;
                         // no upper bound = INFINITE. Falls back to a normal list literal.
-                        {
+                        if (!this.isOpening()) {
                             const save = this.i;
                             const loE = this.parseOperators(6);
                             if (this.isSym("..")) {
@@ -1336,6 +1337,7 @@ class Parser {
                                 es.push(d.t === "type" ? { t: "typeDef", def: d.def } : d.t === "def" ? { t: "stmDef", name: d.name, clauses: d.clauses } : d.value);
                             }
                             else if (this.isSym("]") || this.peek().k === "newline" || this.peek().k === "dedent") { /* a fixity declaration alone */ }
+                            else if (this.isOpening()) es.push(...this.item(first, () => this.parseOpening()));
                             else es.push(this.item(this.peek(), () => this.isFieldDeclaration() ? this.parseFieldDeclaration()
                                 : this.isEagerBinding() ? this.parseEagerBinding()
                                 : this.isPatBinding() ? this.parsePatBinding() : this.isDef() ? this.parseBlockDef() : this.parseDelimitedExpr()));
@@ -1622,6 +1624,26 @@ class Parser {
             ? { t: "setFields", rec: { t: "var", name }, entries: [path[path.length - 1]], value: { t: "list", v: [updated] }, ...path.length > 1 ? { path: path.slice(0, -1) } : {} }
             : updated;
         return literal ? placed : { t: "block", style: "(", stmts: [{ t: "stmDef", name: held, clauses: [{ params: [], body: rhs }] }, placed] };
+    }
+
+    // [..] = e (or <- e) opens e, binding each field under its own name, as
+    // Haskell's {..} does; name.[..] = e binds name too.
+    isOpening(): boolean {
+        const at = this.peek().k === "ident" && this.isSymAt(1, ".") ? 2 : 0;
+        return this.isSymAt(at, "[") && this.isSymAt(at + 1, "..") && this.isSymAt(at + 2, "]")
+            && (this.isSymAt(at + 3, "=") || this.isSymAt(at + 3, "<-"));
+    }
+    parseOpening(): Expr[] {
+        const named = this.peek().k === "ident" ? (this.next() as { v: string }).v : undefined;
+        if (named) this.next(); // .
+        this.next(); this.next(); this.next(); // [..]
+        const eager = this.next().k === "sym" && (this.toks[this.i - 1] as { v: string }).v === "<-";
+        const value = this.parseDefBody(eager ? "<-" : undefined);
+        if (!eager && !named) return [opening(value)];
+        const name = named ?? this.freshName();
+        const bound: Expr = eager ? { t: "patDef", pattern: { p: "var", name }, value, eager: true }
+            : { t: "stmDef", name, clauses: [{ params: [], body: value }] };
+        return [bound, opening({ t: "var", name })];
     }
 
     isEagerBinding(): boolean {
@@ -2502,6 +2524,13 @@ class Parser {
                 out.push({ t: "def", ...operator });
                 continue;
             }
+            if (this.isOpening()) {
+                for (const statement of this.parseOpening()) {
+                    out.push(statement.t === "stmDef" ? { t: "def", name: statement.name, clauses: statement.clauses }
+                        : statement.t === "patDef" ? statement as TopLevel : { t: "expr", value: statement });
+                }
+                continue;
+            }
             if (this.isEagerBinding()) {
                 out.push(this.parseEagerBinding() as TopLevel);
                 continue;
@@ -2793,7 +2822,7 @@ function isFunctionType(type: Expr): boolean {
 function recordFieldsSource(e: Extract<Expr, { t: "record" }>, of: (x: Expr) => string): string[] {
     const declared = new Set(e.declared);
     return e.v.map(([key, x]) => {
-        if (key === "_") return `use ${of(x)}`;
+        if (key === "_") return `[..] = ${of(x)}`;
         if (x.t === "block" && x.stmts.length === 2 && x.stmts[0].t === "stmDef" && x.stmts[0].name === key) return of(x.stmts[0] as Expr);
         if (!declared.has(key)) return fieldSource(key, of(x));
         const typed = x.t === "app" && x.ascribed ? x : undefined;
@@ -2826,7 +2855,7 @@ function recordOf(written: Expr[]): Expr | undefined {
     }
     const fields: Array<[string, Expr]> = [], declared = new Set<string>();
     for (const item of items) {
-        if (item.t === "app" && item.f.t === "var" && item.f.name === "use") { fields.push(["_", item.a]); continue; }
+        if (isUse(item)) { fields.push(["_", item.a]); continue; }
         // A type declaration binds its type and constructors (no field of its own here).
         if (item.t === "typeDef") continue;
         if (item.t !== "stmDef") return undefined;

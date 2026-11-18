@@ -33,7 +33,7 @@ files supply the input and print the answer. Unreachable hill paths return None.
 
 ```apn
 std <- import "std"
-use std.io
+[..] = std.io
 text <- readFile "input.input"
 args <- getArgs
 input <- readInput

@@ -2,11 +2,10 @@
 # No source evaluation or syntax inspection is exposed here.
 # Types for ascription, (entries : HashMap _ _): the object language checks
 # nothing before it runs, so the any type _ is Dynamic, which takes any value.
-strings <- import "std/text"
-sequences <- import "std/sequence"
-functions <- import "std/function"
-option <- import "std/option"
-use [strings,sequences,functions,option]
+[..] <- import "std/text"
+[..] <- import "std/sequence"
+[..] <- import "std/function"
+[..] <- import "std/option"
 [
     metaPrimitives = ([
         ["^",(^)], ["+",(+)], ["-", (x, y -> x - y)], ["*",(*)], ["/",(/)], ["%",(%)]

@@ -1,7 +1,7 @@
 # Framebuffer Blur, from https://p5js.org/examples/3d-framebuffer-blur/
 # Blur what is far from the focus, using the depth a framebuffer records.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 layer = createFramebuffer
 blur = createShader "

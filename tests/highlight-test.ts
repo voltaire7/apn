@@ -42,8 +42,8 @@ Deno.test("editor colors keywords, applied names, constructors, strings and comm
     // A field is applied where the chain it ends starts an application.
     equal(applied("minute = to String (toMinute model.zone model.time)\nintrinsics.add 1 1\nprint (std.text.upper s)"),
         ["to", "toMinute", "add", "print", "upper"]);
-    // return colors as import, load and use do.
-    equal(colors("load use do return else loop for while"), [["load", "keyword"], ["use", "keyword"], ["do", "keyword"], ["return", "keyword"], ["else", "keyword"], ["loop", "keyword"], ["for", "keyword"], ["while", "keyword"]]);
+    // return colors as import and load do.
+    equal(colors("load do return else loop for while"), [["load", "keyword"], ["do", "keyword"], ["return", "keyword"], ["else", "keyword"], ["loop", "keyword"], ["for", "keyword"], ["while", "keyword"]]);
 });
 Deno.test("highlighting tolerates incomplete strings and brackets with UTF-16 positions", () => {
     const source = '["😀\nhello';

@@ -1,7 +1,6 @@
 # report.apn beside report/ is the package's module: import "report" reads this
 # file, which reaches inside its folder with import "report/lines".
-listing <- import "report/lines"
-use listing
+[..] <- import "report/lines"
 [
     report shapes = joinLines (map describe shapes)
 ]

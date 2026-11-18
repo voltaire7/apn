@@ -2,11 +2,10 @@
 # leaves and nodes, so it runs Dynamic, as the meta reader does. A piece of
 # syntax is written for the place it stands in, in parentheses only where it
 # would read differently bare there, as the parser requires.
-sequences <- import "std/sequence"
-strings <- import "std/text"
-functions <- import "std/function"
-option <- import "std/option"
-use [sequences,functions,option,strings]
+[..] <- import "std/sequence"
+[..] <- import "std/text"
+[..] <- import "std/function"
+[..] <- import "std/option"
 fromAST syntax = shown end syntax
 
 # A place: [kind, minimum, follows]. An "operand" takes an expression whose
@@ -35,7 +34,7 @@ kindOf (n : Number) = {
 kindOf (function :: args) = contains function ["[]","[:]","{}",".","..","()",":"] ? "piece"
     : (function == "->" ? "lambda"
     : (function == "?:" ? "ternary"
-    : (contains function ["=","<-"] ? function
+    : (contains function ["=","<-","[..]"] ? function
     : (isOperator function && length args == 2 ? "infix"
     : "call"))))
 digits (n : Number) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) (to String n))
@@ -90,6 +89,7 @@ node _ ".." [low,high] = "[" ++ bound low ++ ".." ++ bound high ++ "]"
 node _ ".." [low,high,next] = "[" ++ listed [bound low, bound next ++ ".." ++ bound high] ++ "]"
 node _ "=" [left,right] = bare end left ++ " = " ++ shown end right
 node _ "<-" [left,right] = bare end left ++ " <- " ++ shown end right
+node _ "[..]" [value] = "[..] = " ++ shown end value
 node _ "()" [op,x] = "(" ++ op ++ " " ++ shown ["operand", 8, -1] x ++ ")"
 node place function args = length args == 2 && isOperator function && !isTag function
     ? infixed place function args
@@ -118,7 +118,7 @@ application _ function args =
 isOperator (name : String) = operator name
 isOperator _ = False
 # The heads that are syntax, not functions.
-isTag head = contains head ["[]","[:]","->","?:",".","{}","..","=","<-","()","|",":"]
+isTag head = contains head ["[]","[:]","->","?:",".","{}","..","=","<-","[..]","()","|",":"]
 operator name = contains (head (to (List Char) name)) (to (List Char) "!$%&*+-/<=>\\^|~:")
 
 # A ',' takes a space only when an item it separates has one (outside string

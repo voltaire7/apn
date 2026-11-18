@@ -252,7 +252,7 @@ builtin on a known list or record. Tests: `tests/operators-test.ts`,
 - A record's key is a name: the lexer reads a backticked one as an `ident`
   token (`quoted`), so every key is one token. The parser's `recordOf` makes a
   list literal of fields alone a `record` node: each binding's name and value
-  (a function's clauses wrapped in a block), `use e` as the key `_`, keeping
+  (a function's clauses wrapped in a block), `[..] = e` as the key `_`, keeping
   the items as `items`, from which the interpreter's `recordCode` and the
   checker's record `code` give its code where code is read (`++`, `toAST`).
   Both evaluate fields in order, each in scope for those after it. The node's
@@ -408,9 +408,9 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   Tests: `tests/eager-binding-test.ts`.
 - `Interpreter.eval` consumes internal `TailCall` transfers for fully applied
   functions, chosen `match` alternatives (a ternary's branches), and block
-  tails. `TailLoad` transfers propagate only from a `use` of code that is a
-  spliced program's final expression. `spliceCode` (what `use` of code runs)
-  owns the iterative loop, splices into the scope `use` was written in, and
+  tails. `TailLoad` transfers propagate only from a `[..] =` of code that is a
+  spliced program's final expression. `spliceCode` (what `[..] =` of code runs)
+  owns the iterative loop, splices into the scope `[..] =` was written in, and
   restores `sourceDir` (set to the code's file's folder, `codeSources`; code's
   own reads use `codeDirs`) on success, error, or interruption.
   `intrinsics.import`, `intrinsics.runFile` and `intrinsics.readFileFrom`
@@ -439,7 +439,7 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   root (`Env.root`) and gives a rebound one a version (`new Env(env, True)`),
   which the statement loops (top level, blocks, do-blocks) go on in;
   `Env.bindings` reads a scope through its versions (module exports), and
-  `newest` is the version `eval` runs in. `use` publishes the same way, and its
+  `newest` is the version `eval` runs in. `[..]` publishes the same way, and its
   statement adopts the version (`adoptPublished`). The runtime tags the
   values `importModule` and `runFile` give and the code `parse` makes of a file
   (`moduleValues`, with their origin and whether checked; the REPL echoes
@@ -448,19 +448,21 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   fields were defined in (`scope`), so a module's record is `ModuleFields` over
   those entries (clauses and fixities too, kept through `copy`, copied per
   import by `importedValue`), and a field naming a native or function is that
-  entry (`upper = upper`). `use` of a module record publishes its names with
+  entry (`upper = upper`). `[..]` of a module record publishes its names with
   the module's origin; the checker opens the module's scope entries and
   settles each type (`validate`) as a statement's value is, so later code
   meets its calls decided. Tests: `tests/load-test.ts`,
   `tests/default-checking-test.ts`. The checker never re-checks a reader: a reader's types
   are its version's. Its static block evaluation (`evaluateBlock`) follows
   the same rule. Tests: `tests/semantics-test.ts`, `tests/default-checking-test.ts`.
-- A statically checked module or load's record publishes by `use` without
+- A statically checked module or load's record publishes by `[..]` without
   `protectDynamicWrite`. For others, `publishForeignBindings` records,
   per caller scope, which origin (path plus source text) published each
   binding (`publishedBy`), and skips the guard only when the same origin
   replaces the exact value it published. Tests: `tests/dynamic-boundary-test.ts`.
-- `use` validates every key as a binding identifier before publishing and opens
+- The parser writes `[..] = e` as the internal name `[..]` (`OPEN`, which no
+  program can write) applied to `e`, and `r.[..] = e` as `r = e` then that.
+  It validates every key as a binding identifier before publishing and opens
   the active evaluation scope, so wrapper functions don't export into their
   caller. Tests: `tests/use-test.ts`, `tests/std-import-test.ts`, `tests/load-test.ts`.
 - `src/modules.ts` `resolveModule` is the one place imports resolve, used by
@@ -804,7 +806,7 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   (`sameBinding`), since nested call arguments are each evaluated.
   Effects (`print`, `echo`, `emit`, `assert`, `debug`) only return their results
   statically. `Known.mutable` is a cell. While `CheckOptions.mutation` (the
-  session-wide `mayMutate` scan for `set` and `load`; `use` only exposes
+  session-wide `mayMutate` scan for `set` and `load`; `[..]` only exposes
   bindings that scan saw) is false,
   `readMutable` gives its first contents. Otherwise cells are followed per
   root (`KnownCell.root`): `writeMutable` updates them in evaluation order,
@@ -822,7 +824,7 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   equality). Top-level cells (`KnownCell.program`, made while
   `creatingTopLevel`) are written only by `executeTopLevel`, which statically
   runs each top-level statement that `mayWrite` (reaches `set` or `load`
-  through named definitions and `use`d fields) before it is checked; reads in that
+  through named definitions and opened fields) before it is checked; reads in that
   statement come from `executedParts`, the values that run gave each
   argument-free part (unknown if it never evaluated them). A top-level value
   whose definition touches a top-level cell (`touchedTopLevel`) keeps its
@@ -839,8 +841,8 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   values `reachable` from the statement's names (through definition bodies,
   the facts of those names, the `Known.origin` of lazy values, and
   `CheckOptions.loadedNames` for literal loads, `Entry.opened` for names
-  `use` opened, and `Entry.bound` for pattern bindings) become `invalid`.
-  An opaque `use` here or elsewhere
+  `[..]` opened, and `Entry.bound` for pattern bindings) become `invalid`.
+  An opaque `[..]` here or elsewhere
   (`CheckOptions.openedElsewhere`), or a lazy value without an origin
   clears `programValid`. Lazy list
   cells and deferred values keep their result only when computed touching
@@ -919,7 +921,7 @@ Behavior: `docs/gradual-and-dependent-types.md`.
 - Keep implicit unknowns separate from explicit `Dynamic`: a concrete type
   requires a runtime constructor/contract or an actually converting pattern,
   never a silently inserted conversion.
-- Reflected environment writes and imported/loaded/`use` bindings must
+- Reflected environment writes and imported/loaded/opened bindings must
   preserve existing types. Never invoke an old action to guess its type.
   Preserve Mutable identity at `Dynamic` boundaries.
 - `CheckingSession` checks the whole submission before effects and commits type

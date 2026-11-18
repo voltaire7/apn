@@ -21,7 +21,7 @@ const CTOR = "Box x = _\nRect (w : Float) (h : Float) = _\nNothing = _\n";
 // declaration (Maybe a = Just a | Nada) makes.
 const MAYBE = "Just x : Maybe x = _\nNada : Maybe a = _\n";
 const SHAPE = "Circle (r : Float) : Shape = _\nSquare (s : Float) : Shape = _\n";
-const OPTION = 'std <- import "std"; use std.option\n';
+const OPTION = 'std <- import "std"; [..] = std.option\n';
 // A union of existing types is a type of its own values: made of nothing new.
 const MIXED = "Mixed = (Int | String)\n";
 const ID = "UserId (x : Int) = _\n";
@@ -199,7 +199,7 @@ for (const checked of [true, false]) {
     });
 }
 // A to String instance is how a value shows, wherever it is.
-const SHOW = 'std <- import "std"; use std.option\nPoint x y = _\nto String (Point x y) = to String x ++ "@" ++ to String y\n';
+const SHOW = 'std <- import "std"; [..] = std.option\nPoint x y = _\nto String (Point x y) = to String x ++ "@" ++ to String y\n';
 for (const checked of [true, false]) for (const [source, expected] of [
     [SHOW + "[Point 1 2, Point 3 4]", "[1@2,3@4]"],
     [SHOW + "Some (Point 1 2)", "Some (1@2)"],

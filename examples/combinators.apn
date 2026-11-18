@@ -1,5 +1,5 @@
 std <- import "std"
-use std.combinator
+[..] = std.combinator
 
 # The supplied Scheme expression, translated directly. "self" replaces "!",
 # which APN reserves for logical negation. The definition never names itself.

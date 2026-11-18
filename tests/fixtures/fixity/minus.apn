@@ -1,4 +1,4 @@
-# A right-grouping operator a program opens with use.
+# A right-grouping operator a program opens with [..].
 [
     infixr 5 <->
     a <-> b = a - b

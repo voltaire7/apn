@@ -1,7 +1,7 @@
 # Video on Canvas, from https://p5js.org/examples/imported-media-video-canvas/
 # Display and stylize a video on the canvas.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 video = createVideo ["assets/fingers.mov","assets/fingers.webm"]
 playing = Mutable False

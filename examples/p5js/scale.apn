@@ -1,7 +1,7 @@
 # Scale, from https://p5js.org/examples/transformation-scale/
 # Modify the coordinate system scale.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 setup (p : Sketch) = {
     p.createCanvas 720 400

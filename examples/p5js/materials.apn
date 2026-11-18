@@ -1,7 +1,9 @@
 # Materials, from https://p5js.org/examples/3d-materials/
 # Set the look of a model's surface with a material.
 std <- import "std"
-use std.[html,sequence,p5]
+[..] = std.html
+[..] = std.sequence
+[..] = std.p5
 [browser] = std
 
 astronaut = loadModel "assets/astronaut.obj"

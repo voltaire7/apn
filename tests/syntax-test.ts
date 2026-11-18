@@ -7,7 +7,7 @@ import { parse } from "../src/parser.ts";
 function session(): Interpreter {
     const i = new Interpreter();
     i.enableChecking();
-    i.run(parse('std <- import "std"; use std.syntax'));
+    i.run(parse('std <- import "std"; [..] = std.syntax'));
     return i;
 }
 const shown = (i: Interpreter, source: string, raw = false) => i.renderString(i.run(parse(source)), raw);
@@ -40,7 +40,7 @@ for (const [source, expected] of [
     ["[f (Some (n : Int)) = n]", '["[]", ["=", ["f", ["Some", [":","n","Int"]]], "n"]]'],
     ["[((x -> x) : Int -> Int) 1]", '["[]", [[":", ["->", ["x"], "x"], ["->", ["Int"], "Int"]], 1]]'],
 ] as const) Deno.test(`toAST: ${source}`, () => {
-    const actual = shown(session(), `std <- import "std"; use std.option\ntoAST ${source}`);
+    const actual = shown(session(), `std <- import "std"; [..] = std.option\ntoAST ${source}`);
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 
@@ -53,7 +53,7 @@ for (const source of [
     "c ? 1 : 2", "c ? (d ? 1 : 2) : 3", "c ? 1 : (d ? 2 : 3)", "f (c ? 1 : 2)", "a $ b ? c : d",
     "c ? (a $ b) : d", "x, y -> x * y", "(n : Int), [a,b] | n > 0 -> a", "{ a <- return 1; print a }",
     "[x = 1, x + 1]", "f n = n * 2", "x :: xs = ys", "!b", "map (+ 1) xs", "head $ [1,2]", "f $ g $ x",
-    "{}", 'std <- import "std"; use std.[option,map]', "Some (Some 1)", "-x ^ 2", "n -> n ~ [0 -> 1, _ -> 2]", "(+)",
+    "{}", 'std <- import "std"\n[..] = std.option\n[..] = std.map', "Some (Some 1)", "-x ^ 2", "n -> n ~ [0 -> 1, _ -> 2]", "(+)",
     "(- 2)", "(10 -)", "xs >>= x -> f x", "xs >>= (x -> f x) >>= g", "(x -> x) 1", "f (x -> x) y",
     "run (x -> x)", "withFile path (file -> file.read)", 'withFile "notes" $ file -> file.read',
     "bracket 1 (_ -> []) (x -> y -> x)", "[(x, y -> x)]", "[x -> x]", "foo Bar (x -> x)",

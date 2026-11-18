@@ -1,12 +1,9 @@
-sequences <- import "std/sequence"
-strings <- import "std/text"
-functions <- import "std/function"
-option <- import "std/option"
-use [sequences,functions,option,strings]
-source <- (load "syntax/source" : Dynamic)
-use source
-lambda <- (load "syntax/lambda" : Dynamic)
-use lambda
+[..] <- import "std/sequence"
+[..] <- import "std/text"
+[..] <- import "std/function"
+[..] <- import "std/option"
+[..] <- (load "syntax/source" : Dynamic)
+[..] <- (load "syntax/lambda" : Dynamic)
 [
     # Code as data. toAST (in the prelude) gives an expression as lists: a leaf is
     # a number, a Bool, a name or a literal's source text ("x", "\"x\"", "'c'");

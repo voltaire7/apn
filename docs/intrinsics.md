@@ -351,7 +351,7 @@ reasons:
 - **Code as data**: `intrinsics.syntax`, `intrinsics.written`,
   `intrinsics.binding`, `intrinsics.yields`, `intrinsics.runs`,
   `intrinsics.bound`, `intrinsics.fixity`, `intrinsics.source`,
-  `intrinsics.parse`, `use`, the debugger's `step` and `debug` (which prints
+  `intrinsics.parse`, the debugger's `step` and `debug` (which prints
   the code it is given) read code as it was written, which needs the parser. `intrinsics.eval` is the
   [metacircular evaluator](metacircular-evaluator.md)'s `eval`, and `~`
   (`intrinsics.match`) is a function's clauses written in place:

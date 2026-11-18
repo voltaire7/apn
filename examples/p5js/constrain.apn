@@ -1,7 +1,7 @@
 # Constrain, from https://p5js.org/examples/calculating-values-constrain/
 # Keep a number within a range.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 radius = 24
 edge = 100

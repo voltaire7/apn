@@ -20,8 +20,8 @@ for (const [source, expected] of [
     ['xs <- return (([1,missing] : Dynamic) : Vect 2 Int); head xs', '1'],
     ['([(1 : Dynamic), (2 : Dynamic)] : Vect 2 Int)', '[1,2]'],
     ['(import "std/function" : Dynamic); 123', '123'],
-    ['m <- (import "std/text" : Dynamic); use m; 123', '123'],
-    ['x = 1; (use [x = 2] : Dynamic); x', '2'],
+    ['m <- (import "std/text" : Dynamic); [..] = m; 123', '123'],
+    ['x = 1; [..] = ([x = 2] : Dynamic); x', '2'],
 ] as const) Deno.test(`explicit Dynamic boundary: ${source}`, () => {
     const result = requireChecked(source);
     if (result.dynamicBoundaries || !result.runtimeChecks) throw new Error(JSON.stringify(result));
@@ -44,7 +44,7 @@ for (const [source, message] of [
     ['(f : Int -> Int) <- return (x -> "bad" : Dynamic); f 1', 'Int expects a number'],
     ['(([1] : Dynamic) : Vect 2 Int)', 'length mismatch'],
     ['(([1, "bad"] : Dynamic) : Vect 2 Int)', 'Int expects a number'],
-    ['x = "old"; (use [x = 123] : Dynamic); x', 'cannot replace string with int'],
+    ['x = "old"; [..] = ([x = 123] : Dynamic); x', 'cannot replace string with int'],
 ]) Deno.test(`Dynamic runtime boundary rejects: ${source}`, () => {
     requireChecked(source);
     try { run(source); } catch (error) {
@@ -60,7 +60,7 @@ Deno.test('Dynamic construction and patterns preserve Mutable identity', () => {
 });
 
 Deno.test('load exports cannot invalidate checked bindings', () => {
-    const source = 'x = "old"; m <- (load "dynamic-overwrite" : Dynamic); use m; x';
+    const source = 'x = "old"; m <- (load "dynamic-overwrite" : Dynamic); [..] = m; x';
     requireChecked(source);
     const i = new Interpreter(); i.checkedExecution = true;
     i.sourceDir = new URL('./fixtures/', import.meta.url).pathname;
@@ -72,8 +72,8 @@ Deno.test('load exports cannot invalidate checked bindings', () => {
 });
 
 for (const module of ['"std/function"']) {
-    Deno.test(`use protects existing bindings: ${module}`, () => {
-        const source = `x = "old"; m <- (import ${module} : Dynamic); use m; x`;
+    Deno.test(`[..] protects existing bindings: ${module}`, () => {
+        const source = `x = "old"; m <- (import ${module} : Dynamic); [..] = m; x`;
         requireChecked(source);
         const i = new Interpreter(); i.checkedExecution = true;
         i.moduleSources = { "/lib/function.apn": '[x = 123]', "/lib/type.apn": '' };
@@ -91,7 +91,7 @@ for (const module of ['"std/function"']) {
 Deno.test("a checked import replaces a builtin function", () => {
     const i = new Interpreter();
     i.enableChecking();
-    const actual = i.renderString(i.run(parseDocument('std <- import "std"; use std.random\nstep (Generator (s -> [1,s])) 0')));
+    const actual = i.renderString(i.run(parseDocument('std <- import "std"; [..] = std.random\nstep (Generator (s -> [1,s])) 0')));
     if (actual !== "[1,0]") throw new Error(actual);
 });
 Deno.test("set on an explicit Dynamic target is checked at runtime", () => {
@@ -106,11 +106,11 @@ Deno.test('loading a file again replaces its definitions', () => {
     if (i.renderString(i.run(parseDocument('[first,second]'))) !== '[2,20]') throw new Error('reload');
     // A checked load's names replace a name rebound in between, as a definition would.
     const j = new Interpreter(); j.enableChecking(); j.sourceDir = fixtures;
-    j.run(parseDocument('r <- load "reload"\nuse r\ndouble n = n + 1\nagain <- load "reload"\nuse again'));
+    j.run(parseDocument('r <- load "reload"\n[..] = r\ndouble n = n + 1\nagain <- load "reload"\n[..] = again'));
     if (j.renderString(j.run(parseDocument('double 5'))) !== '10') throw new Error('rebound reload');
     // An unchecked (Dynamic) load still cannot replace it.
     const k = new Interpreter(); k.enableChecking(); k.sourceDir = fixtures;
-    try { k.run(parseDocument('r <- load "reload"\nuse r\ndouble n = n + 1\nagain <- (load "reload" : Dynamic)\nuse again')); } catch (error) {
+    try { k.run(parseDocument('r <- load "reload"\n[..] = r\ndouble n = n + 1\nagain <- (load "reload" : Dynamic)\n[..] = again')); } catch (error) {
         if (String(error).includes("Dynamic write to 'double'")) return;
         throw error;
     }

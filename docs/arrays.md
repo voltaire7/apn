@@ -59,7 +59,7 @@ interpreted as 0-by-0; `matmul [[]] []` yields `[[]]`.
 
 ```apn
 std <- import "std"
-use std.array
+[..] = std.array
 dot [1,2,3] [4,5,6]                # 32
 transpose [[1,2,3],[4,5,6]]       # [[1,4],[2,5],[3,6]]
 matmul [[1,2],[3,4]] [[5,6],[7,8]]  # [[19,22],[43,50]]

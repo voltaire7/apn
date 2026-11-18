@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, type Binding, clausePlaces, walkObjects, type Contains, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, type Binding, clausePlaces, walkObjects, type Contains, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, OPEN, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { EVALUATED_NATIVES, nativeArity, READS_CODE, RETIRED_NATIVES, SHOWS, STANDARD_NATIVES, STRICT_NATIVES } from "./natives.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -277,7 +277,7 @@ export interface CheckOptions {
     mutation?: () => boolean;
 }
 // Code that may write a Mutable cell: set, or code loaded or typed (repl) at
-// runtime. (use opens a record's fields, which writes no cell.)
+// runtime. ([..] opens a record's fields, which writes no cell.)
 const MUTATING_NAMES = new Set(["set", "load", "repl"]);
 const isFunctionExpr = (e: Expr): e is Extract<Expr, { t: "lambda" | "patternLambda" }> => e.t === "lambda" || e.t === "patternLambda";
 // A lambda, grouped or not.
@@ -395,7 +395,7 @@ export function importedValue(t: Ty): Ty {
 // Whether a type is a module's record (an import's or a load's).
 export function isModuleType(t: Ty): boolean { return t.k === "record" && t.fields instanceof ModuleFields; }
 // What opens a standard module (std/name), for a hint.
-function openHint(module: string): string { return `add \`std <- import "std"; use std.${module.slice("std/".length)}\``; }
+function openHint(module: string): string { return `add \`[..] <- import "${module}"\``; }
 // The names a module type holds, for a record a module made.
 function moduleOf(t: Ty): TypeScope | undefined {
     const module = resolve(t);
@@ -2327,11 +2327,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         dynamicBoundaries++;
     }
     // What would bind a name: a retired native's replacement, a module bound
-    // to a name (use opens it), or the standard module defining it.
+    // to a name ([..] opens it), or the standard module defining it.
     function unboundHint(name: string, scope?: Scope): string | undefined {
         const module = standardModule(name), now = RETIRED_NATIVES[name];
         const holder = scope && [...scope].find(([, entry]) => moduleOf(entry.type)?.has(name))?.[0];
-        return now ? `write \`${now} x\`` : holder ? `write \`${holder}.${name}\`, or \`use ${holder}\` to open its names`
+        return now ? `write \`${now} x\`` : holder ? `write \`${holder}.${name}\`, or \`[..] = ${holder}\` to open its names`
             : module ? `${openHint(module)} to use \`${name}\`` : undefined;
     }
 
@@ -4534,7 +4534,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     runtimeChecks++;
                     return explicitDynamic;
                 }
-                if (resolved.k === "intrinsic" && resolved.name === "use") {
+                if (resolved.k === "intrinsic" && resolved.name === OPEN) {
                     const names: string[] = [];
                     usedNames.set(e, names);
                     const open = (type: Ty): void => {
@@ -4549,12 +4549,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                             scope.set(name, entry);
                         }
                         else if (t.k === "record") for (const [name, type] of t.fields) scope.set(name, { ...fieldEntry(t, name, type), opened: a });
+                        else if (t.k === "list" && t.items && !t.open && t.items.some(item => resolve(item).k === "record")) {
+                            problem("[..] opens one record, not a list", a, "open each in turn: [..] = a; [..] = b");
+                        }
                         else if (t.k === "list" && t.items) t.items.forEach(open);
                         else if (isExplicit(t)) { runtimeChecks++; opaqueUse = true; }
                         // A record not known here (an import the check cannot read) was
                         // counted unknown where it was made: it opens unknown names.
                         else if (t.k === "dynamic") opaqueUse = true;
-                        else problem("use needs a statically known record or list of records; use Dynamic for runtime exports", a);
+                        else problem("[..] needs a statically known record; use Dynamic for runtime exports", a);
                     };
                     open(infer(a, scope));
                     return list(variable(), constant(0n));
@@ -5118,7 +5121,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     for (const name of patternNames(e.pattern)) { const entry = scope.get(name); if (entry) entry.bound = e.value; }
                 } else {
                     const module = moduleOf(t), p = e.pattern;
-                    // A module's names bind as use opens them ([sum] <- import "std/sequence").
+                    // A module's names bind as [..] opens them ([sum] <- import "std/sequence").
                     const picks = p.p === "recPat" ? p.v : p.p === "list" && p.v.every(x => x.p === "var")
                         ? patternNames(p).map(name => [name, name]) : undefined;
                     if (module && picks) {
@@ -7003,7 +7006,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return known([]);
             }, actionResult: "[]" };
             // use forces its record and binds its fields (lazily): no other effect.
-            case "debug": case "use": args[0](); return known([]);
+            case "debug": case OPEN: args[0](); return known([]);
             case "set": return { action: () => { writeMutable(args[0](), args[1]); return known([]); }, actionResult: "[]" };
             // Input read at check time, from the same snapshot the run uses.
             case "readFile": return { action: () => {
@@ -8211,7 +8214,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("isType", [variable(), variable()], bool);
     native("parse", [str], explicitDynamic);
     native("step", [int, variable()], explicitDynamic);
-    for (const name of ["debug", "intrinsics.eval", "use"]) scope.set(name, { type: { k: "intrinsic", name } });
+    for (const name of ["debug", "intrinsics.eval", OPEN]) scope.set(name, { type: { k: "intrinsic", name } });
     // Code parse makes is read at runtime (a literal load's is checked: see PRELUDE_TYPINGS).
     native("intrinsics.parse", [str], explicitDynamic);
     native("intrinsics.readFileFrom", [str], io(str));

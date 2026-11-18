@@ -1,7 +1,7 @@
 # Random Poetry, from https://p5js.org/examples/listing-data-with-arrays-random-poetry/
 # Generate a poem with words randomly selected from a bank.
 std <- import "std"
-use std.p5
+[..] = std.p5
 
 words = [
     "p5.js","is","a","JavaScript","library","for","creative","coding","with","a"

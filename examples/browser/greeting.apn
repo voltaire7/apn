@@ -1,5 +1,5 @@
 std <- import "std"
-use std.html
+[..] = std.html
 [browser] = std
 
 GreetingMsg = NameChanged String | ClearName

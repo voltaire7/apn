@@ -2,7 +2,7 @@
 # Create animations that spin, wave, and zig-zag.
 # This one is a little red wagon bumping along a dirt road.
 std <- import "std"
-use std.playground
+[..] = std.playground
 
 view time = [
     rotate (spin 3 time) $ moveLeft 100 $ octagon darkGray 36

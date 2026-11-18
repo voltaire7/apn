@@ -11,7 +11,7 @@ export const NATIVES: Array<[string, number]> = [
     ["print", 1], ["echo", 1], ["repl", 0], ["compile", 2], ["head", 1], ["tail", 1], ["length", 1], ["null", 1],
     ["iterate", 2], ["enumerate", 1], ["map", 2], ["filter", 2], ["foldl", 3], ["foldr", 3],
     ["intToString", 1], ["pairs", 1], ["format", 2], ["zipWith", 3],
-    ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["use", 1],
+    ["take", 2], ["drop", 2], ["toString", 1], ["parse", 1], ["debug", 1], ["exit", 1], ["[..]", 1],
     ["emit", 1], ["step", 2], ["intrinsics.syntax", 1], ["intrinsics.written", 1], ["intrinsics.binding", 1], ["intrinsics.yields", 1], ["intrinsics.runs", 1], ["intrinsics.bound", 2], ["intrinsics.eval", 1], ["intrinsics.fixity", 1],
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
@@ -76,7 +76,7 @@ export const READS_CODE = new Set(["probe", "toAST", "toLambda", "intrinsics.wri
 // their arguments first.
 export const STRICT_NATIVES = new Set([
     "head", "tail", "null", "length", "chars", "fromChars", "upper", "lower", "toString", "intToString",
-    "parse", "print", "echo", "emit", "debug", "assert", "set", "seq", "readFile", "use",
+    "parse", "print", "echo", "emit", "debug", "assert", "set", "seq", "readFile", "[..]",
 ]);
 export const EVALUATED_NATIVES = new Set([
     ...STRICT_NATIVES, "filter", "map", "take", "drop", "zipWith", "foldl", "foldr", "iterate", "enumerate",

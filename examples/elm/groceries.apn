@@ -1,7 +1,7 @@
 # Groceries, from https://elm-lang.org/examples/groceries
 # Show a list of items I need to buy at the grocery store.
 std <- import "std"
-use std.html
+[..] = std.html
 
 main = div [] [
     h1 [] [text "My Grocery List"]

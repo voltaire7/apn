@@ -17,10 +17,10 @@ for (const command of ['load "main"', 'load $ "main"']) {
             runSource('module <- load "main"', i, true);
             if (output.join(',') !== 'loaded,loaded') throw new Error('a load ran its file once');
             if (runSource('module.v', i) !== '[x = 1, y = 2, z = 3]') throw new Error('field lost');
-            runSource('use module', i);
+            runSource('[..] = module', i);
             if (runSource('v.x', i) !== '1') throw new Error('exports lost');
             if (runSource('take 5 infinite', i) !== '[0,1,2,3,4]') throw new Error('lazy export lost');
-            if (output.length !== 2) throw new Error('use ran the file again');
+            if (output.length !== 2) throw new Error('[..] ran the file again');
         } finally { console.log = log; }
     });
 }

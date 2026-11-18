@@ -39,7 +39,7 @@ Deno.test("p5 call supports overload arguments and rejects unsafe integer conver
 });
 Deno.test("p5 objects are made once per sketch, and preload waits for them", async () => {
     const i = new Interpreter();
-    i.run(parse('std <- import "std"; use std.p5\nimg = loadImage "a.png"\nmain = sketch [preload = [img], setup = (p : Sketch) -> p.image img 1 2]'));
+    i.run(parse('std <- import "std"; [..] = std.p5\nimg = loadImage "a.png"\nmain = sketch [preload = [img], setup = (p : Sketch) -> p.image img 1 2]'));
     let loads = 0, drawn: unknown;
     const image = { width: 5 };
     const sketch = new P5Sketch(i, i.env.get("main")!, {
@@ -53,7 +53,7 @@ Deno.test("p5 objects are made once per sketch, and preload waits for them", asy
 });
 Deno.test("p5 call yields p5's result; a callback without arguments gets the sketch's p", () => {
     const i = new Interpreter();
-    i.run(parse('std <- import "std"; use std.p5\nshape = buildGeometry ((p : Sketch) -> p.sphere 3)\nmain = sketch [setup = (p : Sketch) -> {\n    rate <- p.call "frameRate" []\n    p.model shape\n    p.text (to String rate) 0 0\n}]'));
+    i.run(parse('std <- import "std"; [..] = std.p5\nshape = buildGeometry ((p : Sketch) -> p.sphere 3)\nmain = sketch [setup = (p : Sketch) -> {\n    rate <- p.call "frameRate" []\n    p.model shape\n    p.text (to String rate) 0 0\n}]'));
     const calls: unknown[][] = [];
     const sketch = new P5Sketch(i, i.env.get("main")!, {
         frameRate: () => 60,
@@ -67,7 +67,7 @@ Deno.test("p5 call yields p5's result; a callback without arguments gets the ske
 });
 Deno.test("p5 takes a (keys a program computes : HashMap _ _) as an object", () => {
     const i = new Interpreter();
-    i.run(parse('std <- import "std"; use std.p5\nmain = sketch [setup = (p : Sketch) -> p.call "fill" [([["a b", 1]] : HashMap _ _)]]'));
+    i.run(parse('std <- import "std"; [..] = std.p5\nmain = sketch [setup = (p : Sketch) -> p.call "fill" [([["a b", 1]] : HashMap _ _)]]'));
     let given: unknown;
     new P5Sketch(i, i.env.get("main")!, { fill: (x: unknown) => { given = x; } }).dispatch("setup");
     if (JSON.stringify(given) !== '{"a b":1}') throw new Error(JSON.stringify(given));

@@ -1,7 +1,6 @@
-sequences <- import "std/sequence"
-functions <- import "std/function"
-option <- import "std/option"
-use [sequences,functions,option]
+[..] <- import "std/sequence"
+[..] <- import "std/function"
+[..] <- import "std/option"
 
 insertCombined combine acc [key,value] =
     insert [[key, has key acc ? combine (lookup key acc) value : value]] acc
