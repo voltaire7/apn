@@ -29,7 +29,7 @@ Deno.test("input messages carry strings and boolean attributes update", () => {
 });
 Deno.test("event messages are lazy and failed updates leave the old model usable", () => {
     const counter = app(`std <- import "std"
-[..] = std.html\n[..] = std.browser
+[..] = std.[html,browser]
 HtmlTestMsg = GoodEvent | BadEvent
 update msg model = msg ~ [GoodEvent -> model + 1, BadEvent -> missing]
 view model = div [] [
@@ -50,7 +50,7 @@ for (const [view, error] of [
     ['input [] [text "child"]', 'cannot have children'],
     ['42', 'view must return'],
 ]) Deno.test(`HTML rejects invalid nodes: ${view}`, () => {
-    const test = app(`std <- import "std"\n[..] = std.html\n[..] = std.browser\nmain = sandbox [\n    init = 0\n    update = (msg, model -> model)\n    view = model -> ${view}\n]`);
+    const test = app(`std <- import "std"\n[..] = std.[html,browser]\nmain = sandbox [\n    init = 0\n    update = (msg, model -> model)\n    view = model -> ${view}\n]`);
     try { test.render(); }
     catch (e) { if (e instanceof Error && e.message.includes(error)) return; throw e; }
     throw new Error("Expected error");
@@ -63,7 +63,7 @@ Deno.test("bundled modules load without filesystem access", () => {
         "/lib/time.apn": Deno.readTextFileSync(new URL("../lib/std/time.apn", import.meta.url)),
     };
     i.sourceDir = "/app/";
-    i.run(parse('std <- import "std"\n[..] = std.html\n[..] = std.browser\nmain = sandbox [init = 1, update = (msg, model -> model), view = n -> text (to String n)]'));
+    i.run(parse('std <- import "std"\n[..] = std.[html,browser]\nmain = sandbox [init = 1, update = (msg, model -> model), view = n -> text (to String n)]'));
     if (content(new BrowserApp(i, i.env.get("main")!).render()) !== '1') throw new Error("bundled app failed");
     try { i.importStandard('text'); }
     catch (error) { if (error instanceof Error && error.message.includes('not bundled')) return; throw error; }

@@ -5,7 +5,7 @@ function interpreter(): Interpreter {
     const i = new Interpreter();
     i.sourceDir = new URL("../examples/advent-of-code/", import.meta.url).pathname;
     // (A loaded file runs in a scope of its own: the library names the stress cases use are opened here.)
-    i.run(parse('std <- import "std"\n[..] = std.text\n[..] = std.search\n[..] = std.sequence\n' +
+    i.run(parse('std <- import "std"\n[..] = std.[text,search,sequence]\n' +
         'sonar <- load "sonar-sweep"; fish <- load "lanternfish"; hill <- load "hill-climbing"\n[..] = sonar\n[..] = fish\n[..] = hill'));
     return i;
 }

@@ -1,8 +1,7 @@
 # Snake, from https://p5js.org/examples/games-snake/
 # Make a game based on Snake arcade games.
 std <- import "std"
-[..] = std.p5
-[..] = std.sequence
+[..] = std.[p5,sequence]
 
 [gridWidth,gridHeight,startingSegments] = [30,30,10]
 # The snake's cells from its head (a list of any length), its direction, the

@@ -10,6 +10,9 @@ for (const [source, expected] of [
     ['shared.[..] = [a = 1, f x = x * 2]\n[shared.a, f 3]', '[1,6]'],
     ['unused = missing + 1\n[..] = [x = 1, unused = unused]\nx', '1'],
     ['[..] = [x = 1]\n[..] = [y = 2, x = 3]\n[x,y]', '[3,2]'],
+    // A list of records opens each in turn.
+    ['[..] = [[x = 1], [y = 2, x = 3]]\n[x,y]', '[3,2]'],
+    ['std <- import "std"\n[..] = std.[option,number]\n[withDefault 0 None, sq 3]', '[0,9]'],
     ['[..] = []', '[]'],
     ['x = 1\n[{ [..] = [x = 2]; x }, x]', '[2,1]'],
     ['cell = Mutable 1\n[..] = [alias = cell]\nset alias 2\ncell', '2'],
@@ -28,8 +31,8 @@ Deno.test('[..] = exports retain their defining module scope', () => {
     const actual = result(i, 'module = { private = 40; [add = x -> private + x] }\n[..] = module\nadd 2');
     if (actual !== '42' || i.env.get('private') !== undefined) throw new Error(actual);
 });
-// [..] is no name: use is unbound, and [..] opens one record.
-for (const source of ['[..] = 1', '[..] = [[x = 2], 3]', '[..] = [[x = 1], [y = 2]]', '[..] = [x = 1, [..] = 2]', 'use [x = 1]']) {
+// [..] is no name: use is unbound, and [..] opens records alone.
+for (const source of ['[..] = 1', '[..] = [[x = 2], 3]', '[..] = [x = 1, [..] = 2]', 'use [x = 1]']) {
     Deno.test(`[..] = rejects input without partially installing bindings: ${source}`, () => {
         const i = new Interpreter();
         result(i, 'x = 1');

@@ -1,10 +1,5 @@
 std <- import "std"
-[..] = std.function
-[..] = std.option
-[..] = std.sequence
-[..] = std.text
-[..] = std.map
-[..] = std.search
+[..] = std.[function,option,sequence,text,map,search]
 [
     # AoC 2022 day 12: scalar cell indexes, a height map, and generic BFS.
     solveHill text = {

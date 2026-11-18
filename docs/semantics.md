@@ -1616,8 +1616,9 @@ nothing: a pattern does. `[..]` binds each of a record's fields under its own
 name, as Haskell's `{..}` does: `[..] = r` opens `r`, `[..] <- import "name"` a
 module, and `r.[..] = e` binds `r` and opens it, as any dotted pattern binds
 both its parts. Its names must be known where it stands (a record the check
-reads; `Dynamic` for one only the run knows), and it opens one record: `[]`,
-the empty record, opens nothing, and a list of records is an error.
+reads; `Dynamic` for one only the run knows). A list of records opens each in
+turn (`[..] = std.[option,text]`, as `std.[option,text]` is the list of those
+modules), and `[]` opens nothing.
 
 ```
 # shapes.apn
@@ -1631,7 +1632,7 @@ turn = 2 * pi                  # its own too, a helper the record reads
 
 ```
 std <- import "std"            # the standard library, a record of its modules
-[..] = std.function            # opens one module's names
+[..] = std.[function,option]   # opens both modules' names
 [..] <- import "std/text"      # imports and opens a module
 option <- import "std/option"  # one module: option.withDefault, option.Some
 text.[..] <- import "std/text" # both: text.words, and words

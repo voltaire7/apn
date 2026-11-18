@@ -46,7 +46,7 @@ Deno.test("system exposes halt as a deferred action", () => {
 for (const [source, opened] of [
     ['system <- import "std/system"\n[..] = system', true],
     ['std <- import "std"\n[..] = std.system', true],
-    ['std <- import "std"\n[..] = std.system\n[..] = std.option', true],
+    ['std <- import "std"\n[..] = std.[system,option]', true],
     ['system <- import "std/system"\n{ [..] = system; 1 }', false],
     ['system <- import "std/system"\nhaltAction = system.halt', false],
     ['system <- import "std/system"\nmodule _ = system\nm = module []', false],

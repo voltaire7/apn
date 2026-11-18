@@ -125,7 +125,7 @@ Deno.test("optional type diagnostics share the checker", () => {
     const result: any = server.handle({method: 'textDocument/didOpen', params: {textDocument: {uri: 'file:///types.apn', version: 1, text: source}}})[0];
     equal(result.params.diagnostics.filter((d: any) => d.code === 'type').length, 1);
 });
-Deno.test("completing a standard name adds its import, a line after the others", () => {
+Deno.test("completing a standard name adds its import, as a list beside another", () => {
     const complete = (text: string, name: string) => {
         const server = initialized();
         const uri = "file:///tmp/imports.apn";
@@ -136,11 +136,11 @@ Deno.test("completing a standard name adds its import, a line after the others",
     };
     equal(complete("x = 1", "sum"), ['From std.sequence', [[0, 0, 0, 'std <- import "std"\n[..] = std.sequence\n\n']]]);
     equal(complete("\nx = 1", "sum")?.[1], [[0, 0, 0, 'std <- import "std"\n[..] = std.sequence\n']]);
-    equal(complete('std <- import "std"\n[..] = std.io # files\nx = 1', "upper"), ['From std.text', [[2, 0, 0, '[..] = std.text\n']]]);
-    equal(complete('std <- import "std"\n[..] = std.io\n[..] = std.text', "sum"), ['From std.sequence', [[3, 0, 0, '[..] = std.sequence\n']]]);
+    equal(complete('std <- import "std"\n[..] = std.io # files\nx = 1', "upper"), ['From std.text', [[1, 11, 13, '[io,text]']]]);
+    equal(complete('std <- import "std"\n[..] = std.[io,text]', "sum"), ['From std.sequence', [[1, 11, 20, '[io,text,sequence]']]]);
     equal(complete('std <- import "std"\nx = 1', "sum")?.[1], [[1, 0, 0, '[..] = std.sequence\n']]);
     // Already imported, defined here, or in the prelude: nothing to add.
-    equal(complete('std <- import "std"\n[..] = std.io\n[..] = std.text', "readFile"), ['From std.io', undefined]);
+    equal(complete('std <- import "std"\n[..] = std.[io,text]', "readFile"), ['From std.io', undefined]);
     equal(complete("sum xs = 0", "sum")?.[1], undefined);
     equal(complete("x = 1", "print")?.[1], undefined);
     // Retired natives are not offered; a native needing an import names it.

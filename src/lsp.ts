@@ -81,25 +81,28 @@ const builtins = new Map<string, string>([
     ["withFile", "withFile path use — action scoping a UTF-8 file reader; the callback receives the action file.read (io)."],
 ]);
 
-// The standard modules a document opens: its [..] = std.x lines, as the
-// paths that import them (std/x).
-function importsOf(text: string): { line: number; modules: string[] }[] {
-    const found: { line: number; modules: string[] }[] = [];
+// The standard modules a document opens: its [..] = std.x and
+// [..] = std.[x,y] lines, as the paths that import them (std/x), with where
+// their names stand.
+function importsOf(text: string): { line: number; start: number; end: number; modules: string[] }[] {
+    const found: { line: number; start: number; end: number; modules: string[] }[] = [];
     text.split("\n").forEach((line, n) => {
-        const [, name] = line.match(/^\s*\[\.\.\] = std\.([a-z0-9_]+)\s*(#.*)?$/) ?? [];
-        if (name) found.push({ line: n, modules: [`std/${name}`] });
+        const [, before, target] = line.match(/^(\s*\[\.\.\] = std\.)(\[[a-z0-9_,]*\]|[a-z0-9_]+)\s*(#.*)?$/) ?? [];
+        if (!target) return;
+        const names = target.startsWith("[") ? target.slice(1, -1).split(",").filter(Boolean) : [target];
+        found.push({ line: n, start: before.length, end: before.length + target.length, modules: names.map(name => `std/${name}`) });
     });
     return found;
 }
-// The edit opening module (std/name): its line follows the last one opening a
-// standard module, else the line binding std; else both lines start the
-// document, a blank line apart from what follows.
+// The edit opening module (std/name): its name joins the first [..] = std.
+// line ([..] = std.[x,name]); else [..] = std.name follows the line binding
+// std; else both lines start the document, a blank line apart from what follows.
 function importEdit(text: string, module: string): { range: Range; newText: string } {
-    const name = module.slice("std/".length), last = importsOf(text).at(-1);
-    const at = (line: number) => ({ start: { line, character: 0 }, end: { line, character: 0 } });
+    const name = module.slice("std/".length), first = importsOf(text)[0];
+    const at = (line: number, start = 0, end = start) => ({ start: { line, character: start }, end: { line, character: end } });
+    if (first) return { range: at(first.line, first.start, first.end), newText: `[${[...first.modules.map(m => m.slice("std/".length)), name].join(",")}]` };
     const std = text.split("\n").findIndex(line => /^std <- import "std"\s*(#.*)?$/.test(line));
-    const after = last ? last.line : std;
-    if (after >= 0) return { range: at(after + 1), newText: `[..] = std.${name}\n` };
+    if (std >= 0) return { range: at(std + 1), newText: `[..] = std.${name}\n` };
     return { range: at(0), newText: `std <- import "std"\n[..] = std.${name}\n${/^\s*(\n|$)/.test(text) ? "" : "\n"}` };
 }
 type CompletionItem = { label: string; detail: string; kind: number; documentation?: string; additionalTextEdits?: { range: Range; newText: string }[] };

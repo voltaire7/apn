@@ -501,7 +501,7 @@ existing behavior; repeated patterns do not prove function equivalence.
 
 Static checking follows literal `import` and `load` dependencies and infers their
 values, each file checked in a scope of its own. Nothing opens a record but
-the `[..]` pattern, which opens a statically known record. A file
+the `[..]` pattern, which opens statically known records or lists of records. A file
 loading itself is typed as recursion is, its own load giving the value the file
 turns out to have; computed loads need an explicit `Dynamic` boundary. The checker never runs a file or performs an action to discover types.
 

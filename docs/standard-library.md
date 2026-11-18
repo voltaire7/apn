@@ -2,10 +2,7 @@
 
 ```apn
 std <- import "std"
-[..] = std.sequence
-[..] = std.number
-[..] = std.text
-[..] = std.map
+[..] = std.[sequence,number,text,map]
 take 10 primes
 mean [1,2]                         # Some 3/2
 frequencies $ words $ "one two one" # ([["one", 2], ["two", 1]] : HashMap _ _)
@@ -26,7 +23,8 @@ and Monad functions (`map`, `<$>`, `return`, `<*>`, `>>=`, `>>`, `=<<`,
 
 The standard library is the folder `lib/std/`, imported as `std`: a record of
 its modules, all run when it is imported (each module is checked where a
-program uses it). `[..] = std.name` opens one module's names; `[a,b] = std`
+program uses it). `[..] = std.name` opens one module's names and
+`[..] = std.[a,b]` several (`std.[a,b]` is the list of those modules); `[a,b] = std`
 binds modules without opening them, `name <- import "std/name"` binds one
 without importing `std`, and `[..] <- import "std/name"` opens one. Imports, their lookup and what a module's record holds
 are described in
@@ -45,8 +43,8 @@ library, the local modules the program imports and the files it loads (every
 same imports and loads work in the browser.
 
 `[..] = record` brings its fields into the current scope without forcing their
-values (see [module imports](semantics.md#module-imports)); a later opening's
-fields replace earlier bindings. Fields must be valid binding identifiers (not
+values (see [module imports](semantics.md#module-imports)), and `[..] = [a, b]`
+each record of a finite list in order; later fields replace earlier bindings. Fields must be valid binding identifiers (not
 backticked keys that are not names, or keywords). Invalid input is rejected
 before any fields are installed. Bindings inside a block stay local.
 
@@ -54,8 +52,7 @@ before any fields are installed. Bindings inside a block stay local.
 [..] <- import "std/combinator"
 identity 123
 
-[..] = [first = 10]
-[..] = [second = 20]
+[..] = [[first = 10], [second = 20]]
 first + second                         # 30
 ```
 
@@ -403,8 +400,7 @@ error when the request is made.
 
 ```apn
 std <- import "std"
-[..] = std.http
-[..] = std.json
+[..] = std.[http,json]
 response <- fetch "https://www.youtube-transcript.io/api/channels" [
     method = "POST"
     headers = [

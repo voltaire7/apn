@@ -1,9 +1,7 @@
 # Noise, from https://p5js.org/examples/repetition-noise/
 # Generate naturalistic textures using Perlin noise.
 std <- import "std"
-[..] = std.html
-[..] = std.text
-[..] = std.p5
+[..] = std.[html,text,p5]
 [browser] = std
 
 # The dots' spacing and the noise's offset, from the sliders.

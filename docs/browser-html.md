@@ -71,8 +71,7 @@ the program listens to:
 
 ```apn
 std <- import "std"
-[..] = std.html
-[..] = std.time
+[..] = std.[html,time]
 [browser,task] = std
 
 Msg = Tick Posix | AdjustTimeZone Zone

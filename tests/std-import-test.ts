@@ -6,7 +6,7 @@ function result(i: Interpreter, source: string): string {
 // import "path" is an action yielding the module's record: std is the library's
 // folder, whose fields are its modules, and use opens records.
 for (const [source, expected] of [
-    ['std <- import "std"\n[..] = std.function\n[..] = std.sequence\nid (sum [1,2,3])', '6'],
+    ['std <- import "std"\n[..] = std.[function,sequence]\nid (sum [1,2,3])', '6'],
     ['std <- import "std"; [..] = std.function\nid 7', '7'],
     ['sequence <- import "std/sequence"\nsequence.sum [1,2]', '3'],
     ['std <- import "std"\n[id] = std.function\nid 5', '5'],

@@ -115,7 +115,7 @@ for (const [name, source, expected] of [
     ["partly applied functions show their arguments", "addOp = (+)\nprint (addOp 1)\nprint (+ 1)\nf a b = a + b\nprint (f 1)\ng = x, y, z -> x * y * z\nprint (g 2 3)",
         ["(1 +)", "(+ 1)", "b -> 1 + b", "z -> 2 * 3 * z"]],
     // As in Haskell, a discarded statement in a monad is chained: Err or None stops the block.
-    ["a discarded Err or None stops a block", 'std <- import "std"\n[..] = std.option\n[..] = std.number\nf n = {\n    Err "x"\n    return n\n}\nprint [f 1]\ng n = {\n    n > 0 ? Ok [] : Err "not positive"\n    return (n * 2)\n}\nprint [g 1, g 0]\nh n = {\n    _ <- safeDiv 1 n\n    None\n    return n\n}\nprint (h 1)',
+    ["a discarded Err or None stops a block", 'std <- import "std"\n[..] = std.[option,number]\nf n = {\n    Err "x"\n    return n\n}\nprint [f 1]\ng n = {\n    n > 0 ? Ok [] : Err "not positive"\n    return (n * 2)\n}\nprint [g 1, g 0]\nh n = {\n    _ <- safeDiv 1 n\n    None\n    return n\n}\nprint (h 1)',
         ['[Err "x"]', '[Ok 2, Err "not positive"]', "None"]],
     // assert c x is x, as Haskell's: a value, or an action in any monad.
     // do is Haskell's (do [e] = e; do (e :: es) = e >> do es); [] and bindings drop.
@@ -123,7 +123,7 @@ for (const [name, source, expected] of [
         ["2", "6", "a", "b"]],
     ["assert c x is x once c holds", "double n = assert (n > 0) (n * 2)\nprint (double 3)\nxs = {\n    x <- [1,2]\n    assert (x > 0) (return x)\n}\nprint xs\nassert True (print \"ran\")",
         ["6", "[1,2]", "ran"]],
-    ["guard stops a list, Option or Result block; empty is decided by its context", 'std <- import "std"\n[..] = std.option\n[..] = std.number\nevens = {\n    x <- [1..6]\n    guard (x % 2 == 0)\n    return x\n}\nprint evens\npositive n = {\n    _ <- Some n\n    guard (n > 0)\n    return n\n}\nprint [positive 3, positive -1]\nprint (empty : Option Int)\nprint (empty : List Int)\nprint empty\ncheck n = {\n    _ <- Ok n\n    guard (n > 0)\n    return n\n}\nprint [check 1, check 0]\nhalf n = {\n    guard (n % 2 == 0)\n    return (n / 2)\n} : Result Int String\nprint [half 4, half 3, ({ guard False; return 1 } : Option Int)]',
+    ["guard stops a list, Option or Result block; empty is decided by its context", 'std <- import "std"\n[..] = std.[option,number]\nevens = {\n    x <- [1..6]\n    guard (x % 2 == 0)\n    return x\n}\nprint evens\npositive n = {\n    _ <- Some n\n    guard (n > 0)\n    return n\n}\nprint [positive 3, positive -1]\nprint (empty : Option Int)\nprint (empty : List Int)\nprint empty\ncheck n = {\n    _ <- Ok n\n    guard (n > 0)\n    return n\n}\nprint [check 1, check 0]\nhalf n = {\n    guard (n % 2 == 0)\n    return (n / 2)\n} : Result Int String\nprint [half 4, half 3, ({ guard False; return 1 } : Option Int)]',
         ["[2,4,6]", "[Some 3, None]", "None", "[]", '[]\nNone\nErr "empty"', '[Ok 1, Err "guard failed: n > 0"]', '[Ok 2, Err "guard failed: n % 2 == 0", None]']],
     ["when and unless work in any monad", 'std <- import "std"; [..] = std.option\nprint (unless False (Err "no"))\nprint (when False (Some 1) : Option _)\nwhen True (print "ran")',
         ['Err "no"', "Some []", "ran"]],
@@ -209,7 +209,7 @@ Deno.test("monads: an undecided >> chain prints as written", () => {
     }
 });
 Deno.test("monads: the checker decides an undecided block's monad", () => {
-    const source = 'std <- import "std"\n[..] = std.option\n[..] = std.number\ncheck n = {\n    unless (n > 0) (Err "not positive")\n    return (n * 2)\n}\nprint [check 2, check 0]';
+    const source = 'std <- import "std"\n[..] = std.[option,number]\ncheck n = {\n    unless (n > 0) (Err "not positive")\n    return (n * 2)\n}\nprint [check 2, check 0]';
     for (const checked of [true, false]) {
         const actual = run(source, checked);
         if (JSON.stringify(actual) !== JSON.stringify(['[Ok 4, Err "not positive"]'])) throw new Error(`checked=${checked}: ${JSON.stringify(actual)}`);
@@ -246,7 +246,7 @@ for (const [name, source, expected] of [
 
 // A choice of values of one monad holds either value (f is one, a a union);
 // >>= keeps its monad: f a -> (a -> f b) -> f b, for every choice k gives.
-const unknownTime = 'std <- import "std"\n[..] = std.option\n[..] = std.time\nt <- currentTime\n';
+const unknownTime = 'std <- import "std"\n[..] = std.[option,time]\nt <- currentTime\n';
 Deno.test("monads: a choice of one monad's values binds as that monad", () => {
     const output = run(unknownTime + [
         'm = t > 0 ? Some 1 : Some "a"', 'print (m >>= y -> Some (to String y ++ "!"))',

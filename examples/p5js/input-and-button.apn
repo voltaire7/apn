@@ -1,8 +1,7 @@
 # Input and Button, from https://p5js.org/examples/input-elements-input-button/
 # Use text input from the page visitor.
 std <- import "std"
-[..] = std.html
-[..] = std.p5
+[..] = std.[html,p5]
 [browser] = std
 
 # The name being typed, and the one submitted last.

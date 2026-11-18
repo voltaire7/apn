@@ -25,9 +25,9 @@ function rejected(i: Interpreter, source: string): void {
 for (const [source, expected] of [
     ['std <- import "std"; [..] = std.sequence; sum [1,2,3]', '6'],
     ['seqs <- import "std/sequence"; seqs.sum (to Int * [1,2,3])', '6'],
-    ['std <- import "std"\n[..] = std.function\n[..] = std.number; id (sq 3)', '9'],
+    ['std <- import "std"\n[..] = std.[function,number]; id (sq 3)', '9'],
     ['ns = [double = x -> x * 2]; [..] = ns; double 3', '6'],
-    ['[..] = [one = 1]\n[..] = [two = 2]\none + two', '3'],
+    ['[..] = [[one = 1], [two = 2]]; one + two', '3'],
     ['x = Mutable 1; set x 2; x + 1', '3'],
     ['Direction = North | South; [10,20] South', '20'],
     ['templates = [String,Int]; values = ["x", 1]; (values : templates)', '["x", 1]'],
@@ -801,7 +801,7 @@ for (const source of [
 // The builtin length of a list or String is known when its size is: from a
 // literal, a parameter at its calls, cons, append, shaped builtins (map, sort)
 // and recursion over list patterns.
-const sizeClauses = 'std <- import "std"\n[..] = std.option\n[..] = std.sequence\n[..] = std.number\ng [a] = a; sm n = n < 2 ? None : Some n\n'
+const sizeClauses = 'std <- import "std"\n[..] = std.[option,sequence,number]\ng [a] = a; sm n = n < 2 ? None : Some n\n'
     + 'q xs = length xs < 2 ? None : Some 1; len [] = 0; len (x::xs) = 1 + len xs';
 for (const [source, expected] of [
     ['g (f (sm (length [1])))', '0'],
@@ -1232,7 +1232,7 @@ Deno.test("checking without a run does not read input", () => {
 Deno.test("the run reads the file contents the checker saw", () => {
     const i = session();
     const text = Deno.readTextFileSync(fish);
-    if (run(i, `std <- import "std"\n[..] = std.io\n[..] = std.text\ncontents <- readFile "${fish}"\nwords contents`) !== `["${text.trim()}"]`) throw new Error("run");
+    if (run(i, `std <- import "std"\n[..] = std.[io,text]\ncontents <- readFile "${fish}"\nwords contents`) !== `["${text.trim()}"]`) throw new Error("run");
     // One snapshot per run: the checker's read is the one the run used.
     if (i.inputFile(fish) !== text) throw new Error("snapshot");
 });

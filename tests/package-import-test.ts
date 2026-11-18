@@ -15,7 +15,7 @@ function result(i: Interpreter, source: string): string {
 for (const checked of [false, true]) {
     Deno.test(`import finds files and folders next to the code (checked=${checked})`, () => {
         const i = interpreter(checked);
-        const source = 'hello <- import "hello"\nshapes <- import "shapes"\n[..] = hello\n[..] = shapes.square\n[..] = shapes.cube\n[..] = shapes.solid.box\n'
+        const source = 'hello <- import "hello"\nshapes <- import "shapes"\n[..] = hello\n[..] = shapes.[square,cube]\n[..] = shapes.solid.box\n'
             + '[greet "you", square 3, cube 2, volume 2]';
         const actual = result(i, source);
         if (actual !== '["hi you", 9, 8, 8]') throw new Error(actual);

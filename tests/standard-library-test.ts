@@ -4,7 +4,7 @@ import { isForTypes } from "../src/ast.ts";
 import { QUALIFIED_MODULES } from "../src/modules.ts";
 
 const decoded = (type: string, json: string) =>
-    `std <- import "std"\n[..] = std.option\n[..] = std.decode\njson = from JSON ${JSON.stringify(json)}\ndecodeValue ${type} json`;
+    `std <- import "std"\n[..] = std.[option,decode]\njson = from JSON ${JSON.stringify(json)}\ndecodeValue ${type} json`;
 const cases: [string, string][] = [
     // A type decodes each field by name, as it says, wherever a decoder goes.
     [decoded("(list [n : Int])", '[{"n": 1}, {"n": 2}]'), "Ok [[n = 1], [n = 2]]"],
@@ -106,7 +106,7 @@ const cases: [string, string][] = [
 ];
 for (const [source, expected] of cases) Deno.test(`std: ${source}`, () => {
     const i = new Interpreter();
-    i.run(parse('std <- import "std"\n[..] = std.function\n[..] = std.option\n[..] = std.sequence\n[..] = std.number\n[..] = std.text\n[..] = std.map'));
+    i.run(parse('std <- import "std"\n[..] = std.[function,option,sequence,number,text,map]'));
     const actual = i.renderString(i.run(parse(source)));
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);
 });
@@ -119,7 +119,7 @@ for (const [source, message] of [
     ['import 123', 'string'],
 ]) Deno.test(`std rejects: ${source}`, () => {
     const i = new Interpreter();
-    i.run(parse('std <- import "std"\n[..] = std.sequence\n[..] = std.number\n[..] = std.text'));
+    i.run(parse('std <- import "std"\n[..] = std.[sequence,number,text]'));
     try { i.renderString(i.run(parse(source))); }
     catch (error) {
         if (error instanceof Error && error.message.includes(message)) return;
@@ -136,7 +136,7 @@ for (const [source, message] of [
     ['f n = { Some x = safeDiv 6 n; x }; f 0', 'binding pattern did not match'],
 ]) Deno.test(`std fails: ${source}`, () => {
     const i = new Interpreter();
-    i.run(parse('std <- import "std"\n[..] = std.option\n[..] = std.number'));
+    i.run(parse('std <- import "std"\n[..] = std.[option,number]'));
     try { i.renderString(i.run(parse(source))); }
     catch (error) {
         if (error instanceof Error && error.message.includes(message)) return;
@@ -235,7 +235,7 @@ Deno.test("no two standard modules define the same name", () => {
     }
 });
 Deno.test("html and text import together, in either order", () => {
-    for (const source of ['std <- import "std"\n[..] = std.html\n[..] = std.text', 'std <- import "std"\n[..] = std.text\n[..] = std.html']) {
+    for (const source of ['std <- import "std"\n[..] = std.[html,text]', 'std <- import "std"\n[..] = std.[text,html]']) {
         const i = new Interpreter();
         i.enableChecking();
         i.run(parse(source));

@@ -1,9 +1,7 @@
 # Quotes, from https://elm-lang.org/examples/quotes
 # Press a button to send a GET request for random quotes.
 std <- import "std"
-[..] = std.html
-[..] = std.option
-[..] = std.decode
+[..] = std.[html,option,decode]
 [browser,http] = std
 
 Quote = [quote : String, source : String, author : String, year : Int]

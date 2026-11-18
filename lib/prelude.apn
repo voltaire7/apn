@@ -94,7 +94,7 @@ toAST code = intrinsics.syntax code
 
 # import path: an action reading the module path names (std, std/text, or a
 # file or folder beside the program), its record the result. Each module runs
-# once: std <- import "std", then [..] = std.option opens one of them.
+# once: std <- import "std", then [..] = std.[option,text] opens two of them.
 import = intrinsics.import
 # parse source: the code source writes, its statements as items (in the scope
 # parse runs in): code.x reads a binding, [..] = code opens them, do code runs it.

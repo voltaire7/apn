@@ -1,8 +1,7 @@
 # Video Player, from https://p5js.org/examples/imported-media-video/
 # Create a player for a video file.
 std <- import "std"
-[..] = std.html
-[..] = std.p5
+[..] = std.[html,p5]
 [browser] = std
 
 # The video, from its sources: the first one the browser plays.

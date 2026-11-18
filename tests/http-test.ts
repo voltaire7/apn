@@ -45,7 +45,7 @@ for (const [source, expected] of [
 for (const [source, message] of [
     ['std <- import "std"; [..] = std.json; to JSON (1 / 3)', 'has no JSON number'],
     ['std <- import "std"; [..] = std.json; to JSON (x -> x)', 'cannot encode'],
-    ['std <- import "std"\n[..] = std.json\n[..] = std.option; to JSON (Some 1)', 'cannot encode the variant Some'],
+    ['std <- import "std"\n[..] = std.[json,option]; to JSON (Some 1)', 'cannot encode the variant Some'],
     ['std <- import "std"; [..] = std.json; from JSON "[1,"', 'unexpected end of input'],
     ['std <- import "std"; [..] = std.json; from JSON "{\\"a\\" 1}"', 'expected ":"'],
     ['std <- import "std"; [..] = std.json; from JSON "[1] x"', "unexpected \"x\""],
@@ -54,7 +54,7 @@ for (const [source, message] of [
 // fetch on data: URLs needs no network.
 Deno.test("fetch returns a response record", () => {
     const i = session();
-    run('std <- import "std"\n[..] = std.http\n[..] = std.json\nresponse <- fetch "data:application/json,{\\"a\\":[1,2]}" []; []', i);
+    run('std <- import "std"\n[..] = std.[http,json]\nresponse <- fetch "data:application/json,{\\"a\\":[1,2]}" []; []', i);
     if (run("[response.status,response.ok,response.body]", i) !== '[200, True, "{\\"a\\":[1,2]}"]') throw new Error(run("response", i));
     if (run('response.headers "content-type"', i) !== '"application/json"') throw new Error("headers");
     if (run('from JSON response.body "a"', i) !== "[1,2]") throw new Error("json body");
@@ -90,7 +90,7 @@ Deno.test({ name: "fetch sends method, headers and body to a server", ignore: !n
     try {
         const base = `http://localhost:${port}`;
         const i = session();
-        run(`std <- import "std"\n[..] = std.http\n[..] = std.json
+        run(`std <- import "std"\n[..] = std.[http,json]
 response <- fetch "${base}/api/channels" [
     method = "POST"
     headers = [

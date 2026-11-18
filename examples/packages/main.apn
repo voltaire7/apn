@@ -2,13 +2,13 @@
 # import "name" reads name.apn, else a name/ folder, next to this file (then in
 # parent folders up to the program's): an action yielding its record. A
 # folder's record holds its entries, all imported with it. [..] = r binds each
-# of r's fields under its own name, and [..] <- import "name" opens a module.
+# of r's fields under its own name ([..] = [r, s] each record's), and
+# [..] <- import "name" opens a module.
 [..] <- import "greetings"
 [..] <- import "units"
 [..] <- import "report"
 shapes <- import "shapes"
-[..] = shapes.square
-[..] = shapes.rectangle
+[..] = shapes.[square,rectangle]
 
 print (greet "packages")                         # Hello, packages!
 print [squareArea 3, rectangleArea 2 5]          # [9,10]

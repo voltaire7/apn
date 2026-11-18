@@ -82,9 +82,7 @@ print (to (List Char) "hi")              # => ['h','i']
 # each time, as a call, and a file ending in a function is a module that takes
 # parameters.
 std <- import "std"
-[..] = std.option
-[..] = std.number
-[..] = std.syntax
+[..] = std.[option,number,syntax]
 [parser] = std
 print (sq 12)                            # => 144
 print (parser.parse parser.number "12")  # => Ok 12

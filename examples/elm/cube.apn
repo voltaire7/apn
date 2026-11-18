@@ -2,8 +2,7 @@
 # Render a spinning cube. Elm draws it with WebGL shaders; here a p5 WEBGL
 # canvas in the view draws its triangles, rotated by the model's angle.
 std <- import "std"
-[..] = std.html
-[..] = std.sequence
+[..] = std.[html,sequence]
 [browser,p5] = std
 
 Msg = | TimeDelta Number

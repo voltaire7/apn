@@ -2,8 +2,7 @@
 # https://p5js.org/examples/advanced-canvas-rendering-multiple-canvases/
 # Draw on two canvases, each a sketch of its own.
 std <- import "std"
-[..] = std.html
-[..] = std.p5
+[..] = std.[html,p5]
 
 # Circles on black.
 circles = [

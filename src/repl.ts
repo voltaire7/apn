@@ -339,7 +339,7 @@ function helpText(): string {
         `  recursion, higher-order fns, records, variants`,
         `  [..] <- import "std/number"   import a library module and open its names`,
         `  text <- import "std/text"; text.words "a b"   one module (a file or a folder), not opened`,
-        `  [..] = record   opens its fields in this scope (r.[..] = e binds r too)`,
+        `  [..] = record   opens its fields in this scope (or each record of a list, in turn)`,
         `  text <- readFile "input.input"; input <- readInput; args <- getArgs (script I/O)`,
         `  Bool True; String "hi"; Char 'a'; List [1,2]; Record [x = 1]`,
         `  (x -> x : Function); (Int : Type); (YourConstructor value : Variant)`,

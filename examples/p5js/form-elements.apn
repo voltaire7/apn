@@ -1,8 +1,7 @@
 # Form Elements, from https://p5js.org/examples/input-elements-dom-form-elements/
 # Create a form and respond to the results.
 std <- import "std"
-[..] = std.html
-[..] = std.p5
+[..] = std.[html,p5]
 [browser] = std
 
 # The name typed, the food chosen (its color) and the form's font.

@@ -4549,15 +4549,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                             scope.set(name, entry);
                         }
                         else if (t.k === "record") for (const [name, type] of t.fields) scope.set(name, { ...fieldEntry(t, name, type), opened: a });
-                        else if (t.k === "list" && t.items && !t.open && t.items.some(item => resolve(item).k === "record")) {
-                            problem("[..] opens one record, not a list", a, "open each in turn: [..] = a; [..] = b");
-                        }
                         else if (t.k === "list" && t.items) t.items.forEach(open);
                         else if (isExplicit(t)) { runtimeChecks++; opaqueUse = true; }
                         // A record not known here (an import the check cannot read) was
                         // counted unknown where it was made: it opens unknown names.
                         else if (t.k === "dynamic") opaqueUse = true;
-                        else problem("[..] needs a statically known record; use Dynamic for runtime exports", a);
+                        else problem("[..] needs a statically known record or list of records; use Dynamic for runtime exports", a);
                     };
                     open(infer(a, scope));
                     return list(variable(), constant(0n));

@@ -1,6 +1,5 @@
 std <- import "std"
-[..] = std.meta
-[..] = std.io
+[..] = std.[meta,io]
 
 # The evaluator's own source, read as plain text. Pass its path as the first
 # argument, or run from the repository root to use the default.

@@ -5002,15 +5002,13 @@ export class Interpreter {
             // Code is spliced where use stands: an action running its statements.
             // (into the scope use stands in, wherever its action runs).
             if (this.isList(value) && this.codeItems(value)) { const here = this.env; return { kind: "io", result: "[]", run: () => this.spliceCode(value, here) }; }
-            // ([] is the empty record too: it opens nothing.)
-            if (this.isList(value) && this.cell(value) === null) return { kind: "list", v: [] };
-            if (this.isList(value)) throw new APNError("runtime", "[..] opens one record, not a list", { hint: "open each in turn: [..] = a; [..] = b" });
-            const given = [value];
+            // A list of records opens each in turn ([] opens nothing).
+            const given = this.isList(value) ? this.items(value).map(v => this.dataValue(v)) : [value];
             const opened: Array<{ bindings: Array<[string, Value]>; module?: { origin?: string; checked?: boolean } }> = [];
             for (const written of given) {
                 const record = written;
                 if (this.isList(record) && this.codeItems(record)) throw new APNError("runtime", "[..] opens one code, not a list", { hint: "open each in turn: [..] = a; [..] = b" });
-                if (record.kind !== "record") throw new APNError("runtime", "[..] opens a record or code");
+                if (record.kind !== "record") throw new APNError("runtime", "[..] opens a record, code, or a list of records");
                 const bindings: Array<[string, Value]> = [];
                 for (const [key, field] of record.v) {
                     // A field is a name or an operator (a module's <|>).
