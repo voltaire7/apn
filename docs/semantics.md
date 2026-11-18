@@ -1553,7 +1553,10 @@ value of a type or literal its pattern names. So `(x : Int)` takes `5` before
 `(x : Int8)` would convert it, while `(x : Int8)` still takes it before `_`
 (a pattern naming no type takes nothing as such), and a conversion through a
 to instance comes after both. Patterns neither of which contains the other
-(`[x, 0]` and `[0, y]`) keep the order they were written in. So no
+(`[x, 0]` and `[0, y]`) keep the order they were written in. Ranking reads no
+argument a program's constructor pattern would (it converts nothing: a value it
+does not take fails it when tried), so after `pick (Box a) b = a` and
+`pick a (Box b) = b`, `pick (Box 1) boom` is 1 without evaluating `boom`. So no
 clause hides another by coming first, and clauses added elsewhere (a module's
 instance, a REPL session's) take their place by what they match. Converting
 either a typed or an untyped input must be lossless; explicit floating-point

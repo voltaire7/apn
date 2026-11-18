@@ -33,6 +33,12 @@ for (const [name, source, expected] of [
     ["clauses on a type keep + deep", "Box a = | Box a\nBox a + b = Box a\na + Box b = Box b\n" +
         "count n = n == 0 ? 0 : 1 + count (n - 1)\nprint (count 500)", ["500"]],
     ["clauses on a type keep + lazy", "Box a = | Box a\nBox a + b = a\nboom = fail \"forced\"\nprint (Box 1 + boom)", ["1"]],
+    // Ranking reads no argument a program's constructor pattern would: clauses
+    // neither of which contains the other are tried as written, each forcing
+    // only what it matches.
+    ["incomparable clauses force only what they match", "Box a = | Box a\nBox a + b = a\na + Box b = b\n" +
+        "boom = fail \"forced\"\nprint (Box 1 + boom)\npick (Box a) b = a\npick a (Box b) = b\nprint (pick (Box 2) boom)", ["1", "2"]],
+    ["written order decides", "Box a = | Box a\na + Box b = b\nBox a + b = a\nboom = fail \"forced\"\nprint (boom + Box 3)", ["3"]],
     // Each use of an intrinsic has its own type variables.
     ["intrinsics are polymorphic at each use", "x <- intrinsics.return 1\ny <- intrinsics.return \"s\"\nprint [x + 1]\nprint (y ++ \"!\")\nprint (intrinsics.source 1 ++ intrinsics.source \"a\")",
         ["[2]", "s!", "1\"a\""]],

@@ -3803,8 +3803,14 @@ export class Interpreter {
         if (given && (given.kind === "type" || given.kind === "functionType" || this.isList(given) && this.isTypeValue(given))) {
             return this.sameType(closed!, given) || this.within(given, closed!) ? 1 : -1000;
         }
-        // Only a constructor pattern looks at its argument.
+        // Only a constructor pattern looks at its argument. One a program
+        // declared converts nothing: a value it does not take fails it when
+        // tried, so it counts as taking its argument as it is, which is not
+        // read (Box a + b takes Box 1 + boom without forcing boom).
         if (pattern.p !== "constr") return 0;
+        const declared = !pattern.typed && !this.builtinType(pattern.tag) ? this.env.get(pattern.tag) : undefined;
+        const made = declared && this.reference(declared);
+        if (made && made.kind === "native" && made.name === "__constr" && made.tag === pattern.tag) return 1;
         const named = this.reference(arg);
         if (named.kind === "variant" && named.family?.base) {
             if (pattern.tag === named.family.name) return 1;
