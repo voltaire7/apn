@@ -462,6 +462,9 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   replaces the exact value it published. Tests: `tests/dynamic-boundary-test.ts`.
 - The parser writes `[..] = e` as the internal name `[..]` (`OPEN`, which no
   program can write) applied to `e`, and `r.[..] = e` as `r = e` then that.
+  `r ++ [...]` (the prelude's `++`, a record literal on the right) runs and
+  checks as that record with `[..] = r` first, `r` held under `JOINED` so it is
+  evaluated and inferred once.
   It validates every key as a binding identifier before publishing and opens
   the active evaluation scope, so wrapper functions don't export into their
   caller. Tests: `tests/use-test.ts`, `tests/std-import-test.ts`, `tests/load-test.ts`.

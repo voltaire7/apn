@@ -12,6 +12,14 @@ for (const checked of [false, true]) {
             ["base = [x = 1]; r = [[..] = base]; r.x = 2; [base.x,r.x]", "[1,2]"],
             // _ = e binds nothing, in a record as in a block.
             ["base = [x = 1]; [_ = base, y = 2]", "[y = 2]"],
+            // A record ++ a record: one record, the written one's items seeing
+            // the first's names; nothing of the first runs again.
+            ["[a = 1] ++ [x = 1]", "[a = 1, x = 1]"],
+            ["r = [a = 1]; r ++ [x = a + 1]", "[a = 1, x = 2]"],
+            ["make n = [a = n]; make 5 ++ [x = 1]", "[a = 5, x = 1]"],
+            ["r = [a = 1]; s = [b = 2, a = 3]; r ++ s", "[a = 3, b = 2]"],
+            ["c = [x = 1] ++ [x + 1]; [c, do c]", "[[2], 2]"],
+            ["s.[..] = [Box = | Box Int, unbox (Box n) = n]; m = s ++ [wrap n = Box n]; unbox (m.wrap 4)", "4"],
             [
                 "unused = missing : Dynamic; base = [x = unused]; r = [[..] = base, y = 2]; r.y",
                 "2",

@@ -32,8 +32,8 @@ updateKeyboard isDown key keyboard = {
         _ -> keyboard
     ]
 }
-# What the module's names share with its helpers: opened here, and passed on
-# by the record's [..] = shared.
+# What the module's names share with its helpers: opened here, and joined to
+# the record it gives (shared ++ [...]).
 shared.[..] = [
     # A shape is what it is, placed: where it is, its angle, size and opacity
     # (Placed, whose shape is never itself Placed). A color is its red, green and
@@ -169,8 +169,7 @@ advance updateMemory msg game = {
         }
     ]
 }
-[
-    [..] = shared
+shared ++ [
     circle color radius = Circle color radius
     oval color width height = Oval color width height
     square color n = Rectangle color n n

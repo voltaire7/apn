@@ -58,6 +58,7 @@ expansions in every way, and `tests/sugar-test.ts` holds each beside it.
 | `v.[x : T, y] = [a, b]` | `v = [[..] = v, x : T = a].[y] = [b]` | [records](semantics.md#records) |
 | `[x = 1, x = x + 1]` | `[x = 2]` | [records](semantics.md#records) |
 | `[_ = e, b = 2]` | `[b = 2]` (`_ = e` binds nothing, as in a block) | [records](semantics.md#records) |
+| `r ++ [x = a + 1]` | `[[..] = r, x = a + 1]` | [records](semantics.md#records) |
 | `[x] = r`, a pattern | `[x = x] = r` | [records](semantics.md#records) |
 | `v.[x,_] = [a,b]` | `v.[x] = [a]` (`_` takes `b` and discards it) | [records](semantics.md#records) |
 

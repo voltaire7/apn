@@ -21,7 +21,7 @@ import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { type Alternative, type Binding, clausePlaces, listRole, readPatterns, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, declaresNames, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
 import { type Value, Env, IOTail } from "./types.ts";
-import { enumerationPositions, isUse, OPEN } from "./ast.ts";
+import { enumerationPositions, isUse, OPEN, opening } from "./ast.ts";
 import { canonicalTypeText, ioTypeText, compoundArgument, slotField, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
 import { KEYWORDS } from "./lexer.ts";
@@ -58,6 +58,8 @@ const rankedAlternatives = new WeakMap<object, PatternLambda[] | null>();
 class TailCall {
     constructor(readonly body: Expr, readonly env: Env) {}
 }
+// The record r ++ [...] joins, as the written record's items see it.
+const JOINED = "[..]joined";
 // A tail use of code (see spliceCode): the code, and the scope it runs over.
 class TailLoad {
     constructor(readonly code: Value, readonly env: Env) {}
@@ -1981,6 +1983,21 @@ export class Interpreter {
         return this.apply(this.apply(f, l), r);
     }
 
+    // A record ++ a record: one record, the left's fields, then the right's (a
+    // later one wins).
+    private mergeRecords(record: Extract<Value, { kind: "record" }>, other: Value): Value | undefined {
+        return other.kind === "record" ? { kind: "record", v: [...new Map([...record.v, ...other.v])] } : undefined;
+    }
+    // A record ++ a record written there: the record [[..] = r, ...] with the
+    // written one's items, which see r's names (code joins code).
+    private joinRecord(left: Value, rThunk: Value): Value | undefined {
+        if (rThunk.kind !== "thunk" || !rThunk.env || rThunk.body.t !== "record" || !rThunk.body.items) return undefined;
+        const r = rThunk.body, held: Expr = { t: "var", name: JOINED };
+        const env = new Env(rThunk.env);
+        env.setLocal(JOINED, left);
+        return { kind: "thunk", body: { ...r, v: [["_", held], ...r.v], items: [opening(held), ...r.items!] }, env };
+    }
+
     // The builtin meaning of an operator, over lazy operands.
     operate(op: string, lThunk: Value, rThunk: Value): Value {
         if (op === "$") return this.apply(this.demand(lThunk), rThunk);
@@ -1999,7 +2016,10 @@ export class Interpreter {
             };
         }
         if (op === "++") {
-            const l = this.code(this.dataValue(lThunk));
+            const record = this.dataValue(lThunk);
+            const joined = record.kind === "record" ? this.joinRecord(record, rThunk) ?? this.mergeRecords(record, this.dataValue(rThunk)) : undefined;
+            if (joined) return joined;
+            const l = this.code(record);
             const r = rThunk;
             if (this.isList(l)) return this.appendCode(l, r);
             const right = this.dataValue(r);

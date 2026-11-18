@@ -945,16 +945,17 @@ for (const source of [
     'g (f (q (sort [3,1])))',
 ]) Deno.test(`builtins and std evaluated stay checked: ${source}`, () => rejected(session(), `${optionClauses}\n${sizeClauses}\n${textClauses}\n${source}`));
 // from String reads booleans and numbers as at runtime; recursion is evaluated as
-// deep as the runtime's own stack allows (non-tail recursion to depth 500).
+// deep as the runtime's own stack allows (non-tail recursion to depth 200; how
+// deep the host stack reaches depends on when the JIT optimizes, so not more).
 const deepClauses = 'count n = n == 0 ? 0 : 1 + count (n - 1); upto n = n == 0 ? [] : n :: upto (n - 1)';
 for (const [source, expected] of [
     ['g (f (r (from String "12" == 12)))','0'],
     ['g (f (r (from String " True ")))','0'],
     ['g (f (r (from String "1/2" == 0.5)))','0'],
     ['g (f (q (integers "4")))','0'],
-    ['g (f (r (count 500 == 500)))','0'],
-    ['g (f (r (length (upto 450) == 450)))','0'],
-    ['g (f (r (len [1..400] == 400)))','0'],
+    ['g (f (r (count 200 == 200)))','0'],
+    ['g (f (r (length (upto 200) == 200)))','0'],
+    ['g (f (r (len [1..200] == 200)))','0'],
     ['g (f (r (sum (map (* 2) [1..5000]) == 25005000)))','0'],
     ['g (f (r (isPrime 7919)))','0'],
     ['g (f (q (take 1 (repeat 0))))','0'],

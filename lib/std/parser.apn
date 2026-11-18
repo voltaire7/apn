@@ -10,8 +10,8 @@
 [..] <- import "std/sequence"
 [..] <- import "std/function"
 
-# What the module's names share with its helpers: opened here, and passed on
-# by the record's [..] = shared.
+# What the module's names share with its helpers: opened here, and joined to
+# the record it gives (shared ++ [...]).
 shared.[..] = [Parser a = | Parser (input -> Result [a,input] String)]
 run (Parser p) input = p input
 shown x = isType Char x ? "'" ++ from (List Char) [x] ++ "'" : to String x
@@ -21,9 +21,7 @@ digitValue d = length (takeWhile (!= d) (to (List Char) "0123456789"))
 readMany p input items = readNext p (run p input) input items
 readNext p (Ok [x,rest]) _ items = readMany p rest (x :: items)
 readNext _ (Err _) input items = [items = reverse items, rest = input]
-[
-    [..] = shared
-
+shared ++ [
     # Ok of the value a parser reads from all of the input, or Err.
     # (A string is read as its characters.)
     parse parser text = {

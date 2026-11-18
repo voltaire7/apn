@@ -788,7 +788,11 @@ A record applied to fields is the same update: `r [f = v, g = w]` is
 of them in order (`r [10,20]`), a type given fields too (`Vector3 [x : Int]` is
 `Vector3.x = Int`); `r []` is `r`. A record's value is made by ascription
 instead (`[x = 1] : Vector3`; see [zero initialization](zero-initialization.md)).
-A record is code, so `++` joins it to more code (`[x = 1] ++ [x + 1]`).
+A record is code, so `++` joins it to more code (`[x = 1] ++ [x + 1]`), and
+to a record it gives one record: the first's fields, then the other's, whose
+items written there see the first's names, as code joined after it does
+(`r ++ [x = a + 1]` is `[[..] = r, x = a + 1]`; `r ++ s` takes `s`'s fields as
+they are). Nothing of the first runs again: its values and types are its own.
 
 An empty list `[]` becomes a record on its first field assignment.
 `obj.[x] = [10]` requires a one-element RHS list; `obj.[x] = 10` errors.
@@ -1642,11 +1646,11 @@ text.[..] <- import "std/text" # both: text.words, and words
 
 A module's record is a record as any is (see [records](#records)): its fields
 are in scope for all of it, a function's clauses join, a type's constructors
-are fields, and `[..] = r` in it makes `r`'s names fields, which passes them
-on. So what both the record and a helper above it need is a record of its own,
-opened where it is defined and in the module's record:
-`shared.[..] = [Glsl = | Glsl String]` before the helpers, and `[..] = shared`
-in the record.
+are fields, and `r ++ [...]` gives `r`'s names with its own. So what both the
+record and a helper above it need is a record of its own, opened where it is
+defined and joined to the record the module gives:
+`shared.[..] = [Glsl = | Glsl String]` before the helpers, and
+`shared ++ [...]` last.
 A file ending in a binding gives `[]`. One ending in a function gives the
 function, a module that takes parameters: after `make <- import "counter"`,
 `make 10` is a module of its own. `import` is a prelude function (`import =

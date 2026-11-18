@@ -1,5 +1,5 @@
 import { fieldSource } from "./record-keys.ts";
-import { type Alternative, type Binding, clausePlaces, walkObjects, type Contains, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, OPEN, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
+import { type Alternative, type Binding, clausePlaces, walkObjects, type Contains, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, isUse, OPEN, opening, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
 import { EVALUATED_NATIVES, nativeArity, READS_CODE, RETIRED_NATIVES, SHOWS, STANDARD_NATIVES, STRICT_NATIVES } from "./natives.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
@@ -370,7 +370,7 @@ export function moduleValue(value: Ty | undefined): Ty {
 // A record's field as opening it defines the name: as the record's own scope
 // defined it (its clauses and fixity too, for static evaluation), each generic.
 export function fieldEntry(record: Extract<Ty, { k: "record" }>, name: string, type: Ty): Entry {
-    const defined = record.scope?.get(name);
+    const defined = record.fields instanceof ModuleFields ? record.fields.scope.get(name) : record.scope?.get(name);
     return defined ? { ...defined, nonGeneric: undefined, mono: false, inherited: undefined } : { type };
 }
 // What a load of a file still being checked gives (the file loading itself):
@@ -395,6 +395,8 @@ export function importedValue(t: Ty): Ty {
 // Whether a type is a module's record (an import's or a load's).
 export function isModuleType(t: Ty): boolean { return t.k === "record" && t.fields instanceof ModuleFields; }
 // What opens a standard module (std/name), for a hint.
+// The record r ++ [...] joins, as the written record's items see it (as at runtime).
+const JOINED = "[..]joined";
 function openHint(module: string): string { return `add \`[..] <- import "${module}"\``; }
 // The names a module type holds, for a record a module made.
 function moduleOf(t: Ty): TypeScope | undefined {
@@ -3022,7 +3024,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return list(a, tail.k === "list" && tail.length ? indexAdd(tail.length, constant(1n)) : undefined);
         }
         if (op === "++") {
-            // A record and a record of fields: a copy with them (as at runtime).
+            // Two records: the left's fields, then the right's (as at runtime).
+            if (resolve(a).k === "record" && resolve(b).k === "record") return operation("merge-record", [a, b]);
             const x = asCode(resolve(a)), y = asCode(resolve(b));
             // Code joins code: the right's items see the left's bindings.
             if (x.k === "list" && y.k === "list" && x.formula && (y.formula || y.items)) {
@@ -4944,6 +4947,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const at = sourceLocations.get(e);
                     if (at) sourceLocations.set(union, at);
                     return infer(union, scope, expected);
+                }
+                // A record ++ a record written here is the record [[..] = r, ...]
+                // with the written one's items, as at runtime; the left is
+                // inferred once, under a name the expansion reads.
+                if (e.op === "++" && bound.builtin && e.r.t === "record" && e.r.items && !(e as { joined?: true }).joined) {
+                    const held: Expr = { t: "var", name: JOINED }, child: Scope = new BlockScope(scope);
+                    const left = infer(e.l, scope);
+                    child.set(JOINED, { type: left });
+                    const joined: Expr = resolve(left).k === "record"
+                        ? { ...e.r, v: [["_", held], ...e.r.v], items: [opening(held), ...e.r.items] }
+                        : { ...e, l: held, joined: true } as Expr;
+                    return infer(joined, child, expected);
                 }
                 let op = builtinOperator(bound.type), operands: [Ty, Ty] | undefined;
                 if (op === undefined) {

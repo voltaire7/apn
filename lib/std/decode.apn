@@ -18,8 +18,8 @@ allOk results = results ~ [
     [] -> Ok []
     result :: rest -> map2 (x, xs -> x :: xs) result (allOk rest)
 ]
-# What the module's names share with each other: opened here, and passed on
-# by the record's [..] = shared.
+# What the module's names share with each other: opened here, and joined to
+# the record it gives (shared ++ [...]).
 shared.[..] = [
     Decoder a = | Decoder (value -> Result a String)
     expecting what test = Decoder (value -> test value ? Ok value : Err ("Expecting " ++ what))
@@ -51,8 +51,7 @@ shared.[..] = [
     decodeValue (t : Type) value = decodeValue (t == String ? string : (t == Int ? int
         : (t == Float ? float : (t == Bool ? bool : expecting (to String t) (isType t))))) value
 ]
-[
-    [..] = shared
+shared ++ [
     # A type's decoder, for what takes only a decoder (map f (fromType Quote)), or
     # a record's whose fields may be decoders ([name : String, tags = list string]).
     fromType t = Decoder (decodeValue t)

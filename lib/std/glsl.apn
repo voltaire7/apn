@@ -5,8 +5,8 @@
 [..] <- import "std/sequence"
 [..] <- import "std/function"
 [..] <- import "std/option"
-# What the module's names share with the operators' helper: opened here, and passed on
-# by the record's [..] = shared.
+# What the module's names share with the operators' helper: opened here, and joined to
+# the record it gives (shared ++ [...]).
 shared.[..] = [
     Glsl = | Glsl String
     # A value's GLSL code.
@@ -16,9 +16,7 @@ shared.[..] = [
     glsl (n : Number) = to String (n : Float)
 ]
 binary operator a b = Glsl ("(" ++ glsl a ++ " " ++ operator ++ " " ++ glsl b ++ ")")
-[
-    [..] = shared
-
+shared ++ [
     # A list as one GLSL vector, for arithmetic as a whole: vec [x,y] * 0.5.
     vec items = Glsl (glsl items)
     # A GLSL function applied to its arguments: call "mix" [a,b,0.5].
