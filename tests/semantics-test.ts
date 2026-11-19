@@ -135,6 +135,36 @@ print (True ? 7 : missing)
 print (False ? missing : 8)
 `, ["7", "8"]);
 
+example("Takes and Gives take any value apart: a function as what it takes", `
+succ (n : Int) = n + 1
+describe (Takes t _) = format "takes %" [t]
+describe (Gives v) = format "gives %" [v]
+print (map describe [succ,5])
+print (describe [1,2])
+arity (Takes _ k) = 1 + arity (k 0)
+arity (Gives _) = 0
+add x y = x + y
+print [arity add, arity (add 1), arity 7]
+[Takes accepted k] = [succ]
+print [accepted, k 2]
+`, ['["takes Int","gives 5"]', "gives [1,2]", "[2,1,0]", "[Int,3]"]);
+
+example("Takes t k is k taking only t, Gives v is v", `
+inc = Takes Int (x -> x + 1)
+print [inc 2, Gives 5]
+[Takes t _] = [inc]
+print t
+sumTo0 total = Takes Int (n -> n == 0 ? (Gives total : Dynamic) : sumTo0 (total + n))
+print (sumTo0 0 1 2 3 0)
+`, ["[3,5]", "Int", "6"]);
+
+example("a program's own Takes is its own constructor", `
+Box = Takes Int | Empty
+f (Takes n) = n
+f Empty = 0
+print [f (Takes 3), f Empty]
+`, ["[3,0]"]);
+
 example("debug shows code as written, unevaluated", `
 debug [missing + 1]
 `, ["[missing + 1]"]);

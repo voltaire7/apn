@@ -4184,6 +4184,33 @@ export class Interpreter {
         }
         return undefined;
     }
+    // Whether a Takes or Gives pattern is the builtin view, not a program's own
+    // constructor of that name.
+    private builtinView(tag: string): boolean {
+        const own = this.env.get(tag), value = own && this.reference(own);
+        return value?.kind === "native" && value.name === tag && !value.tag;
+    }
+    // Whether a value is a function, as typeOf tells (a type, which converts
+    // what it is applied to, is none).
+    private isFunction(v: Value): boolean {
+        return ["closure", "clauseFn", "native", "contract"].includes(this.reference(v).kind);
+    }
+    // The type a function accepts (Takes t k's t): its contract's, or the input
+    // of the type typeOf describes; any value where that cannot be read.
+    private accepted(f: Value): Value {
+        const ref = this.reference(f);
+        if (ref.kind === "contract") return ref.from;
+        const type = this.callNative("typeOf", [ref]);
+        const caller = this.env;
+        try {
+            const [statement] = type.kind === "type" && type.description ? parse(type.description) : [];
+            this.env = new Env(this.programEnv);
+            const written = statement?.t === "expr" ? this.force(this.eval(statement.value)) : undefined;
+            const read = written && (written.kind === "closure" || written.kind === "clauseFn") ? this.readFunctionType(written, new Map()) : undefined;
+            if (read?.kind === "functionType") return read.from;
+        } catch { /* an input not written as a type accepts any value */ } finally { this.env = caller; }
+        return { kind: "type", name: "$any" };
+    }
     // A lambda read as the function type it spells: (Int -> Int), (a -> b),
     // (n : Float) -> Float, its typed parameter's type the input; a guard
     // refines it ((n : Float) | n > 0 -> Float), as X = (n : Float) | n > 0 does.
@@ -5439,6 +5466,13 @@ export class Interpreter {
                 for (const x of this.elements(args[2])) acc = this.demand(this.apply(this.apply(f, acc), x));
                 return acc;
             }
+            // Takes t k is k, taking only t; Gives v is v.
+            case "Takes": {
+                const f = this.force(args[1]);
+                if (!this.isFunction(f)) throw new APNError("runtime", "Takes expects a type and a function", { hint: "write Takes Int (x -> x + 1)" });
+                return { kind: "contract", target: f, from: this.asType(args[0]) ?? args[0], to: { kind: "type", name: "$any" } };
+            }
+            case "Gives": return args[0];
             case "S": {
                 if (!isNumeric(a)) throw new APNError("runtime", "S expects a natural number (a UInt)");
                 const n = castNumeric("UInt", a);
@@ -6975,6 +7009,13 @@ export class Interpreter {
                     let converted: Value;
                     try { converted = castNumeric(p.tag, v); } catch { return false; }
                     return this.matchPattern(p.args[0], NUMERIC_CLASSES.has(p.tag) ? v : converted, binds);
+                }
+                // Takes t k and Gives v take any value apart: a function as the
+                // type it accepts and itself, any other value as itself.
+                if ((p.tag === "Takes" && p.args.length === 2 || p.tag === "Gives" && p.args.length === 1) && this.builtinView(p.tag)) {
+                    const takes = this.isFunction(v);
+                    if (p.tag === "Gives") return !takes && this.matchPattern(p.args[0], v, binds);
+                    return takes && this.matchPattern(p.args[0], this.accepted(v), binds) && this.matchPattern(p.args[1], v, binds);
                 }
                 // Z and S k take a natural number apart: 0, or k + 1 (k a UInt).
                 if (isNumeric(v) && (p.tag === "Z" && !p.args.length || p.tag === "S" && p.args.length === 1)) {

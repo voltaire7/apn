@@ -47,6 +47,19 @@ A `UInt` is stored as a bigint, and `Z` and `S` are its constructors as a view:
 a list of units, `List []`, its length the only thing it keeps: the two have
 the same shape (`Z` is `Nil`, `S n` is `Cons [] n`).
 
+## Functions: `Takes` and `Gives`
+
+```apn
+Program = Takes Type Function | Gives Value    # any value, as this view
+```
+
+Every value is a `Program`, as a view, the way a number is a `UInt`: a function
+is `Takes t k`, `t` the type it takes and `k` the function itself, whose result
+is again a `Program`; any other value `v` is `Gives v`. A function is a list of
+what it takes, ending in what it gives: `Takes` is `Cons`, `Gives` the end. The
+view shows what a function takes, never its body, so equal functions take apart
+alike. `k` is a function, not data: the view looks into one, it does not build it.
+
 ## Lists
 
 ```apn

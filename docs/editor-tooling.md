@@ -87,7 +87,8 @@ an expression nothing demands never fails. It warns when a function calls
 itself with no smaller argument where the call is certainly evaluated (its
 body, a branch, an arithmetic operand): `up n = up (n + 1)` may never finish.
 An argument is smaller when a parameter's pattern took it apart (`xs` from
-`x::xs`, `k` from `S k`), or it is `n - 1` or `tail xs`. A call under a lazy
+`x::xs`, `k` from `S k`), or it is `n - 1`, `tail xs`, or `k x` of a function
+`Takes t k` took apart (`k` alone is the whole function). A call under a lazy
 constructor (`nats n = n :: nats (n + 1)`), in another function's argument, a
 lambda or a block (an action's loop) is not reported. It also issues conservative variant-exhaustiveness
 warnings for statically recognizable matches; see [type and resource rules](type-and-resource-rules.md). `_` placeholders are valid syntax.

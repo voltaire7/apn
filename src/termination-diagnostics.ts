@@ -6,7 +6,8 @@ import { definitionsInOrder } from "./unused-diagnostics.ts";
 // the call is certainly evaluated, so it may never finish: f n = f (n + 1).
 // An argument is smaller when it is part of what a parameter's pattern took
 // apart (xs from x :: xs, k from S k), the parameter minus a positive number
-// (n - 1), or tail of it. A call under a lazy constructor (n :: nats (n + 1)),
+// (n - 1), tail of it, or the rest of a function Takes took apart (k x from
+// Takes t k, where k is the function itself). A call under a lazy constructor (n :: nats (n + 1)),
 // in another function's argument, a lambda or a block (an action's loop) is
 // not evaluated by the call itself, so it is not reported. Like the other
 // lint analyses, this never evaluates APN.
@@ -89,6 +90,8 @@ function smaller(arg: Expr, p: Pattern): boolean {
     }
     // tail xs, drop k xs: a list after its first element.
     if (arg.t === "app" && arg.f.t === "var" && arg.f.name === "tail" && arg.a.t === "var") return whole.has(arg.a.name) || parts.has(arg.a.name);
+    // k x, of Takes t k: the function after what it takes first.
+    if (arg.t === "app" && arg.f.t === "var") return whole.has(arg.f.name) && takenApart(p);
     return false;
 }
 // The names a pattern binds to the whole argument (n, (Int n), all@...).
@@ -98,8 +101,9 @@ function wholeNames(p: Pattern): Set<string> {
         case "as": return new Set([...wholeNames(p.left), ...wholeNames(p.right)]);
         case "typeBind": return wholeNames(p.value);
         case "schema": return wholeNames(p.value);
-        // A numeric type pattern binds the number itself.
-        case "constr": return /^U?Int|^Float|^Number|^Integer/.test(p.tag) && p.args.length === 1 ? wholeNames(p.args[0]) : new Set();
+        // A numeric type pattern binds the number itself, Takes t k the function as k.
+        case "constr": return /^U?Int|^Float|^Number|^Integer/.test(p.tag) && p.args.length === 1 ? wholeNames(p.args[0])
+            : takenApart(p) ? wholeNames(p.args[1]) : new Set();
         default: return new Set();
     }
 }
@@ -123,10 +127,16 @@ function partNames(p: Pattern): Set<string> {
         case "typeBind": return partNames(p.value);
         case "schema": return partNames(p.value);
         case "list": case "cons": case "recPat": return new Set(all(p));
-        // A constructor's fields are parts (S k, Some x); a numeric type's payload is the whole.
-        case "constr": return /^U?Int|^Float|^Number|^Integer/.test(p.tag) ? new Set() : new Set(all(p));
+        // A constructor's fields are parts (S k, Some x); a numeric type's payload
+        // is the whole, as Takes t k's k is (t is a part).
+        case "constr": return /^U?Int|^Float|^Number|^Integer/.test(p.tag) ? new Set() : takenApart(p) ? new Set(all(p.args[0])) : new Set(all(p));
         default: return new Set();
     }
+}
+// Takes t k, a function taken apart (lint reads no scopes: a program's own
+// two-field Takes reads the same).
+function takenApart(p: Pattern): p is Extract<Pattern, { p: "constr" }> {
+    return p.p === "constr" && p.tag === "Takes" && p.args.length === 2;
 }
 // Does the pattern bind name (shadowing the function)?
 function binds(p: Pattern, name: string): boolean {

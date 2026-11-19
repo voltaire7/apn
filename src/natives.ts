@@ -18,6 +18,8 @@ export const NATIVES: Array<[string, number]> = [
     ["intrinsics.bind", 2], ["intrinsics.negate", 1], ["intrinsics.range", 3], ["intrinsics.ap", 2], ["intrinsics.return", 1], ["intrinsics.throw", 1], ["intrinsics.source", 1],
     // Natural numbers are UInt: Z is UInt 0, S n the next one.
     ["S", 1],
+    // Any value taken apart: a function is Takes t k, any other Gives v.
+    ["Takes", 2], ["Gives", 1],
     // to T x writes x as a T; from T x reads it back (methods, like map).
     ["to", 2], ["from", 2],
     // tag owner ctor fields: a value made by ctor, belonging to owner.

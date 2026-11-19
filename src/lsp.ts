@@ -62,6 +62,8 @@ const builtins = new Map<string, string>([
     ["JSON", "JSON — JSON text, a named String: to JSON x encodes, from JSON text decodes."],
     ["Z", "Z — the natural number zero, UInt 0; the pattern Z matches 0."],
     ["S", "S n — the natural number after n (n + 1, a UInt); the pattern S k matches 1 and up, binding k to one less."],
+    ["Takes", "Takes t k — k taking only values of t; the pattern Takes t k matches a function, binding t to the type it takes and k to the function."],
+    ["Gives", "Gives v — v; the pattern Gives v matches any value that is not a function."],
     ["return", "return x — x in the monad the context decides (an annotation, a >>=, or IO when run)."],
     ["sequence", "sequence actions — action running each, yielding the list of results."],
     ["mapM", "mapM f xs — sequence (map f xs)."],

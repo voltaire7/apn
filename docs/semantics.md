@@ -1458,11 +1458,31 @@ factorial 20                     # 2432902008176640000, a UInt
 S (S Z)                          # 2, a UInt
 ```
 
+Every value is taken apart the same way by `Takes` and `Gives`, a function as
+a list of what it takes: `Takes t k` matches a function, binding `t` to the type
+it takes (what `typeOf` gives as its input, any value where that is unwritten) and
+`k` to the function itself, which applied gives the rest, again a `Takes` or a
+`Gives`; `Gives v` matches any other value, binding it. Built, `Takes t k` is `k`
+taking only `t` and `Gives v` is `v`. Taking a function apart shows what it takes,
+never how it is written, so equal functions take apart alike (`return = Some` and
+`return x = Some x`). A function whose arity its arguments decide has no static
+type, so its result is `Dynamic`:
+
+```apn
+arity (Takes _ k) = 1 + arity (k 0)
+arity (Gives _) = 0
+add x y = x + y
+arity add                        # 2
+[Takes t _] = [(n : Int) -> n]   # t is Int
+sumTo0 total = Takes Int (n -> n == 0 ? (Gives total : Dynamic) : sumTo0 (total + n))
+sumTo0 0 1 2 3 0                 # 6
+```
+
 `S k` destructures, it does not unwrap: `k` is the predecessor, itself a `UInt`,
 while `(k : UInt)` binds a `UInt`, as any typed pattern binds a value of its type.
 A bare `Z` in a pattern takes no fields (`plus Z m = m`). A program that declares
-its own constructor named `Z` or `S` gets it in that scope, matched as a variant;
-a number never matches a variant pattern.
+its own constructor named `Z`, `S`, `Takes` or `Gives` gets it in that scope,
+matched as a variant; a number never matches a variant pattern.
 
 Ascribing `Float`, `Float32`, or `Float64` rounds to the target floating-point
 precision, for bare or annotated inputs: `(.1 : Float32)` is `0.1` as a Float32
