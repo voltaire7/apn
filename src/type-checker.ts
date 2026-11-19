@@ -9,7 +9,7 @@ import { parseLiteral, textNatives } from "./text-natives.ts";
 import { builtinContains, castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_CLASSES, NUMERIC_TYPES, OWN_SCALAR_TYPES, numericWithin, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
 import { ACTION_SHOWN, APNError, didYouMean, formatFileReadError, missingTypeParameters, placeholderError, typeApplied, withArticle } from "./errors.ts";
-import { bindingItem, DEFAULT_FIXITY, exprToSource, getPreludeUsed, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
+import { bindingItem, DEFAULT_FIXITY, exprToSource, itemComparisonHint, getPreludeUsed, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
 import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
@@ -1447,16 +1447,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const written = t.written?.t === "binop" && ["<", ">", "<=", ">="].includes(t.written.op) ? t.written : undefined;
             const single = (x: Ty) => numeric(x) || x.k === "atom" && ["String", "Char", "Bool"].includes(x.name);
             const listLeft = a.k === "list" && single(b), listRight = b.k === "list" && single(a);
-            let hint: string | undefined;
-            if (written && (listLeft || listRight)) {
-                // The section the printer writes, operand parenthesized where needed.
-                const item: Expr = { t: "var", name: "$S" };
-                const section = exprToSource({ t: "lambda", params: ["$S"], body: { ...written, ...listLeft ? { l: item } : { r: item } } });
-                // all is the library's: its import too, unless the program has it.
-                const module = !topScope?.has("all") && standardModule("all");
-                hint = `compare each item with \`${section} * xs\`, or every item with \`all ${section} xs\``
-                    + (module ? ` (${openHint(module)} first)` : "");
-            }
+            const hint = written && (listLeft || listRight)
+                ? itemComparisonHint(written.op, listLeft ? written.r : written.l, listLeft, topScope?.has("all") ? undefined : standardModule("all"))
+                : undefined;
             return problem(`cannot compare ${text(a)} and ${text(b)}`, undefined, hint);
         }
         if (t.op === "++") {

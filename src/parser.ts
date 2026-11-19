@@ -149,11 +149,20 @@ function reassociate(e: Expr, fixity: (op: string) => Fixity): Expr {
 // operator after it that it would take in (a lambda's body takes everything).
 const isLambda = (e: Expr) => e.t === "lambda" || e.t === "patternLambda";
 // An ascription is written in its own parentheses: (x : T).
-const primary = (e: Expr) => e.t === "app" && !!e.ascribed || !["binop", "pipe", "unop", "app", "ternary", "lambda", "patternLambda"].includes(e.t);
+const primary = (e: Expr) => e.t === "app" && !!e.ascribed || !["binop", "pipe", "unop", "app", "ternary", "lambda", "patternLambda"].includes(e.t) && !numberOperator(e);
 // (r.1).2 is not r.1.2, which reads the float 1.2.
 const postfixHead = (e: Expr) => primary(e) && !["int", "float", "numeric"].includes(e.t) && !(e.t === "recordAccess" && /^\d/.test(e.field));
+// The operator a number's text is written with (1/2, 1+2i, 1-2i), which ranks
+// it as that operator's application.
+function numberOperator(e: Expr): string | undefined {
+    if (e.t !== "numeric") return undefined;
+    const text = numberText(e.v);
+    return text.includes("/") ? "/" : /.[+-]/.test(text) ? "+" : undefined;
+}
 function level(e: Expr): number {
     if (e.t === "binop") return fixityOf(e.op).prec;
+    const op = numberOperator(e);
+    if (op) return fixityOf(op).prec;
     if (e.t === "pipe") return fixityOf("$").prec;
     return e.t === "ternary" ? 1 : Infinity;
 }
@@ -3046,6 +3055,14 @@ function fits(where: Place, e: Expr): boolean {
 export function exprToSource(e: Expr, where: Place = END): string {
     e = ungrouped(e);
     return fits(where, e) ? bareSource(e, where) : `(${bareSource(e, END)})`;
+}
+// The hint for a list compared with one value ([1,2,3] < 2): its items
+// compared, each or every one, by the section the printer writes; module is
+// where all comes from, when the program has not opened it.
+export function itemComparisonHint(op: BinOp, value: Expr, listLeft: boolean, module?: string): string {
+    const item: Expr = { t: "var", name: "$S" };
+    const section = exprToSource({ t: "lambda", params: ["$S"], body: { t: "binop", op, l: listLeft ? item : value, r: listLeft ? value : item } });
+    return `\`${section} * xs\` compares each item, \`all ${section} xs\` every one` + (module ? ` (from ${module})` : "");
 }
 function bareSource(e: Expr, where: Place): string {
     const of = (x: Expr, at: Place = END) => exprToSource(x, at);
