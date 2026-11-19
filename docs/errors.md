@@ -19,11 +19,10 @@ rendered by `formatError(err, color)`:
   exports gets a hint naming the import (``add `[..] <- import "std/option"`
   to use `okOr` ``). A name the program defines locally elsewhere (in this
   input or an earlier one) is out of scope where it is read, and its hint says
-  how to get it from there instead: ``hint: `code` is defined inside `f`: end
-  `f` with `return code` to return it, then `code <- f` `` (`code` and
-  `code = f` when `f` is no action; no binding when `f` is a function or is
-  itself local), or for a record's field ``hint: `size` is a field of
-  `config`: write `config.size` ``; one defined in a block no definition names
+  how to get it from there instead: ``hint: end `f` with `return code`, then
+  `code <- f` `` (`code` and `code = f` when `f` is no action; no binding when
+  `f` is a function or is itself local), or for a record's field
+  ``hint: write `config.size` ``; one defined in a block no definition names
   gets none. Others get `did you mean '...'?`.
 - Code in a hint is in backticks: ``bind a value with `=` ``, ``bind its
   result first: `x <- action` ``.

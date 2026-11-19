@@ -2357,7 +2357,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function localHint(name: string, place: LocalName | undefined): string | undefined {
         if (!place) return undefined;
         const { owner, field } = place;
-        if (field) return `\`${name}\` is a field of \`${owner}\`: write \`${owner}.${name}\``;
+        if (field) return `write \`${owner}.${name}\``;
         const entry = topScope?.get(owner);
         let type = entry && resolve(entry.type);
         // Bound from a top-level value only: a function's call, or a definition
@@ -2366,8 +2366,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         while (type?.k === "fn") type = resolve(type.output);
         const action = type?.k === "variant" && type.name === "IO";
         const last = action ? `return ${name}` : name;
-        return `\`${name}\` is defined inside \`${owner}\`: end \`${owner}\` with \`${last}\` to return it`
-            + (bound ? `, then \`${name} ${action ? "<-" : "="} ${owner}\`` : "");
+        return `end \`${owner}\` with \`${last}\`` + (bound ? `, then \`${name} ${action ? "<-" : "="} ${owner}\`` : "");
     }
     // Whether a value of a type is, or holds, an action (a function giving one
     // holds none: it shows as its source).

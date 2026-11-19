@@ -1179,14 +1179,14 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
 // it is defined (no module defining it), and a block no definition names gives
 // none.
 Deno.test("an unbound name defined locally elsewhere is hinted to where it is defined", () => {
-    const pure = "`code` is defined inside `f`: end `f` with `code` to return it, then `code = f`";
+    const pure = "end `f` with `code`, then `code = f`";
     for (const [inputs, name, hint] of [
         [["f = { code = [1]; [2] }\nprint code"], "code", pure],
         [["f = { code = [1]; [2] }", "print code"], "code", pure],
         [["f = { code = [1]; debug code }\nprint code"], "code",
-            "`code` is defined inside `f`: end `f` with `return code` to return it, then `code <- f`"],
-        [["g n = { helper = n + 1; helper }\nprint helper"], "helper", "`helper` is defined inside `g`: end `g` with `helper` to return it"],
-        [["config = [size = 3]\nprint size"], "size", "`size` is a field of `config`: write `config.size`"],
+            "end `f` with `return code`, then `code <- f`"],
+        [["g n = { helper = n + 1; helper }\nprint helper"], "helper", "end `g` with `helper`"],
+        [["config = [size = 3]\nprint size"], "size", "write `config.size`"],
         [["print { inner = 1; inner }\nprint inner"], "inner", undefined],
     ] as const) {
         const checking = session();
