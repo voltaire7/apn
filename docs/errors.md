@@ -17,10 +17,12 @@ rendered by `formatError(err, color)`:
   other error its unknown value leads to: `unbound variable 'x'`, or
   `unknown constructor 'Some' in a pattern`. A name the standard library
   exports gets a hint naming the import (``add `[..] <- import "std/option"`
-  to use `okOr` ``), unless the program defines it locally elsewhere (inside
-  another definition, block or record, in this input or an earlier one): there
-  it is out of scope, and the import is no answer. Others get
-  `did you mean '...'?`.
+  to use `okOr` ``). A name the program defines locally elsewhere (in this
+  input or an earlier one) is out of scope where it is read, and its hint says
+  where it is defined instead: ``hint: `code` is defined inside `f`, so only
+  `f` sees it``, or for a record's field ``hint: `size` is a field of
+  `config`: write `config.size` ``; one defined in a block no definition names
+  gets none. Others get `did you mean '...'?`.
 - Code in a hint is in backticks: ``bind a value with `=` ``, ``bind its
   result first: `x <- action` ``.
 - Messages carry no `Parser:`/`Lexer:`/`Runtime:` prefixes — the headline

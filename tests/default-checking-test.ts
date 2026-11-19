@@ -1174,14 +1174,21 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
     }
     if (run(session(), 'std <- import "std"\n[..] = std.option\nfunc (Some x::xs) = [x,xs]; func [Some 1, None]') !== "[1, [None]]") throw new Error("with the import");
 });
-// A name the program defines locally elsewhere (inside f), in this input or one
-// before it, is out of scope where it is read: no module defining it is hinted.
-Deno.test("an unbound name defined locally elsewhere is not hinted to a module", () => {
-    for (const inputs of [["f = { code = [1]; code }\nprint code"], ["f = { code = [1]; code }", "print code"]]) {
+// A name the program defines locally elsewhere, in this input or one before
+// it, is out of scope where it is read: the hint says where it is defined (no
+// module defining it), and a block no definition names gives none.
+Deno.test("an unbound name defined locally elsewhere is hinted to where it is defined", () => {
+    const inside = "`code` is defined inside `f`, so only `f` sees it";
+    for (const [inputs, name, hint] of [
+        [["f = { code = [1]; code }\nprint code"], "code", inside],
+        [["f = { code = [1]; code }", "print code"], "code", inside],
+        [["config = [size = 3]\nprint size"], "size", "`size` is a field of `config`: write `config.size`"],
+        [["print { inner = 1; inner }\nprint inner"], "inner", undefined],
+    ] as const) {
         const checking = session();
         try { for (const input of inputs) run(checking, input); } catch (error) {
             const e = error as { message: string; hint?: string };
-            if (e.message !== "unbound variable 'code'" || e.hint) throw new Error(`${inputs}: ${e.message} (${e.hint})`);
+            if (e.message !== `unbound variable '${name}'` || e.hint !== hint) throw new Error(`${inputs}: ${e.message} (${e.hint})`);
             continue;
         }
         throw new Error(`accepted: ${inputs}`);
