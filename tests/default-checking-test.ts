@@ -28,6 +28,11 @@ for (const [source, expected] of [
     ['std <- import "std"\n[..] = std.[function,number]; id (sq 3)', '9'],
     ['ns = [double = x -> x * 2]; [..] = ns; double 3', '6'],
     ['[..] = [[one = 1], [two = 2]]; one + two', '3'],
+    // A value, as a function, is defined for its whole scope: code above uses it.
+    ['a = b + 1\nb = 2\na', '3'],
+    ['xs = 1 :: ys\nys = 2 :: xs\ntake 4 xs', '[1,2,1,2]'],
+    ['v = {\n    a = b + 1\n    b = 2\n    a\n}\nv', '3'],
+    ['f = g\ng = f\n1', '1'],
     ['x = Mutable 1; set x 2; x + 1', '3'],
     ['Direction = North | South; [10,20] South', '20'],
     ['templates = [String,Int]; values = ["x", 1]; (values : templates)', '["x", 1]'],
@@ -254,6 +259,9 @@ for (const source of [
     'pick b a c = b ~ [True -> [map (x -> x) a, c], _ -> [map (x -> x) a, c]]\n' +
         'sum3 [[x],[y,z]] = x + y + z\nk n = sum3 (pick (n > 0) [1,2] [1,2])',
 ]) Deno.test(`a choice is used as every type it may be: ${source}`, () => rejected(session(), choices + source));
+
+// A value defined further on is checked where it is used.
+Deno.test("a forward value keeps its type", () => rejected(session(), 'a = b + 1\nb = "x"\na'));
 
 // A ternary's branch is checked as the expression alone is: a lossy mix the
 // checker types as Number fails when it runs, in a branch as outside one.

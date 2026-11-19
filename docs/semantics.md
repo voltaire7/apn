@@ -275,8 +275,9 @@ group's value is its last statement's, and a binding's is the value it binds:
 `print (x = 1)` prints 1, and `x` is unbound after it. A list item may be a
 binding too (see [code](#code)). A value never changes once written, so when
 something is computed never changes what it is. A name not visible here is
-defined for its whole scope: code above may use it (functions may call each
-other in any order), and its value may refer to itself (`ones = 1 :: ones`).
+defined for its whole scope: code above may use it (functions and values may
+refer to each other in any order: `a = b + 1` then `b = 2`), and its value may
+refer to itself (`ones = 1 :: ones`).
 A name already visible, here or in an enclosing scope (the prelude's too), is
 rebound: a new version from that line on, whose right side reads the one
 before (`count = count + 1` is 2 after `count = 1`), while what was written

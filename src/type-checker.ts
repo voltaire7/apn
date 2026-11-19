@@ -892,7 +892,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const forwardOf = new Map<Ty, Ahead>();
     function declareAhead(definitions: Array<{ name: string; clauses: { params: Pattern[]; body: Expr }[]; statement: object }>, scope: Scope): void {
         for (const { name, clauses, statement } of definitions) {
-            if (!clauses[0].params.length || scope.has(name)) continue;
+            // (A capitalized name is a type's or constructor's, declared as one.)
+            if (!clauses[0].params.length && !/^[a-z_]/.test(name) || scope.has(name)) continue;
             const t = variable();
             forwardOf.set(t, { name, clauses, scope, statement });
             scope.set(name, { type: t });
@@ -4329,6 +4330,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // A function its scope defines further on is defined when first used.
                 const ahead = entry && forwardOf.get(entry.type);
                 if (ahead) {
+                    // (While it is defined, a use of it reads its type, as a
+                    // definition's use of itself does: f = g, g = f.)
+                    forwardOf.delete(entry!.type);
                     define(ahead.name, ahead.clauses, ahead.scope, ahead.clauses[0].body);
                     analyzed.add(ahead.statement);
                     entry = ahead.scope.get(e.name);
