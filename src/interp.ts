@@ -3,7 +3,7 @@ import type { TypeScope } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeElementType, describeType } from "./type-description.ts";
-import { isForTypes, METHOD_INTRINSICS, sourceLocations, boolSelection, ternaryExpansion, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
+import { isForTypes, METHOD_INTRINSICS, listLiterals, sourceLocations, boolSelection, ternaryExpansion, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { fieldSource, keySource } from "./record-keys.ts";
 import doSource from "../lib/std/do.apn" with { type: "text" };
@@ -24,7 +24,7 @@ import { type Value, Env, IOTail } from "./types.ts";
 import { enumerationPositions, givesValue, isUse, OPEN, opening } from "./ast.ts";
 import { canonicalTypeText, ioTypeText, compoundArgument, slotField, mkInt, mkBool, mkStr, mkList, rangeValue, typeToString, valueToString, rawString } from "./types.ts";
 import { argument, functionSource, residualSource } from "./function-source.ts";
-import { KEYWORDS } from "./lexer.ts";
+import { KEYWORDS, lex } from "./lexer.ts";
 import { bindingItem, getPreludeUsed, parse, parseDocument, exprToSource, patternSource, patternVariables, isOperatorName, PRIMITIVE_OPERATORS, DEFAULT_FIXITY, type Fixity, fixitiesOf, getLooseSpacing, preludeFixity, regroup, setLooseSpacing } from "./parser.ts";
 import { charLiteral, itemsText, literalKind, spacedItem, stringLiteral } from "./separators.ts";
 
@@ -1682,6 +1682,7 @@ export class Interpreter {
                         if (e.v.length && !this.preludeCons() && !binds) { next = new TailCall(listExpansion(e), this.env); break; }
                         if (!binds) { r = { kind: "lazyList", exprs: e.v, env: this.env }; break; }
                         r = this.codeList(e.v, this.env);
+                        this.literalItems.set(r, e.v);
                         break;
                     }
                     case "record": {
@@ -2651,7 +2652,10 @@ export class Interpreter {
                 checkInterrupt();
                 if (v.kind === "lazyList") {
                     const env = v.env;
-                    v.value ??= mkList(v.exprs.map((body) => this.writtenAs({ kind: "thunk", body, env }, { expr: body, env })));
+                    if (!v.value) {
+                        v.value = mkList(v.exprs.map((body) => this.writtenAs({ kind: "thunk", body, env }, { expr: body, env })));
+                        this.literalItems.set(v.value, v.exprs);
+                    }
                     v = v.value;
                 } else if (v.kind === "thunk" || v.kind === "deferred") {
                     if (v.value !== undefined) { v = v.value; continue; }
@@ -3021,10 +3025,37 @@ export class Interpreter {
             return { kind: "cons", head: cell.head, tail: this.appendCode(cell.tail, ys, binds ? new Map([...before, ...binds]) : before) };
         });
     }
-    // A value's code: a list's items as written (an item without, as its
-    // value's code), anything else as its value is shown.
+    // The items of the literal a list was made from, while it is that list.
+    private literalItems = new WeakMap<Value, Expr[]>();
+    // A literal's text as written, its line breaks, indentation and comments
+    // kept: from its [ to the ] matching it, its lines moved left by the
+    // indentation of the line it starts on.
+    private originalText(literal: Expr): string | undefined {
+        const place = sourceLocations.get(literal);
+        if (!place) return undefined;
+        const lineStart = place.source.lastIndexOf("\n", place.start - 1) + 1;
+        const indent = /^ */.exec(place.source.slice(lineStart))![0].length;
+        const text = place.source.slice(place.start, place.end).split("\n")
+            .map((line, n) => n ? line.replace(new RegExp(`^ {0,${indent}}`), "") : line).join("\n");
+        if (text[0] !== "[") return undefined;
+        let depth = 0;
+        try {
+            for (const token of lex(text)) {
+                if (token.k !== "sym") continue;
+                if (["[", "(", "{"].includes(token.v)) depth++;
+                else if (["]", ")", "}"].includes(token.v) && --depth === 0) return text.slice(0, token.pos + 1);
+            }
+        } catch { /* text that does not lex alone is shown from its items */ }
+        return undefined;
+    }
+    // A value's code: a list's items as written (as the literal was, when it is
+    // one), an item without as its value's code, anything else as its value is
+    // shown.
     private writtenText(v: Value): string {
         const value = this.dataValue(v);
+        const items = this.literalItems.get(value), literal = items && listLiterals.get(items);
+        const original = literal && this.originalText(literal);
+        if (original) return original;
         if (value.kind === "range" || value.kind === "floatRange" || value.kind === "rationalRange" || !this.isList(value)) return this.renderString(value);
         const ITEM = { kind: "item", min: 0, follows: -1 } as const;
         return `[${itemsText(this.items(value).map(item => {

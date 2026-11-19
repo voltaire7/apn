@@ -139,6 +139,18 @@ example("debug shows code as written, unevaluated", `
 debug [missing + 1]
 `, ["[missing + 1]"]);
 
+example("debug shows a literal's source text, its layout and comments kept", `
+f = {
+    code = [
+        x = 1  # one
+        x + 1
+    ]
+    debug code
+}
+f
+debug (map (* 2) [1,2])  # built, so shown from its items
+`, ["[\n    x = 1  # one\n    x + 1\n]", "[2,4]"]);
+
 example("debug shows quoted code without running it", `
 action = print "unexpected"
 debug [action]

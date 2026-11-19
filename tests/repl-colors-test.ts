@@ -141,6 +141,9 @@ Deno.test("debug prints code, highlighted", () => {
         interp.paint = colored;
         interp.run(parse('debug [1 + 1, "hi"]'));
         if (output[0] !== '["hi", Vect 1 Int]' || output[1] !== highlightLine('[1 + 1, "hi"]')) throw new Error(JSON.stringify(output));
+        // A literal written over lines is highlighted line by line.
+        interp.run(parse("code = [\n    x = 1  # one\n    x + 1\n]\ndebug code"));
+        if (output[2] !== ["[", "    x = 1  # one", "    x + 1", "]"].map((line) => highlightLine(line)).join("\n")) throw new Error(JSON.stringify(output));
     } finally {
         console.log = log;
     }

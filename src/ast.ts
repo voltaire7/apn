@@ -716,6 +716,8 @@ export function typedForm(p: Pattern, parameters: (name: string) => number | und
 // Source metadata is kept out of AST serialization and source round-trips.
 export interface SourceLocation { source: string; file: string; start: number; end: number; }
 export const sourceLocations = new WeakMap<Expr, SourceLocation>();
+// A list literal by its items, for the text it was written as (debug).
+export const listLiterals = new WeakMap<Expr[], Expr>();
 
 // Sugar is the core code it expands into, as if written in its place: the
 // runtime and the checker run and type a sugar node as its expansion, with
