@@ -1,7 +1,7 @@
 import { APNError } from "./errors.ts";
 import { parse } from "./parser.ts";
 import { loadPath, readLoad, resolveModule, unknownModule } from "./modules.ts";
-import { type CheckOptions, checkTypes, dynamicEntry, importedValue, mayMutate, moduleType, moduleValue, recursiveValue, settleRecursive, type TypeBridge, type TypeScope } from "./type-checker.ts";
+import { type CheckOptions, checkTypes, type LocalName, dynamicEntry, importedValue, mayMutate, moduleType, moduleValue, recursiveValue, settleRecursive, type TypeBridge, type TypeScope } from "./type-checker.ts";
 import { type Expr, type TopLevel } from "./ast.ts";
 type Ty = ReturnType<typeof moduleValue>;
 
@@ -28,7 +28,7 @@ export class CheckingSession {
     patternTypes = new WeakMap<Expr, unknown>();
     bridge?: TypeBridge;
     // Names defined in local scopes so far (see CheckOptions.localNames).
-    private localNames = new Map<string, string | undefined>();
+    private localNames = new Map<string, LocalName | undefined>();
     /** Names the interpreter can resolve, so the checker can tell a typo from a runtime-only builtin. */
     runtimeNames?: () => Iterable<string>;
     /** The program's input when checking right before a run (see CheckOptions.inputs). */

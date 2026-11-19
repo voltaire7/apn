@@ -227,12 +227,14 @@ type Scope = TypeScope;
 // ++ and an item update infer again the items whose names change (codeList).
 type Formula = { items: FormulaItem[] };
 type FormulaItem = { expr?: Expr; scope?: Scope; type?: Ty; binds?: Map<string, Entry>; open?: Map<string, { expr: Expr; within?: Expr }>; slot?: Ty };
+export interface LocalName { owner: string; field: boolean }
 export interface CheckOptions {
     strict?: boolean;
     /** Names defined inside a definition, block or record, in this check or one
-     * before it (a REPL session's), each with its hint where it is unbound
-     * (where it is defined): out of scope there, not a missing import. */
-    localNames?: Map<string, string | undefined>;
+     * before it (a REPL session's), each with the definition holding it (if
+     * any) and whether it is a record's field: unbound, such a name is out of
+     * scope, not a missing import. */
+    localNames?: Map<string, LocalName | undefined>;
     /** A whole file, a block run once: its last statement, once one ran, is
      * in its monad too (a REPL input's is shown instead). */
     file?: boolean;
@@ -846,7 +848,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     let firstUnbound: Unbound | undefined;
     // The program's top-level scope, and the names defined in any other (see CheckOptions).
     let topScope: Scope | undefined;
-    const localNames = options.localNames ?? new Map<string, string | undefined>();
+    const localNames = options.localNames ?? new Map<string, LocalName | undefined>();
     // The scopes of record literals, whose names are fields.
     const recordScopes = new WeakSet<Scope>();
     // The names bound nowhere that the list item being inferred reads, by
@@ -2349,6 +2351,24 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : module ? `${openHint(module)} to use \`${name}\`` : undefined;
     }
 
+    // How to read a name defined inside another definition: a record's field
+    // by its path, anything else returned as the definition's last statement
+    // (return x when it is an action) and bound from it.
+    function localHint(name: string, place: LocalName | undefined): string | undefined {
+        if (!place) return undefined;
+        const { owner, field } = place;
+        if (field) return `\`${name}\` is a field of \`${owner}\`: write \`${owner}.${name}\``;
+        const entry = topScope?.get(owner);
+        let type = entry && resolve(entry.type);
+        // Bound from a top-level value only: a function's call, or a definition
+        // inside another, is left to the reader.
+        const bound = !!type && type.k !== "fn";
+        while (type?.k === "fn") type = resolve(type.output);
+        const action = type?.k === "variant" && type.name === "IO";
+        const last = action ? `return ${name}` : name;
+        return `\`${name}\` is defined inside \`${owner}\`: end \`${owner}\` with \`${last}\` to return it`
+            + (bound ? `, then \`${name} ${action ? "<-" : "="} ${owner}\`` : "");
+    }
     // Whether a value of a type is, or holds, an action (a function giving one
     // holds none: it shows as its source).
     function holdsAction(type: Ty, seen = new Set<Ty>()): boolean {
@@ -7780,9 +7800,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
         const owner = defining?.name;
-        if (scope !== topScope && !localNames.has(name)) localNames.set(name, !owner ? undefined
-            : recordScopes.has(scope) ? `\`${name}\` is a field of \`${owner}\`: write \`${owner}.${name}\``
-            : `\`${name}\` is defined inside \`${owner}\`, so only \`${owner}\` sees it`);
+        if (scope !== topScope && !localNames.has(name)) localNames.set(name, owner ? { owner, field: recordScopes.has(scope) } : undefined);
         try { defineIn(name, clauses, scope, location); }
         finally { if (ownDefinitions.has(scope)) ownDefinitions.get(scope)!.add(name); else ownDefinitions.set(scope, new Set([name])); }
     }
@@ -8606,8 +8624,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
         }
         // A name the program defines elsewhere, locally, is out of scope here:
-        // the hint says where it is defined, not which library module has it.
-        const hint = localNames.has(name) ? localNames.get(name) : firstUnbound.hint;
+        // the hint says how to get it from where it is defined, not which
+        // library module has it.
+        const hint = localNames.has(name) ? localHint(name, localNames.get(name)) : firstUnbound.hint;
         issues.push({ message: firstUnbound.inPattern ? `unknown constructor '${firstUnbound.name}' in a pattern` : `unbound variable '${firstUnbound.name}'`, hint, pos, len, source: loc?.source, file: loc?.file });
     } else if (options.strict && dynamicBoundaries && !issues.length) {
         const loc = firstUnknown && sourceLocations.get(firstUnknown);
