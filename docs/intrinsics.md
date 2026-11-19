@@ -17,6 +17,7 @@ is a definition with parameters, and an operator is a prelude function. Where
 the language cannot yet say something, this page says so: those gaps are what
 the language still lacks, not exceptions the built-ins enjoy. The types come
 first, then [the functions](#functions) (`src/natives.ts` lists every native).
+The few primitives these are written in are [the core](core.md).
 
 ## Bool
 

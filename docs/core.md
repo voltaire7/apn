@@ -1,0 +1,120 @@
+# The core
+
+**Draft.** This page is the core APN is moving toward: the few primitives the
+rest of the language should be written in. Each primitive says how far today's
+interpreter has it. [Semantics](semantics.md) stays authoritative for what a
+program means; this page is where the implementation should go.
+
+One idea runs through the language: **a value is what you can take apart, and
+every value comes apart the same way.**
+
+| Value | Taken apart as |
+| --- | --- |
+| A list | `x :: xs`, `[]` |
+| A natural number | `S k`, `Z` |
+| A function | `Takes t k`, any other value `Gives v` |
+| A record | its (key, value) pairs |
+| Code | a list of items as written |
+| A type | the set of its values |
+
+Two rules keep it small: every other form is sugar that behaves exactly as its
+expansion ([sugar](semantics.md#sugar), [equivalence](equivalence.md)), and every
+built-in behaves exactly as its APN definition ([intrinsics](intrinsics.md)).
+
+## The primitives
+
+| # | Primitive | Written | Today |
+| --- | --- | --- | --- |
+| 1 | Names and application | `f x` | present |
+| 2 | Clauses: lambdas with patterns and guards, tried most specific first | `p \| g -> e` | present |
+| 3 | A scope binding its names for all of itself | `{ xs = 1 :: xs; ... }` | present |
+| 4 | Making data: a tagged value | `intrinsics.tag` | present |
+| 5 | Views: a pattern defined by a function that takes a value apart | `S k`, `Takes t k` | special-cased |
+| 6 | Sets: types as values, union, intersection, refinement, membership | `A \| B`, `x : T` | present |
+| 7 | Actions as values, run only by statements and `<-` | `x <- m` | present |
+| 8 | Code as data: a list keeps its items as written | `[x + 1]` | present |
+| 9 | Evaluation order: laziness by default, `seq` to force, `fail` to stop | `seq a b` | present |
+
+Literals (numbers, characters, strings) are spellings of values whose models
+are in [intrinsics](intrinsics.md). The natives no APN definition can replace
+are grouped there, under
+[what only the interpreter can do](intrinsics.md#what-only-the-interpreter-can-do):
+they are effects (7), evaluation order (9), reading values as data (6) and
+code as data (8).
+
+### 1–3. Functions
+
+A definition is clauses (`f x = e` is `f = x -> e`, and `f p = a; f q = b` is
+`f x = x ~ [p -> a, q -> b]`), so clauses and application are the whole of
+functions. A block's bindings are the one thing a lambda does not express: a
+name new to the block is bound for the whole block, which is what recursion
+needs.
+
+### 4–5. Data and views
+
+`intrinsics.tag` makes a constructor's values, and a constructor pattern takes
+them apart. A **view** is the same pattern over a value that is not stored that
+way: a number is not stored as `S (S Z)`, nor a function as `Takes`. Today
+each view is written into the interpreter's matcher, the checker's binding, a
+hand-written checker type and the linter, so one view costs four places. As a
+primitive, a view would be a builder and a matcher, given by a function rather
+than a keyword:
+
+```apn
+S = view (k -> k + 1) (n | n > 0 -> [n - 1])
+Takes = view (t, k -> (k : t -> b)) (f | isFunction f -> [inputOf f, f])
+Gives = view (v -> v) (v | !isFunction v -> [v])
+```
+
+The matcher gives the fields or does not match. One arity per name holds for
+free: the builder takes as many arguments as the matcher gives fields. `view`
+is the primitive; `isFunction` and `inputOf` are the two reads of a value that
+`Takes` needs, natives reading values as data (6). A
+constructor made by `tag` would be the view whose matcher reads the tag, so
+views would be the one way to take data apart.
+
+### 6. Sets
+
+A type is the set of its values: `|` and `&` are union and intersection,
+`intrinsics.refine` is a refinement (`(n : Int) | n > 0`), and `x : T` asks
+for membership, converting where `T` declares a conversion
+([values are sets](semantics.md#values-are-sets)). The static checker is the
+same sets decided early: what it cannot decide is checked as the program runs.
+
+### 7–9. Effects, code, order
+
+An action is a function of the world ([intrinsics](intrinsics.md#effects-and-references)),
+so applying one runs nothing. A list literal is code: its items keep the scope
+they were written in, so quoting needs no form of its own. Evaluation is lazy;
+`seq` and `fail` are the two things a definition can use but not make.
+
+## What the core would remove
+
+| Today | In the core |
+| --- | --- |
+| `S`/`Z` and `Takes`/`Gives` written into the matcher, checker and linter | prelude views |
+| Typed patterns `(x : Int32)` as their own pattern | a view matching members of `Int32`, binding the converted value |
+| A checker rule written by hand for each native (`Takes`, `S`, ...) | the type of its definition |
+| Natives with an APN definition in [intrinsics](intrinsics.md) (list functions, maps, `truthy`, `++`, `get`, `with`, ranges, the list and action instances) | prelude definitions, with the interpreter's version kept as a faster way to compute the same thing |
+
+`tests/intrinsics-test.ts` already runs the definitions against the natives,
+so moving a native to the prelude is checked by a test that exists.
+
+## Open questions
+
+- **How a view is typed.** The checker must read the fields' types from the
+  matcher (`n | n > 0 -> [n - 1]` gives a `UInt`), as it reads a clause's.
+- **Whether typed patterns are views.** `(x : T)` both tests and converts; a
+  view that binds the converted value would cover it, but a program's own `to`
+  instances must still take part.
+- **Whether records need a form of their own.** A record is already code, a list
+  of bindings; its literal, access (`v.x`) and update forms are sugar for `get`
+  and `with`, but the parser keeps them as nodes of their own.
+
+## Order of work
+
+1. Views as a primitive; `S`/`Z` and `Takes`/`Gives` move to the prelude.
+2. Typed patterns as views, if the open question above allows it.
+3. The checker types natives from their definitions where they have one.
+4. Natives with a definition move to the prelude; the interpreter keeps them
+   only as faster ways to compute.
