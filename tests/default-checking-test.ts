@@ -1181,10 +1181,13 @@ Deno.test("a list compared with one value hints at comparing its items", () => {
         ["print ([1,2,3] < 2)", "(< 2)"],
         ["print (2 >= [1,2,3])", "(2 >=)"],
         ["n = 1\nprint ([1,2,3] <= n + 1)", "(<= (n + 1))"],
+        ['[..] <- import "std/sequence"\nprint ([1,2,3] < 2)', "(< 2)"],
     ]) {
         try { run(session(), source); } catch (error) {
             const e = error as { message: string; hint?: string };
-            if (!e.message.startsWith("cannot compare") || e.hint !== `compare each item with \`${section} * xs\`, or every item with \`all ${section} xs\``) {
+            const hint = `compare each item with \`${section} * xs\`, or every item with \`all ${section} xs\``
+                + (source.includes("import") ? "" : ' (add `[..] <- import "std/sequence"` first)');
+            if (!e.message.startsWith("cannot compare") || e.hint !== hint) {
                 throw new Error(`${source}: ${e.message} (${e.hint})`);
             }
             continue;

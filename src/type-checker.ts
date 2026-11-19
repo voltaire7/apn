@@ -1452,7 +1452,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // The section the printer writes, operand parenthesized where needed.
                 const item: Expr = { t: "var", name: "$S" };
                 const section = exprToSource({ t: "lambda", params: ["$S"], body: { ...written, ...listLeft ? { l: item } : { r: item } } });
-                hint = `compare each item with \`${section} * xs\`, or every item with \`all ${section} xs\``;
+                // all is the library's: its import too, unless the program has it.
+                const module = !topScope?.has("all") && standardModule("all");
+                hint = `compare each item with \`${section} * xs\`, or every item with \`all ${section} xs\``
+                    + (module ? ` (${openHint(module)} first)` : "");
             }
             return problem(`cannot compare ${text(a)} and ${text(b)}`, undefined, hint);
         }
