@@ -1222,6 +1222,26 @@ unbox (Box x) = x               # unbox (Box 5) is 5
 tag Option Some [5] == Some 5   # True: a declared constructor's own value
 ```
 
+A **view** is a pattern defined by a function: `view build match` is a
+constructor that builds with `build`, and whose pattern takes a value apart by
+`match`, a function giving the list of its fields, or matching nothing (no
+clause of it fits). The pattern takes as many fields as `build` takes
+arguments; a matcher giving another count is an error. A nullary view (`build`
+a value, not a function) is that value wherever it is used:
+
+```apn
+Nat = view (k -> k + 1) (n | n > 0 -> [n - 1])
+Zero = view 0 (0 -> [])
+fact Zero = 1
+fact (Nat k) = (k + 1) * fact k
+fact 5                          # 120
+Nat 4                           # 5
+```
+
+The fields' types are what the matcher gives, and what its pattern takes apart
+is what the matcher takes. Which values a view's pattern matches only the
+matcher decides, so the checker leaves it to the run.
+
 A type in a pattern takes its parameters, then a value. Applied to exactly its
 parameters it matches a type value, each name binding the part in its place:
 `(Option t)` given `Option Int` binds `t` to `Int`, `(Vect n a)` given `Vect 3

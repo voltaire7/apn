@@ -4184,6 +4184,33 @@ export class Interpreter {
         }
         return undefined;
     }
+    // The view a name is bound to, if it is one: the binding read only as far
+    // as the view itself (a nullary view, used as a value, is what it builds).
+    private viewNamed(name: string): Extract<Value, { kind: "native" }> | undefined {
+        let v = this.env.get(name);
+        if (!v) return undefined;
+        v = this.force(v);
+        while (v.kind === "closure" && v.params.length === 0 && !v.applied?.length) v = this.force(this.callBlockFn(v));
+        if (v.kind === "native" && v.arity === 0 && !v.view) v = this.force(this.reference(v));
+        const view = v.kind === "native" && v.view ? v : this.nullaryViews.get(v);
+        return view?.kind === "native" ? view : undefined;
+    }
+    // The value each nullary view builds, and the view (see view).
+    private nullaryViews = new WeakMap<Value, Value>();
+    // A view's pattern, its fields matched against what its matcher gives.
+    private matchView(view: Extract<Value, { kind: "native" }>, p: Extract<Pattern, { p: "constr" }>, v: Value, binds: Map<string, Value>): boolean {
+        if (p.args.length !== view.arity) {
+            throw new APNError("runtime", `${p.tag} takes ${view.arity} field${view.arity === 1 ? "" : "s"}, not ${p.args.length}`);
+        }
+        const given = this.force(this.apply(view.view!, v, true));
+        if (given.kind === "nomatch") return false;
+        const fields = this.isList(this.demand(given)) ? this.items(this.demand(given)) : undefined;
+        if (!fields || fields.length !== view.arity) {
+            throw new APNError("runtime", `${p.tag}'s matcher gives ${fields ? `${fields.length} field${fields.length === 1 ? "" : "s"}` : "no list of fields"}, and ${p.tag} takes ${view.arity}`,
+                { hint: "a view's matcher gives a list of the fields its builder takes" });
+        }
+        return p.args.every((q, i) => this.matchPattern(q, fields[i], binds));
+    }
     // Whether a Takes or Gives pattern is the builtin view, not a program's own
     // constructor of that name.
     private builtinView(tag: string): boolean {
@@ -5465,6 +5492,17 @@ export class Interpreter {
                 let acc = args[1];
                 for (const x of this.elements(args[2])) acc = this.demand(this.apply(this.apply(f, acc), x));
                 return acc;
+            }
+            // view build match: a builder whose pattern takes values apart by match.
+            case "view": {
+                const [match] = [args[1]], arity = this.arity(args[0]) ?? 0;
+                // A nullary view is the value it builds wherever it is used, so
+                // that value is what its name holds: it remembers the view.
+                const build = arity ? args[0] : this.force(args[0]);
+                const view: Value = { kind: "native", name: "view", arity, applied: [], view: match,
+                    invoke: (xs: Value[]) => xs.reduce((f: Value, x) => this.apply(f, x), build) };
+                if (!arity) this.nullaryViews.set(build, view);
+                return view;
             }
             // Takes t k is k, taking only t; Gives v is v.
             case "Takes": {
@@ -7010,6 +7048,10 @@ export class Interpreter {
                     try { converted = castNumeric(p.tag, v); } catch { return false; }
                     return this.matchPattern(p.args[0], NUMERIC_CLASSES.has(p.tag) ? v : converted, binds);
                 }
+                // A view's pattern: its matcher takes the value apart into the
+                // fields, or does not match (a variant of the tag is its own).
+                const view = v.kind === "variant" && v.tag === p.tag ? undefined : this.viewNamed(p.tag);
+                if (view) return this.matchView(view, p, v, binds);
                 // Takes t k and Gives v take any value apart: a function as the
                 // type it accepts and itself, any other value as itself.
                 if ((p.tag === "Takes" && p.args.length === 2 || p.tag === "Gives" && p.args.length === 1) && this.builtinView(p.tag)) {

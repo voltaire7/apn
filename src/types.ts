@@ -61,7 +61,8 @@ export type Value =
     // A partly applied closure keeps its whole parameter list and the arguments
     // applied so far, for showing it: (a b -> a + b) 1.
     | { kind: "closure"; params: string[]; body: Expr; env?: Env; mutableValue?: Value; whole?: string[]; applied?: Value[]; names?: string }
-    | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string; family?: VariantFamily; invoke?: (args: Value[]) => Value }
+    // view: a view's matcher (see the view native): its pattern takes a value apart by it.
+    | { kind: "native"; name: string; arity: number; applied: Value[]; tag?: string; family?: VariantFamily; invoke?: (args: Value[]) => Value; view?: Value }
     // fallback: an overloaded operator's previous meaning, applied when no clause matches.
     | { kind: "clauseFn"; name: string; clauses: DefClause[]; arity: number; env: Env; applied: Value[]; fallback?: Value }
     | { kind: "floatRange"; lo: number; step: number; hi: number | null; index?: number }

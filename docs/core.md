@@ -29,7 +29,7 @@ built-in behaves exactly as its APN definition ([intrinsics](intrinsics.md)).
 | 2 | Clauses: lambdas with patterns and guards, tried most specific first | `p \| g -> e` | present |
 | 3 | A scope binding its names for all of itself | `{ xs = 1 :: xs; ... }` | present |
 | 4 | Making data: a tagged value | `intrinsics.tag` | present |
-| 5 | Views: a pattern defined by a function that takes a value apart | `S k`, `Takes t k` | special-cased |
+| 5 | Views: a pattern defined by a function that takes a value apart | `view build match` | present; `S`, `Takes` still special-cased |
 | 6 | Sets: types as values, union, intersection, refinement, membership | `A \| B`, `x : T` | present |
 | 7 | Actions as values, run only by statements and `<-` | `x <- m` | present |
 | 8 | Code as data: a list keeps its items as written | `[x + 1]` | present |
@@ -57,8 +57,9 @@ them apart. A **view** is the same pattern over a value that is not stored that
 way: a number is not stored as `S (S Z)`, nor a function as `Takes`. Today
 each view is written into the interpreter's matcher, the checker's binding, a
 hand-written checker type and the linter, so one view costs four places. As a
-primitive, a view would be a builder and a matcher, given by a function rather
-than a keyword:
+primitive, a view is a builder and a matcher, given by a function rather than a
+keyword ([views](semantics.md#patterns-variants-and-scope)); the built-in views
+are to be written this way:
 
 ```apn
 S = view (k -> k + 1) (n | n > 0 -> [n - 1])

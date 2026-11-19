@@ -152,6 +152,9 @@ interface Known {
 interface Summary { clauses: (ClauseOrder & { body: Expr; guard?: Expr })[]; scope: Scope }
 interface Entry {
     type: Ty;
+    // A view's matcher (Nat = view build match): its pattern's fields are what
+    // the matcher gives.
+    view?: Ty;
     // A constructor whose rules give values of other types (sin 0 = 0 before
     // sin x = _): what applying it gives, its type or one of theirs.
     widened?: Ty;
@@ -849,6 +852,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The program's top-level scope, and the names defined in any other (see CheckOptions).
     let topScope: Scope | undefined;
     const localNames = options.localNames ?? new Map<string, LocalName | undefined>();
+    // The names bound to views, whose patterns no known value decides here.
+    const viewNames = new Set<string>([...options.initial?.entries() ?? []].filter(([, entry]) => entry.view).map(([name]) => name));
     // The scopes of record literals, whose names are fields.
     const recordScopes = new WeakSet<Scope>();
     // The names bound nowhere that the list item being inferred reads, by
@@ -2635,6 +2640,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const value = patternSource(p.args[p.args.length - 1]);
                     problem(`'${p.tag}' in a pattern takes ${parameters} type${parameters === 1 ? "" : "s"}, or ${parameters + 1} patterns for a value`, e,
                         `write (${p.tag} ${"_ ".repeat(parameters)}${value})`);
+                }
+                // A view's pattern: its fields are what its matcher gives, and
+                // what it takes apart is what the matcher takes.
+                if (entry?.view) {
+                    const matcher = resolve(copy(entry.view));
+                    const given = matcher.k === "fn" ? resolve(matcher.output) : undefined;
+                    const fields = given?.k === "list" ? given.items ?? p.args.map(() => given.element) : p.args.map(() => variable());
+                    if (fields.length !== p.args.length) problem(`${p.tag} takes ${fields.length} field${fields.length === 1 ? "" : "s"}, not ${p.args.length}`, e);
+                    if (matcher.k === "fn") unify(matcher.input, expected, e);
+                    p.args.forEach((q, n) => bind(q, fields[n] ?? variable(), scope, e, bound));
+                    return;
                 }
                 // Takes t k and Gives v, the builtin view: any value, a function
                 // taken apart as the type it accepts and itself, any other as
@@ -7255,6 +7271,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (p.p === "string") return argument.string === p.v;
         if (p.p === "char") return argument.char === p.v;
         if (p.p === "range") return !!argument.index && !argument.index.terms.size && argument.index.constant >= p.lo && argument.index.constant <= p.hi;
+        // A view's matcher decides at runtime.
+        if (p.p === "constr" && viewNames.has(p.tag)) return false;
         const n = naturalArgument(p, argument);
         if (n !== undefined) return p.p === "constr" && (p.tag === "Z" ? n === 0n : n > 0n && irrefutable(p.args[0]));
         // A value of a program's own type, as it is, binding it whole.
@@ -7294,6 +7312,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (p.p === "char") return argument.char !== undefined && argument.char !== p.v;
         if (p.p === "range") return !!argument.index && !argument.index.terms.size && (argument.index.constant < p.lo || argument.index.constant > p.hi);
         if (p.p === "constr" && TYPE_NAMES.includes(p.tag)) return low === -1000 && high === -1000;
+        if (p.p === "constr" && viewNames.has(p.tag)) return false;
         const n = naturalArgument(p, argument);
         if (n !== undefined) return p.p === "constr" && (p.tag === "Z" ? n !== 0n : n <= 0n);
         // A typed pattern names a type, not a constructor: (s : Shape) takes Circle 1.
@@ -7819,7 +7838,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
         const owner = defining?.name;
         if (scope !== topScope && !localNames.has(name)) localNames.set(name, owner ? { owner, field: recordScopes.has(scope) } : undefined);
-        try { defineIn(name, clauses, scope, location); }
+        try {
+            defineIn(name, clauses, scope, location);
+            // A view's definition (X = view build match) keeps its matcher's
+            // type for its pattern.
+            const [clause] = clauses;
+            let body = clause?.body;
+            while (body?.t === "block" && body.style === "(" && body.stmts.length === 1) body = body.stmts[0];
+            const entry = scope.get(name);
+            if (clauses.length === 1 && !clause.params.length && body?.t === "app" && body.f.t === "app" && body.f.f.t === "var" && body.f.f.name === "view"
+                && scope.get("view")?.builtin && entry) {
+                entry.view = infer(body.a, scope);
+                viewNames.add(name);
+            }
+        }
         finally { if (ownDefinitions.has(scope)) ownDefinitions.get(scope)!.add(name); else ownDefinitions.set(scope, new Set([name])); }
     }
     // The names each scope's own definitions bind (a block's scope starts
@@ -8375,6 +8407,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Prefix - is the prelude's negate (toAST writes -x as ["negate","x"]).
     scope.set("intrinsics.negate", { type: { k: "intrinsic", name: "negate", arity: 1 } });
     native("while", [list(variable()), variable()], io(empty));
+    // view build match: what build makes, its pattern taking values apart by match.
+    {
+        const built = variable();
+        scope.set("view", { type: fn(built, fn(fn(variable(), variable()), built)) });
+    }
     native("for", [list(variable()), variable()], io(empty));
     // Natural numbers are UInt: Z is UInt 0, S n the next one (converting n as UInt n does).
     scope.set("Z", { type: atom("UInt"), number: { kind: "int", v: 0n, typeName: "UInt" } });

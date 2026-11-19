@@ -135,6 +135,31 @@ print (True ? 7 : missing)
 print (False ? missing : 8)
 `, ["7", "8"]);
 
+example("a view is a pattern defined by a function taking values apart", `
+Nat = view (k -> k + 1) (n | n > 0 -> [n - 1])
+Zero = view 0 (0 -> [])
+fact Zero = 1
+fact (Nat k) = (k + 1) * fact k
+print [fact 5, Nat 4, Zero]
+Pair = view (a, b -> [a,b]) ([a,b] -> [a,b])
+swap (Pair a b) = Pair b a
+print (swap [1,2])
+print (3 ~ [Nat k -> k, _ -> -1])
+print (0 ~ [Nat k -> k, _ -> -1])
+`, ["[120,5,0]", "[2,1]", "2", "-1"]);
+
+failure("a view's pattern takes as many fields as its builder", `
+Nat = view (k -> k + 1) (n | n > 0 -> [n - 1])
+f (Nat a b) = a
+print (f 3)
+`, "Nat takes 1 field, not 2");
+
+failure("a view's matcher gives a list of its fields", `
+Bad = view (k -> k) (n -> n)
+f (Bad k) = k
+print (f 3)
+`, "Bad's matcher gives no list of fields");
+
 example("Takes and Gives take any value apart: a function as what it takes", `
 succ (n : Int) = n + 1
 describe (Takes t _) = format "takes %" [t]
