@@ -1442,7 +1442,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // constructor given types the type it names (Box Int).
             const typed = (x: Ty): boolean => x.k === "type" || !!sharedType(x) || x.k === "atom" && x.name === "Type" || x.k === "list" && (x.items ? x.items.every(item => typed(resolve(item))) : typed(resolve(x.element)));
             if (typed(a) && typed(b)) return atom("Bool");
-            return problem(`cannot compare ${text(a)} and ${text(b)}`);
+            // A list and one value, as written ([1,2,3] < 2): what is meant is
+            // its items, each or every one, compared with the value.
+            const written = t.written?.t === "binop" && ["<", ">", "<=", ">="].includes(t.written.op) ? t.written : undefined;
+            const single = (x: Ty) => numeric(x) || x.k === "atom" && ["String", "Char", "Bool"].includes(x.name);
+            const listLeft = a.k === "list" && single(b), listRight = b.k === "list" && single(a);
+            let hint: string | undefined;
+            if (written && (listLeft || listRight)) {
+                // The section the printer writes, operand parenthesized where needed.
+                const item: Expr = { t: "var", name: "$S" };
+                const section = exprToSource({ t: "lambda", params: ["$S"], body: { ...written, ...listLeft ? { l: item } : { r: item } } });
+                hint = `compare each item with \`${section} * xs\`, or every item with \`all ${section} xs\``;
+            }
+            return problem(`cannot compare ${text(a)} and ${text(b)}`, undefined, hint);
         }
         if (t.op === "++") {
             if (a.k === "list" && b.k === "list") return list(union([a.element, b.element]));

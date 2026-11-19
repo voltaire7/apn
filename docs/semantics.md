@@ -1947,8 +1947,9 @@ Int & Positive                  # the Ints that are Positive
 round. Inclusion is a partial order: two lists neither of which starts the
 other are unordered. Sorting uses dictionary order instead, the standard
 library's `compare`. Values of different kinds do not compare (`3 <= Int` is an
-error: `3` is a member of `Int`, `3 : Int`, not a part of it), and a value is
-never a type's subset. `==` and `!=` take any two values: ones of different
+error: `3` is a member of `Int`, `3 : Int`, not a part of it; `[1,2,3] < 2` is
+one too, whose hint compares the items, each with `(< 2) * xs` or every one with
+`all (< 2) xs`), and a value is never a type's subset. `==` and `!=` take any two values: ones of different
 kinds are never equal (`1 == "a"`, `"" == []` and `[a = 1] == [1]` are
 `False`), and records are equal where their fields are, in any order.
 

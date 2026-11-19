@@ -1174,6 +1174,24 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
     }
     if (run(session(), 'std <- import "std"\n[..] = std.option\nfunc (Some x::xs) = [x,xs]; func [Some 1, None]') !== "[1, [None]]") throw new Error("with the import");
 });
+// A list compared with one value is no comparison of sets: the hint compares
+// its items, each or every one, with the section as written.
+Deno.test("a list compared with one value hints at comparing its items", () => {
+    for (const [source, section] of [
+        ["print ([1,2,3] < 2)", "(< 2)"],
+        ["print (2 >= [1,2,3])", "(2 >=)"],
+        ["n = 1\nprint ([1,2,3] <= n + 1)", "(<= (n + 1))"],
+    ]) {
+        try { run(session(), source); } catch (error) {
+            const e = error as { message: string; hint?: string };
+            if (!e.message.startsWith("cannot compare") || e.hint !== `compare each item with \`${section} * xs\`, or every item with \`all ${section} xs\``) {
+                throw new Error(`${source}: ${e.message} (${e.hint})`);
+            }
+            continue;
+        }
+        throw new Error(`accepted: ${source}`);
+    }
+});
 // A name the program defines locally elsewhere, in this input or one before
 // it, is out of scope where it is read: the hint says how to get it from where
 // it is defined (no module defining it), and a block no definition names gives
