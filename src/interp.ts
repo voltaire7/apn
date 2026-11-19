@@ -171,7 +171,7 @@ export class Interpreter {
     assetUrl?: (path: string) => string | undefined;
     programArgs: string[] = [];
     // Colors rendered text by its kind, for echo on a terminal (see repl.ts).
-    paint?: (text: string, kind?: Value["kind"] | "key") => string;
+    paint?: (text: string, kind?: Value["kind"] | "key" | "code") => string;
     // The REPL loop repl runs (see session): the command line's (repl.ts).
     interactive?: () => void;
     // The outermost run's program and the statement it is running.
@@ -1261,52 +1261,52 @@ export class Interpreter {
     // step n v — descend n levels into v's unevaluated structure (resolving
     // names, unwrapping blocks/thunks/0-arg bodies) and return a LIVE 0-arg
     // action over the level's expression: debug shows its source, print RUNS it.
+    // step n code: n levels into code's (last) item, as code: a name goes to
+    // what it is defined as, a block to its last statement, a 0-argument
+    // action or a thunk to its body, and anything else computable evaluates one
+    // level (step 1 [1 + 2] is [3]); an action stays as written.
     stepNative(argsIn: Value[]): Value {
         const n = this.dataValue(argsIn[0]);
         if (n.kind !== "int" || n.v < 0) {
             throw new APNError("runtime", "step needs a non-negative int count");
         }
-        const t = argsIn[1];
-        // the argument's thunk wrapper is NOT a level — level 0 is its body
-        let expr: import("./ast.ts").Expr | null = t.kind === "thunk" ? t.body : null;
+        const code = this.dataValue(argsIn[1]);
+        const item = this.isList(code) ? this.items(code).at(-1) : undefined;
+        const written = item && this.written(item);
+        if (!written) throw new APNError("runtime", "step takes code: a list's items as written", { hint: "quote what to step into: step 1 [inner]" });
+        let expr: Expr | null = written.expr, env = written.env;
         let val: Value = { kind: "list", v: [] };
         for (let i = 0n; i < n.v; i++) {
             checkInterrupt();
             // free descents: names resolve, blocks expose their last statement
             for (;;) {
                 if (expr !== null && expr.t === "var") {
-                    val = this.env.get(expr.name) ?? { kind: "list", v: [] };
+                    val = env.get(expr.name) ?? { kind: "list", v: [] };
                     expr = null;
                 } else if (expr !== null && expr.t === "block") {
-                    const last = expr.stmts[expr.stmts.length - 1];
+                    const last: Expr | undefined = expr.stmts[expr.stmts.length - 1];
                     if (!last || last.t === "stmDef" || last.t === "patDef") break;
                     expr = last;
                 } else break;
             }
-            // the level: a 0-arg action or a thunk opens its body (structural);
-            // anything computable evaluates ONE level (step 1 [1 + 2] => [3])
-            const act = val.kind === "closure" && val.params.length === 0
-                ? val
-                : val.kind === "thunk"
-                ? val
-                : null;
+            const act: Extract<Value, { kind: "closure" | "thunk" }> | null = val.kind === "closure" && val.params.length === 0 ? val : val.kind === "thunk" ? val : null;
             if (act !== null) {
                 expr = act.body;
+                env = act.env ?? env;
                 val = { kind: "list", v: [] };
                 continue;
             }
-            if (
-                expr === null ||
-                ["int", "float", "bool", "string", "char"].includes(expr.t)
-            ) break;
+            if (expr === null || ["int", "float", "bool", "string", "char"].includes(expr.t)) break;
             // An action has no source form: the level stays as written.
-            const level = this.demand(this.eval(expr));
+            const outer = this.env;
+            this.env = env;
+            let level: Value;
+            try { level = this.demand(this.eval(expr)); } finally { this.env = outer; }
             if (level.kind === "io" || level.kind === "pending") break;
             expr = this.valueToExpr(level);
             val = { kind: "list", v: [] };
         }
-        if (expr === null) return val;
-        return { kind: "closure", params: [], body: expr, env: this.env };
+        return this.codeList([expr ?? this.valueToExpr(val)], env);
     }
 
 
@@ -5258,21 +5258,6 @@ export class Interpreter {
             try { return this.demand(this.eval({ t: "block", stmts, style: "{" })); } finally { this.env = caller; }
         }
         if (name === "step") return this.stepNative(argsIn);
-        if (name === "debug") {
-            // debug = SOURCE inspection: show the argument as written; if what it
-            // produces is a 0-arg action (and it wasn't a bare name), show its BODY.
-            const t = argsIn[0];
-            const forced = this.force(t);
-            let text: string;
-            if (t.kind === "thunk") {
-                const isVar = t.body.t === "var";
-                const act = forced.kind === "closure" && forced.params.length === 0
-                    ? forced : forced.kind === "thunk" ? forced : null;
-                text = !isVar && act ? exprToSource(act.body) : exprToSource(t.body);
-            } else text = valueToString(t);
-            console.log(text);
-            return { kind: "list", v: [] };
-        }
         // These natives select their own demand points. In particular take 0
         // never inspects its input, and list producers defer their first cell.
         if (name === "__constr") return { kind: "variant", tag: tag!, v: argsIn };
@@ -5296,7 +5281,14 @@ export class Interpreter {
             }
             return rest;
         }
-        const args = argsIn.map((x, index) => ["print", "echo", "emit", "toString", "format"].includes(name) || (name === "foldl" && index === 0) ? this.demand(x) : this.dataValue(x));
+        // debug shows a value as code: a list's items as written, any other value
+        // as source writes it (strings quoted), highlighted on a terminal.
+        if (name === "debug") {
+            const text = this.writtenText(argsIn[0]);
+            console.log(this.paint ? this.paint(text, "code") : text);
+            return mkList([]);
+        }
+        const args = argsIn.map((x, index) => ["print", "emit", "toString", "format"].includes(name) || (name === "foldl" && index === 0) ? this.demand(x) : this.dataValue(x));
         const a = args[0];
         // An undecided value reaching a builtin that needs a plain value.
         if (!TAKES_UNDECIDED.has(name)) for (const x of args) if (x.kind === "pending") this.ambiguous(x);
@@ -5309,10 +5301,6 @@ export class Interpreter {
                 return mkList([]);
             case "emit":
                 this.printValue(a, false);
-                return mkList([]);
-            // The REPL's echo: strings quoted, colored on a terminal.
-            case "echo":
-                this.printValue(a, true, false, this.paint);
                 return mkList([]);
             case "repl":
                 if (!this.interactive) throw new APNError("runtime", "repl needs a terminal: run the program with apn");

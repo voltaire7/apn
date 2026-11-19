@@ -93,7 +93,7 @@ Deno.test("toAST does not evaluate its code", () => {
     if (shown(session(), "toAST [undefinedName 1]") !== '["[]", ["undefinedName", 1]]') throw new Error("evaluated");
 });
 
-// toLambda desugars code to lambdas and application, as code: probe shows
+// toLambda desugars code to lambdas and application, as code: debug shows
 // it, and its values are the original's (a binding's item aside: its name is
 // a lambda's parameter).
 for (const [source, expected] of [

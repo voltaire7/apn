@@ -85,10 +85,9 @@ enumFromThen a b = intrinsics.range a b []
 enumFromTo a c = intrinsics.range a [] c
 enumFromThenTo a b c = intrinsics.range a b c
 # A list keeps its items as written: it is code, edited as any list is (++
-# joins code, an item update replaces an item). probe shows the code, print
+# joins code, an item update replaces an item). debug shows the code, print
 # the values; reduce gives the values alone. toAST gives the code as lists
 # (see lib/std/syntax.apn).
-probe x = print (intrinsics.written x)
 reduce xs = map (x -> x) (intrinsics.yields xs)
 toAST code = intrinsics.syntax code
 

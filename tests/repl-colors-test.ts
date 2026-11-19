@@ -128,19 +128,19 @@ Deno.test("a type's numeric arguments are colored as numbers", () => {
     if (output.replace(/\x1b\[[0-9;]*m/g, "") !== "Vect 2 (Vect 1 Int)") throw new Error(output);
 });
 
-// echo x prints what the REPL echoes for x, colored when paint is set.
-Deno.test("echo prints as the REPL echoes", () => {
+// debug x prints x as code (a list's items as written), highlighted when
+// paint is set, as the REPL highlights code.
+Deno.test("debug prints code, highlighted", () => {
     const output: string[] = [];
     const log = console.log;
     console.log = (...args: unknown[]) => output.push(args.map(String).join(" "));
     try {
         const interp = new Interpreter();
         interp.enableChecking();
-        interp.run(parse('echo ["hi", Vect 1 Int]'));
+        interp.run(parse('debug ["hi", Vect 1 Int]'));
         interp.paint = colored;
-        interp.run(parse('echo "hi"'));
-        const expected = echo(interp, interp.run(parse('"hi"')));
-        if (output[0] !== '["hi", Vect 1 Int]' || output[1] !== expected) throw new Error(JSON.stringify(output));
+        interp.run(parse('debug [1 + 1, "hi"]'));
+        if (output[0] !== '["hi", Vect 1 Int]' || output[1] !== highlightLine('[1 + 1, "hi"]')) throw new Error(JSON.stringify(output));
     } finally {
         console.log = log;
     }

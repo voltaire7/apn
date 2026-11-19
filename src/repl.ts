@@ -100,10 +100,10 @@ function lastIsPrintCall(src: string): boolean {
         if (!last || last.t !== "expr") return false;
         let e = last.value;
         for (;;) {
-            if (e.t === "app" && e.f.t === "var" && ["print", "echo", "emit"].includes(e.f.name)) return true;
+            if (e.t === "app" && e.f.t === "var" && ["print", "debug", "emit"].includes(e.f.name)) return true;
             if (e.t === "pipe") {
                 const c = e.f;
-                if (c.t === "var" && ["print", "echo", "emit"].includes(c.name)) return true;
+                if (c.t === "var" && ["print", "debug", "emit"].includes(c.name)) return true;
                 e = c;
                 continue;
             }
@@ -203,8 +203,9 @@ const A = {
 const paint = (code: string, s: string) => code + s + A.reset;
 
 // Text the interpreter renders, colored by its kind (Interpreter.paint).
-export function colored(text: string, kind?: Value["kind"] | "key"): string {
+export function colored(text: string, kind?: Value["kind"] | "key" | "code"): string {
     if (kind === "key") return text;
+    if (kind === "code") return highlightLine(text);
     if (kind === "int" || kind === "float" || kind === "rational" || kind === "complex") return highlightLine(text);
     const type = kind === "string" || kind === "char" ? "string"
         : kind === "bool" ? "keyword"
@@ -324,7 +325,7 @@ function helpText(): string {
         `  operators spaced on both sides or neither: 1 + 2, 1+2 (not 1 +2); -x negates, f -1 passes -1`,
         `  ; or newline       statement separators (blocks & top level)`,
         `  print, readFile, fetch, set ... are IO actions: statements and <- run them`,
-        `  echo x prints x as the REPL shows it; repl opens a session on the names where it runs`,
+        `  repl opens a session on the names where it runs`,
         `  x <- action        run it now and bind its result (outer value only); x <- return v is strict`,
         `  f n = { print n; return n }   a block running an action is an action; it ends with one`,
         `  IO [] is the type of an action yielding []; IO [] { print "hi" } checks one; return x`,
@@ -372,8 +373,8 @@ function helpText(): string {
         `  both sides of = are required; use [] for an empty result`,
         ``,
         `print x    any value (strings raw), returns x;  emit  = no newline`,
-        `debug x    shows the SOURCE as written;  step n v  descends v's body`,
-        `probe [1 + 1] => [1 + 1]: a list is code; print shows values, reduce gives them`,
+        `debug x    x as code, colored: debug [1 + 1] => [1 + 1], debug "a" => "a"; reduce gives values`,
+        `step n code  n levels into code: step 2 [inner] => its body's last statement`,
         `[x = 1] ++ [x + 1] joins code: [2]; code 0 = (x = 10) replaces an item; code.x reads x, code.x = 5 rebinds it`,
         `toAST [1 + 2] => ["[]", ["+", 1, 2]]; import "std/syntax": fromAST, eval, toLambda`,
         `Mutable: x = Mutable 0; set x $ (x + 1); print x`,
@@ -386,7 +387,7 @@ function helpText(): string {
         `0-arg defs: ordinary value bodies are lazy and memoized; an ACTION`,
         `               body (f = { ... } / f = print "hi" — same thing) declares`,
         `               a 0-arg FUNCTION: the bare name at statement level runs it`,
-        `               print f also runs it; debug f shows its name without running it`,
+        `               print f also runs it; debug [f] shows it without running it`,
         ``,
         `Types are written after ':'; '::' is cons:`,
         `  x = 5 : Int    x : Int = 5    f (x : Int) = x + 1    (f : Int -> Int) <- expr`,

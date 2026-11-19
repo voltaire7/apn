@@ -34,8 +34,8 @@ for (const [name, source, expected] of [
     ["return x is the action yielding x", "x <- return 42\nprint x", ["42"]],
     ["IO types describe actions", "print (IO [])\nprint (IO Int)", ["IO []", "IO Int"]],
     // An action is shown only as code a list keeps, and by its type.
-    ["an action is shown by probe and typeOf", 'probe [print "hi", echo [1,2]]\nprint (typeOf (print 1))',
-        ['[print "hi", echo [1,2]]', "IO []"]],
+    ["an action is shown by debug and typeOf", 'debug [print "hi", emit [1,2]]\nprint (typeOf (print 1))',
+        ['[print "hi", emit [1,2]]', "IO []"]],
     // A do-block yields what its last statement does; one reading a bound
     // name, what the check inferred: nothing in a generic function's body.
     ["a do-block's type is its last statement's", 'n = 7\nprint [typeOf { print 1; print 2 }, typeOf { print 1; return n }]\n' +
@@ -83,7 +83,7 @@ for (const [source, message, kind] of [
     // An action has no value to show until it runs, wherever it is held.
     ['print (print "hi")', "an action has no value to show until it runs", "type"],
     ['print [print "hi"]', "an action has no value to show until it runs", "type"],
-    ['g n = print n\necho [x = g 1]', "an action has no value to show until it runs", "type"],
+    ['g n = print n\nprint [x = g 1]', "an action has no value to show until it runs", "type"],
 ] as const) Deno.test(`IO rejects: ${JSON.stringify(source)}`, () => fails(source, message, kind));
 // Where the check cannot see it (Dynamic), the run refuses it.
 Deno.test("showing an action is a runtime error past a Dynamic boundary", () => {

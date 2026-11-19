@@ -331,7 +331,7 @@ The other natives do what no APN definition can yet, each for one of these
 reasons:
 
 - **Effects** act on the `World`, whose operations are the interpreter's:
-  `print`, `echo`, `emit`, `exit`, `repl`, `set`, `while`, `for`, `compile`,
+  `print`, `debug`, `emit`, `exit`, `repl`, `set`, `while`, `for`, `compile`,
   `intrinsics.import`, `intrinsics.readFileFrom`, and the standard library's
   `readFile`, `readStdin`, `getArgs`, `sendRequest` (behind `http`'s
   `fetch`, which reads its options in APN), `bracket`, `withFile`,
@@ -351,8 +351,8 @@ reasons:
 - **Code as data**: `intrinsics.syntax`, `intrinsics.written`,
   `intrinsics.binding`, `intrinsics.yields`, `intrinsics.runs`,
   `intrinsics.bound`, `intrinsics.fixity`, `intrinsics.source`,
-  `intrinsics.parse`, the debugger's `step` and `debug` (which prints
-  the code it is given) read code as it was written, which needs the parser. `intrinsics.eval` is the
+  `intrinsics.parse`, `step` (which descends into code) and `debug` (which
+  prints code) read code as it was written, which needs the parser. `intrinsics.eval` is the
   [metacircular evaluator](metacircular-evaluator.md)'s `eval`, and `~`
   (`intrinsics.match`) is a function's clauses written in place:
   `x ~ [p -> a, q -> b]` is `f x` for `f p = a` and `f q = b`.

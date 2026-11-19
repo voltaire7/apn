@@ -28,7 +28,7 @@ alongside the code, and don't restate the user-facing rules here.
   parse of the tokens decides. It must never flag a group whose removal changes the
   parse: when unsure it keeps the group. Pattern groups are not judged. The
   printers write each piece for its place by the same rules: `exprToSource`
-  (with `level`/`reach`, also behind function text and `probe`) and
+  (with `level`/`reach`, also behind function text and `debug`) and
   `fromAST` (`lib/std/syntax/source.apn`), each checked by a strict round trip
   (`tests/unnecessary-parentheses-test.ts`, `tests/syntax-test.ts`).
 
@@ -108,7 +108,7 @@ intentional evaluation change.
   (`ast.ts`) gives among equally ranked ones, so the two cannot disagree. A function whose body matches its
   parameters is its alternatives as clauses (`matchedClauses`) wherever the
   checker or `typeOf` reads a definition.
-- Sugar keeps its written node (printing, `probe`, tools) and runs and checks
+- Sugar keeps its written node (printing, `debug`, tools) and runs and checks
   as its core expansion from `src/ast.ts` (`ternaryExpansion`), built once with
   each part at its source. The expansion's names mean what they mean there
   (no hygiene); the runtime and checker take the builtin `Bool`, `not` and
@@ -812,7 +812,7 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   meet is unknown or endless, and argument-free compound expressions are
   cached per node and the bindings of the names they mention
   (`sameBinding`), since nested call arguments are each evaluated.
-  Effects (`print`, `echo`, `emit`, `assert`, `debug`) only return their results
+  Effects (`print`, `emit`, `assert`, `debug`) only return their results
   statically. `Known.mutable` is a cell. While `CheckOptions.mutation` (the
   session-wide `mayMutate` scan for `set` and `load`; `[..]` only exposes
   bindings that scan saw) is false,

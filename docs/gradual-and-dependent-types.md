@@ -643,7 +643,7 @@ elements) stay unknown where only a value is evaluated to know more of it
 (`print (s + 1)`), and are an error where a type needs them (above).
 
 Effects are never performed while checking, but their results are known:
-`print x`, `echo x` and `emit x` are `x`, `set` and `debug` give `[]`, and `assert c x` gives `x`. A
+`print x` and `emit x` are `x`, `set` and `debug` give `[]`, and `assert c x` gives `x`. A
 `Mutable` cell's contents are known when nothing checked in the session can
 write a cell (no `set`, `load` or `repl`). Otherwise contents are followed
 in the run's order: block statements, eager bindings (`<-`) and operands run in

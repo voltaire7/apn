@@ -418,13 +418,13 @@ with another arity. `_` reads nothing: `isType (Option _) (Some missing)` is
 ### Code
 
 A list keeps its items as written, each in the scope it was written in: a list
-is code, edited as any list is. `probe` shows a value as code (a list's items
+is code, edited as any list is. `debug` shows a value as code (a list's items
 as written, a string quoted), `print` shows its values, and `reduce xs` is the
 values alone, a list that is no longer code, so `print xs` is
-`probe (reduce xs)`:
+`debug (reduce xs)`:
 
 ```apn
-probe [1 + 1, 2]            # [1 + 1, 2]
+debug [1 + 1, 2]            # [1 + 1, 2]
 print [1 + 1, 2]            # [2,2]
 ```
 
@@ -453,7 +453,7 @@ it, wherever they were written, and it wins over a name visible there:
 
 ```apn
 code = [x = 1] ++ [x + 1]
-probe code                  # [x = 1, x + 1]
+debug code                  # [x = 1, x + 1]
 print code                  # [2]
 y = 100
 print ([y = 1] ++ [y + 1])  # [2]
@@ -483,7 +483,7 @@ as an item (`code 0 = ...`):
 code = [x = 1, x + 1]
 code.x                      # 1
 code.x = 10
-probe code                  # [x = 10, x + 1]
+debug code                  # [x = 10, x + 1]
 print code                  # [11]
 ```
 
@@ -500,7 +500,7 @@ is written; the static check reports it, except after code it cannot follow
 
 These forms are their expansions, as if written in their place: each runs and
 checks as its expansion does, with what its names mean there (a program's own
-`+`, `not` or `get` is the one they use). Printing and `probe` show what was
+`+`, `not` or `get` is the one they use). Printing and `debug` show what was
 written. `tests/sugar-test.ts` holds each form beside its expansion.
 
 | Written | Is |
@@ -680,10 +680,10 @@ fibs = 0 : 1 : zipWith (+) fibs (tail fibs)
 print (take 12 fibs)   # [0,1,1,2,3,5,8,13,21,34,55,89]
 ```
 
-Entering `x` or `fibs` in the REPL streams elements until Ctrl+C. `print`,
-`echo` and `emit` also stream lists, including nested ones. `echo x` prints `x`
-as the REPL echoes it: strings and characters quoted (`echo "hi"` prints
-`"hi"`, `print "hi"` prints `hi`), and colored on a terminal. File mode executes bare
+Entering `x` or `fibs` in the REPL streams elements until Ctrl+C. `print`
+and `emit` also stream lists, including nested ones. `debug x` prints `x` as
+code (see [inspection](#inspection-and-numbers)): strings and characters quoted
+(`debug "hi"` prints `"hi"`, `print "hi"` prints `hi`). File mode executes bare
 expressions without echoing them; use `print x` to stream from a file.
 
 `x = x` cannot produce even an outer value. Demanding it waits indefinitely
@@ -876,7 +876,7 @@ only for its own types.
 APN code is pure; effects are **IO actions**, ordinary values describing what
 to do. `print "hi"` builds the action that prints `hi`; nothing is printed
 until the action runs. The effectful builtins all return actions: `print`,
-`echo`, `emit` and `repl` (yielding `[]`), `readFile`, `readStdin`, `getArgs`, `exit`,
+`debug`, `emit` and `repl` (yielding `[]`), `readFile`, `readStdin`, `getArgs`, `exit`,
 `set` (writing a `Mutable` cell), `bracket`, `withFile` and
 `ffi.withLibrary`. An action has no value to show until it runs, so showing one is an
 error, as in Haskell: `print (readFile "f")`, `print [print "hi"]`, `toString` of one, or
@@ -886,8 +886,8 @@ The check reports it before the run where it sees the action. `typeOf` gives its
 known without running it when that statement reads no name the block binds (`typeOf
 { print 1; return 5 }` is `IO Int`), and otherwise the type the check inferred (`{ x <-
 readFile "f"; return x }` is `IO String`; `IO a` where it inferred none, as in the body of
-a function generic in what it returns). `probe`
-shows code, a list's items as written (`probe [print "hi"]` is `[print "hi"]`).
+a function generic in what it returns). `debug`
+shows code, a list's items as written (`debug [print "hi"]` is `[print "hi"]`).
 
 Actions run in exactly two places:
 
@@ -1021,7 +1021,7 @@ function: `x ~ [(Int | String) -> e]` takes an Int or a String, and
 `Int | String -> e` is the parameter `Int` with the guard `String`. So an
 instance names its type:
 `to Celsius (F f) = C ((f - 32) * 5 / 9)`. A `to String` instance is also how
-its values show: `print`, `echo`, the REPL and `to String` of a value holding
+its values show: `print`, `debug`, the REPL and `to String` of a value holding
 one write its text, wherever it is (with `to String (Point x y) = ...`,
 `[Point 1 2]` shows `[1@2]`). See the [standard library](standard-library.md).
 
@@ -1163,8 +1163,7 @@ they are then, as a do-block's statements are: `xs = [set c (c + 1)]` run twice
 (`head xs; head xs`) adds 2. A value passed in (a name, a parameter) is the one
 it is. List elements and arguments likewise share
 demanded results. Values are return, so sharing is never observable except
-through `debug` (which prints the source it is given) and FFI calls, the two
-deliberate escape hatches.
+through FFI calls, the deliberate escape hatch.
 
 ## Lists and consumers
 
@@ -1260,12 +1259,15 @@ does not evaluate its `halt` action.
 
 ## Inspection and numbers
 
-`probe` shows a value as code (see [code](#code)). `debug`
-forces its argument without running a returned action: `a = print 3; debug a`
-prints `a`. `step n v` goes `n` levels into `v`'s unevaluated structure and
-gives that level as a live value: `debug` shows its source, and `<-` runs it
-when it is an action (`inner = { print 1; return 2 }`: `debug $ step 2 inner`
-shows `return 2`).
+`debug x` is the action printing `x` as code, highlighted on a terminal: code,
+a list, as its items are written (`debug [1 + 1]` prints `[1 + 1]`, see
+[code](#code)), any other value as source writes it (`debug "hi"` prints
+`"hi"`). Code is quoted, so an action in it is shown, not run:
+`debug [print 3]`. `step n code` goes `n` levels into code (its last item): a
+name to what it is defined as, a block to its last statement, anything else
+computable one level further, and gives the level as code, which `debug` shows
+and `do` runs (`inner = { print 1; return 2 }`: `debug (step 2 [inner])` prints
+`[return 2]`).
 `to String` demands its argument and collects its full rendering into a string.
 Values render as source writes them: strings and characters escaped
 (`"a\"b"`), a constructor argument that is itself

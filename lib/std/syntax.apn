@@ -15,6 +15,6 @@
     eval syntax = intrinsics.eval (fromAST syntax)
     # toLambda gives code desugared to lambdas and application, as code: each
     # item of [x = 10, y = x + 1, y] is the block of the bindings before it, so
-    # its last is (x -> (y -> y) (x + 1)) 10 (see syntax/lambda). probe shows it.
+    # its last is (x -> (y -> y) (x + 1)) 10 (see syntax/lambda). debug shows it.
     toLambda code = eval (desugared [] (intrinsics.syntax code) : Dynamic)
 ]

@@ -597,7 +597,7 @@ print (format "last: %" [9])                 # => last: 9
 print (format "100%%" [])                    # => 100%  (%% is a literal %)
 
 # ---------------------------------------------------------
-# 15. OUTPUT & INTROSPECTION — print / emit / debug / probe / toAST / step
+# 15. OUTPUT & INTROSPECTION — print / emit / debug / toAST / step
 #     print takes ANY value (strings print raw, unquoted) and RETURNS it,
 #     so pipes continue; it EVALUATES 0-arg actions it is given.
 # ---------------------------------------------------------
@@ -609,38 +609,39 @@ print [name = "Alice", age = 30] # => [name = "Alice", age = 30]
 # emit is print WITHOUT the newline (also returns its value)
 emit "same"; emit " line"; print ""     # prints: same line
 
-# debug shows the argument AS WRITTEN — the unevaluated source:
-debug (1 + 1)                 # => 1 + 1
+# debug shows a value AS CODE (colored on a terminal): code, a list, as its
+# items are written; any other value as source writes it (strings quoted).
+debug (1 + 1)                 # => 2
 debug [1 + 2, 3 + 4]         # => [1 + 2, 3 + 4]
-debug 42                      # => 42
+debug "hi"                    # => "hi"
 
-# step n descends n levels into a value's unevaluated structure and yields
-# a LIVE value: debug shows the level's source, <- runs an action.
+# step n code descends n levels into code, and gives the level as code:
+# debug shows it, do runs it.
 inner = {
     print "inner"
     return 42
 }
-stepped <- step 1 inner       # => inner          (runs the action)
+stepped <- do (step 1 [inner])  # => inner          (runs the action)
 print stepped                 # => 42
-debug $ step 1 inner         # => { print "inner"; 42 }
-debug $ step 2 inner         # => return 42     (the block's tail statement)
+debug (step 1 [inner])       # => [{ print "inner"; return 42 }]
+debug (step 2 [inner])       # => [return 42]   (the block's tail statement)
 
-# A list keeps its items as written: it is CODE. probe shows a value as code,
-# print its values (print xs is probe (reduce xs)); a string probes quoted.
-probe [1 + 1, 2]              # => [1 + 1, 2]
+# A list keeps its items as written: it is CODE. debug shows it as code,
+# print its values (print xs is debug (reduce xs)); a string shows quoted.
+debug [1 + 1, 2]              # => [1 + 1, 2]
 print [1 + 1, 2]              # => [2,2]
-probe (reduce [1 + 1])        # => [2]
-probe "hi"                    # => "hi"
+debug (reduce [1 + 1])        # => [2]
+debug "hi"                    # => "hi"
 # Editing code is list editing. ++ joins code: the items after a binding see
 # it, wherever they were written (a name the code reads may be bound only by
 # code joined before it). An item update replaces the item, as code.
 joined = [x = 1] ++ [x + 1]
-probe joined                  # => [x = 1, x + 1]
+debug joined                  # => [x = 1, x + 1]
 print joined                  # => [2]
 edited = [x = 1, x + 1] ++ [5]
 edited 0 = (x = 10)
 print edited                  # => [11,5]
-probe (take 1 edited ++ [x * 3])          # => [x = 10, x * 3]
+debug (take 1 edited ++ [x * 3])          # => [x = 10, x * 3]
 print (take 1 edited ++ [x * 3])          # => [30]
 
 # toAST — code as lists, unevaluated: an application is a list, function
@@ -655,12 +656,12 @@ print (fromAST (toAST [n -> n * 2 + 1]))  # => [n -> n * 2 + 1]
 doubled e = ["*", e, 2]         # building code is building a list
 print (fromAST (doubled (toAST [x + 1] 1)))  # => (x + 1) * 2
 print (eval (doubled ["sqrt", 16]))        # => 8
-# toLambda: code desugared to lambdas and application, as code: probe shows
+# toLambda: code desugared to lambdas and application, as code: debug shows
 # the lambdas; a binding becomes a lambda's parameter, so it is no item.
-probe (toLambda [x = 1, x + 1])          # => [(x -> x + 1) 1]
-probe (toLambda [x = 10, y = x + 1, y])  # => [(x -> (y -> y) (x + 1)) 10]
+debug (toLambda [x = 1, x + 1])          # => [(x -> x + 1) 1]
+debug (toLambda [x = 10, y = x + 1, y])  # => [(x -> (y -> y) (x + 1)) 10]
 print (toLambda [fact n = n == 0 ? 1 : n * fact (n - 1), fact 5])  # => [120]
-probe (toLambda [{ a <- return 1; return (a + 1) }])  # => [return 1 >>= a -> return (a + 1)]
+debug (toLambda [{ a <- return 1; return (a + 1) }])  # => [return 1 >>= a -> return (a + 1)]
 # Parsers, as Haskell's Parsec, are monads: a do-block reads input in order.
 parser <- import "std/parser"
 date = {
@@ -766,7 +767,7 @@ print seqResult              # => 42
 
 # Unfinished definitions use an explicit placeholder; defining it is silent.
 unfinished = _
-probe [unfinished]           # => [unfinished] (inspect without evaluating)
+debug [unfinished]           # => [unfinished] (inspect without evaluating)
 # Evaluating unfinished raises "not implemented" (asserted in tests).
 explicitEmpty = []
 print explicitEmpty           # => []
@@ -905,9 +906,9 @@ describe0 1 = "one"
 print [label0 0, describe0 1]    # => ["it is zero","one"]
 
 # step into the imported halt (an action whose body is exit 0):
-debug $ step 1 halt          # => exit 0
-# print RUNS the level, so this terminates the program:
-#   print $ step 1 halt
+debug (step 1 [halt])        # => [exit 0]
+# do RUNS the level, so this terminates the program:
+#   do (step 1 [halt])
 
 # [..] = inside a { } block stays in the block's scope
 scoped <- {

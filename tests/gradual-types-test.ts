@@ -112,7 +112,7 @@ for (
     });
 }
 Deno.test("type computations remain non-evaluating in checker", () => {
-    const source = 'Choice flag = { debug "must not run"; flag ? Int : String }; (1 : Choice True)';
+    const source = 'Choice flag = { d = debug "must not run"; flag ? Int : String }; (1 : Choice True)';
     const result = checkSource(source);
     if (result.issues.length) throw new Error(JSON.stringify(result));
 });

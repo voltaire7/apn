@@ -4534,8 +4534,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (resolved.k === "intrinsic" && resolved.name === "do" && a.t === "list") {
                     return infer({ t: "block", stmts: a.v, style: "{" }, scope);
                 }
-                // debug reads its argument unevaluated (unchecked).
-                if (resolved.k === "intrinsic" && resolved.name === "debug") return list(variable(), constant(0n));
                 if (resolved.k === "intrinsic" && resolved.name === "intrinsics.eval") {
                     infer(a, scope);
                     runtimeChecks++;
@@ -7017,12 +7015,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // Effects are actions, run statically where the program runs them;
             // print, echo, emit, debug and set yield []. Printing
             // renders, forcing every element in order.
-            case "print": case "echo": case "emit": return { action: () => {
+            // (debug shows code, which the run writes: no value is rendered here.)
+            case "debug": return { action: () => known([]), actionResult: "[]" };
+            case "print": case "emit": return { action: () => {
                 if (renderKnown(args[0]()) === undefined) incomplete = true;
                 return known([]);
             }, actionResult: "[]" };
             // use forces its record and binds its fields (lazily): no other effect.
-            case "debug": case OPEN: args[0](); return known([]);
+            case OPEN: args[0](); return known([]);
             case "set": return { action: () => { writeMutable(args[0](), args[1]); return known([]); }, actionResult: "[]" };
             // Input read at check time, from the same snapshot the run uses.
             case "readFile": return { action: () => {
@@ -8223,14 +8223,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     };
     const int = atom("Int"), str = atom("String"), bool = atom("Bool"), num = atom("Number");
     const empty = list(variable(), constant(0n));
-    for (const name of ["print", "echo", "emit"]) native(name, [variable()], io(empty));
+    for (const name of ["print", "debug", "emit"]) native(name, [variable()], io(empty));
     native("repl", [], io(empty));
     native("compile", [variable(), variable()], io(empty));
     { const held = variable(); native("assert", [variable(), held], held); }
     native("isType", [variable(), variable()], bool);
     native("parse", [str], explicitDynamic);
-    native("step", [int, variable()], explicitDynamic);
-    for (const name of ["debug", "intrinsics.eval", OPEN]) scope.set(name, { type: { k: "intrinsic", name } });
+    // (Code: a list of one item, as written.)
+    native("step", [int, variable()], list(variable(), constant(1n)));
+    for (const name of ["intrinsics.eval", OPEN]) scope.set(name, { type: { k: "intrinsic", name } });
     // Code parse makes is read at runtime (a literal load's is checked: see PRELUDE_TYPINGS).
     native("intrinsics.parse", [str], explicitDynamic);
     native("intrinsics.readFileFrom", [str], io(str));

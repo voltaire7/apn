@@ -4,8 +4,9 @@ Two modes, picked automatically: a **TTY** stdin gets the raw-mode line editor
 (`ReplEditor`); a **piped** stdin (`... | deno run main.ts`) gets the plain
 line loop — no colors, no editor, same chunk semantics. Each input is a
 statement: an action runs (as in a file) and its result is echoed, except an
-empty result (`print 3` shows only `3`); bindings echo nothing. `echo x` prints
-a value the same way from any program, and `repl` opens a session from one,
+empty result (`print 3` shows only `3`); bindings echo nothing. `debug x` prints
+a value as code from any program, highlighted as the REPL highlights code, and
+`repl` opens a session from one,
 on its names where it runs (see `docs/semantics.md`); a session inside another
 shares its terminal setup and the input typed ahead. Interactive features:
 

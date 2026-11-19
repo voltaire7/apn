@@ -135,14 +135,14 @@ print (True ? 7 : missing)
 print (False ? missing : 8)
 `, ["7", "8"]);
 
-example("probe shows code as written, unevaluated", `
-probe [missing + 1]
+example("debug shows code as written, unevaluated", `
+debug [missing + 1]
 `, ["[missing + 1]"]);
 
-example("debug inspects an action without calling its body", `
+example("debug shows quoted code without running it", `
 action = print "unexpected"
-debug action
-`, ["action"]);
+debug [action]
+`, ["[action]"]);
 
 example("finite and infinite ranges support head", `
 print (head [3..5])
@@ -435,7 +435,7 @@ print [[a,b] = [1,2], a + b]
 x = 7
 print [x + 1, x = 1, x]
 print x
-probe [x = 1, x + 1]`, ["[2]", "2", "[6]", "[3]", "[8,1]", "7",
+debug [x = 1, x + 1]`, ["[2]", "2", "[6]", "[3]", "[8,1]", "7",
     "[x = 1, x + 1]"]);
 // x <- m is a list item as a block's statement: do runs m and binds x for the
 // items after it, in any monad; it yields nothing, and x is bound only then.
@@ -443,7 +443,7 @@ example("an x <- m item binds when do runs the code", `
 print (do [x <- [1,2], y <- [10,20], return (x + y)])
 code = [n <- return 5, z = n * 2, print z]
 do code
-probe code
+debug code
 vw <- do [v <- return 1, w <- return (v + 1), return [v,w]]
 print vw
 print [x <- [1,2,3], return x]
@@ -577,21 +577,21 @@ print [f Int 3, g 2 Float]
 print (to Option (Ok 1))`, ["[3,2]", "Some 1"]);
 example("a list is code: ++ joins it and an update replaces an item", `
 code = [x = 1] ++ [x + 1]
-probe code
+debug code
 print code
 edited = [x = 1, x + 1] ++ [5]
 edited 0 = (x = 10)
 print edited
-probe edited
+debug edited
 edited 1 = x * 3
 print edited
 y = 100
 print ([y = 1] ++ [y + 1])
-probe (take 1 edited ++ [x * 5])
+debug (take 1 edited ++ [x * 5])
 print (take 1 edited ++ [x * 5])
 cycle xs = xs ++ cycle xs
 print (take 5 (cycle [1,2]))
-probe (reduce [1 + 1])
+debug (reduce [1 + 1])
 print (length edited)`, ["[x = 1, x + 1]", "[2]", "[11,5]", "[x = 10, x + 1, 5]", "[30,5]", "[2]",
     "[x = 10, x * 5]", "[50]", "[1,2,1,2,1]", "[2]", "3"]);
 failure("an open list's values need its names", "print [x + 1]", "unbound variable 'x'");
@@ -613,7 +613,7 @@ example("code.x reads a binding and code.x = v replaces it", `
 code = [x = 1, x + 1]
 print code.x
 code.x = 10
-probe code
+debug code
 print code
 joined = [x = 1] ++ [y = x * 2, y + 1]
 print [joined.x,joined.y]

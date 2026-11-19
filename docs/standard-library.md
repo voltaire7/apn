@@ -13,7 +13,7 @@ operator (`(+) = intrinsics.add`, ...; the `intrinsics` record holds the
 functions APN cannot define) and its fixity, `negate` and `not` (the functions
 `-x` and `!x` are), `enumFrom`, `enumFromThen`, `enumFromTo` and
 `enumFromThenTo` (the functions ranges are: `[a..]` is `enumFrom a`),
-`probe`, `reduce`, `else` (the guard that always holds), `fail` (code still to write: `fail "todo"`), `toAST` and
+`debug`, `reduce`, `else` (the guard that always holds), `fail` (code still to write: `fail "todo"`), `toAST` and
 `parse` (see [code](semantics.md#code)), `import`
 and `load` (see [module imports](semantics.md#module-imports)),
 and the Functor, Applicative
@@ -281,12 +281,12 @@ action it makes is returned, not run, and its result is `Dynamic`.
 
 `toLambda code` gives code desugared to a core of names, literals,
 one-parameter lambdas and application, as code (evaluated as `eval` does):
-`probe` shows the lambdas, and each item runs as the original's does:
+`debug` shows the lambdas, and each item runs as the original's does:
 
 ```apn
-probe (toLambda [{ x = 10; y = x + 1; y }])  # [(x -> (y -> y) (x + 1)) 10]
-probe (toLambda [(x, y -> x + y)])           # [x -> y -> x + y]
-probe (toLambda [x = 1, y = 2, x + y])       # [(x -> (y -> x + y) 2) 1]
+debug (toLambda [{ x = 10; y = x + 1; y }])  # [(x -> (y -> y) (x + 1)) 10]
+debug (toLambda [(x, y -> x + y)])           # [x -> y -> x + y]
+debug (toLambda [x = 1, y = 2, x + y])       # [(x -> (y -> x + y) 2) 1]
 toLambda [fact n = n == 0 ? 1 : n * fact (n - 1), fact 5]   # [120]
 ```
 
