@@ -139,7 +139,7 @@ example("debug shows code as written, unevaluated", `
 debug [missing + 1]
 `, ["[missing + 1]"]);
 
-example("debug shows a literal's source text, its layout and comments kept", `
+example("debug shows a list's or record's literal as written, its layout and comments kept", `
 f = {
     code = [
         x = 1  # one
@@ -149,7 +149,14 @@ f = {
 }
 f
 debug (map (* 2) [1,2])  # built, so shown from its items
-`, ["[\n    x = 1  # one\n    x + 1\n]", "[2,4]"]);
+config = [
+    name = "apn"  # a record too
+    size = 3
+]
+debug config
+debug (config [size = 4])  # a changed copy, shown from its fields
+`, ["[\n    x = 1  # one\n    x + 1\n]", "[2,4]", "[\n    name = \"apn\"  # a record too\n    size = 3\n]",
+    "[name = \"apn\", size = 4]"]);
 
 example("debug shows quoted code without running it", `
 action = print "unexpected"

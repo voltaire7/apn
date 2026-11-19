@@ -3,7 +3,7 @@ import type { TypeScope } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeElementType, describeType } from "./type-description.ts";
-import { isForTypes, METHOD_INTRINSICS, listLiterals, sourceLocations, boolSelection, ternaryExpansion, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
+import { isForTypes, METHOD_INTRINSICS, literals, sourceLocations, boolSelection, ternaryExpansion, writtenMatch, type CoreMatch, type PatternLambda } from "./ast.ts";
 import { builtinZero } from "./zero-values.ts";
 import { fieldSource, keySource } from "./record-keys.ts";
 import doSource from "../lib/std/do.apn" with { type: "text" };
@@ -3048,12 +3048,13 @@ export class Interpreter {
         } catch { /* text that does not lex alone is shown from its items */ }
         return undefined;
     }
-    // A value's code: a list's items as written (as the literal was, when it is
-    // one), an item without as its value's code, anything else as its value is
-    // shown.
+    // A value's code: a list's or record's literal as written, a list's items
+    // as written (an item without, as its value's code), anything else as its
+    // value is shown.
     private writtenText(v: Value): string {
         const value = this.dataValue(v);
-        const items = this.literalItems.get(value), literal = items && listLiterals.get(items);
+        const items = this.literalItems.get(value) ?? this.recordCode.get(value)?.exprs;
+        const literal = items && literals.get(items);
         const original = literal && this.originalText(literal);
         if (original) return original;
         if (value.kind === "range" || value.kind === "floatRange" || value.kind === "rationalRange" || !this.isList(value)) return this.renderString(value);

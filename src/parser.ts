@@ -1,4 +1,4 @@
-import { countingOf, isUse, listLiterals, opening, typeOperators, writtenOperators, type DataDef, extendedDeclaration, fillPlaceholders, holdsPlaceholder, patternNames, sourceLocations, walkObjects } from "./ast.ts";
+import { countingOf, isUse, literals, opening, typeOperators, writtenOperators, type DataDef, extendedDeclaration, fillPlaceholders, holdsPlaceholder, patternNames, sourceLocations, walkObjects } from "./ast.ts";
 import { fieldSource, keySource } from "./record-keys.ts";
 import { TYPE_NAMES } from "./type-system.ts";
 import { type Real, type Numeric, numericNative, complex, arithmetic, negate, compareNumbers, integer, asFloat, numberText } from "./numbers.ts";
@@ -1345,9 +1345,10 @@ class Parser {
                             if (this.isSym("]")) {
                                 this.next();
                                 const record = recordOf(es);
+                                if (record?.t === "record") literals.set(record.items!, record);
                                 if (record) return record;
                                 const list: Expr = { t: "list", v: es };
-                                listLiterals.set(es, list);
+                                literals.set(es, list);
                                 return list;
                             }
                             if (this.peek().k === "eof") throw new Error("Parser: unexpected end of file inside list literal");

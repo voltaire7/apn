@@ -377,7 +377,7 @@ function helpText(): string {
         ``,
         `print x    any value (strings raw), returns x;  emit  = no newline`,
         `debug x    x as code, colored: debug [1 + 1] => [1 + 1], debug "a" => "a"; reduce gives values`,
-        `           a literal as its source text, line breaks and comments kept`,
+        `           a list or record literal as written, line breaks and comments kept`,
         `step n code  n levels into code: step 2 [inner] => its body's last statement`,
         `[x = 1] ++ [x + 1] joins code: [2]; code 0 = (x = 10) replaces an item; code.x reads x, code.x = 5 rebinds it`,
         `toAST [1 + 2] => ["[]", ["+", 1, 2]]; import "std/syntax": fromAST, eval, toLambda`,

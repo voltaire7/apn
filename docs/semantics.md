@@ -1262,10 +1262,11 @@ does not evaluate its `halt` action.
 `debug x` is the action printing `x` as code, highlighted on a terminal: code,
 a list, as its items are written (`debug [1 + 1]` prints `[1 + 1]`, see
 [code](#code)), any other value as source writes it (`debug "hi"` prints
-`"hi"`). A list literal prints as its source text, from its `[` to its `]`, with
-its line breaks, indentation and comments, its lines moved left by the
-indentation of the line it starts on; a list built by running code (`map`,
-`++`, `step`) has no source text and prints from its items. Code is quoted, so an action in it is shown, not run:
+`"hi"`). A list or record literal prints as its source text, from its `[` to its
+`]`, with its line breaks, indentation and comments, its lines moved left by the
+indentation of the line it starts on; a list or record built by running code
+(`map`, `++`, `step`, an update such as `r [x = 1]`) has no source text and
+prints from its items. Code is quoted, so an action in it is shown, not run:
 `debug [print 3]`. `step n code` goes `n` levels into code (its last item): a
 name to what it is defined as, a block to its last statement, anything else
 computable one level further, and gives the level as code, which `debug` shows

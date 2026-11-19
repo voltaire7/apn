@@ -1298,8 +1298,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // the last one's ([] for none); a literal list is checked as that block.
         if (t.op === "do") {
             // A file's code (what load gives) runs its statements, as the run checks.
-            if (a.k === "record" && a.fields instanceof ModuleFields) { runtimeChecks++; return explicitDynamic; }
-            if (a.k !== "list") return problem("do expects a list of statements");
+            if (a.k === "record" && a.fields instanceof ModuleFields || isExplicit(a)) { runtimeChecks++; return explicitDynamic; }
+            // Code of a type not known here (an unbound name) is not a list's problem.
+            if (a.k === "dynamic") return unknown();
+            if (a.k !== "list") return problem(`do expects code, a list of statements, not ${text(a)}`);
             return a.items ? a.items.at(-1) ?? list(dynamic, constant(0n)) : a.element;
         }
         if (t.op === "to" || t.op === "from") {
