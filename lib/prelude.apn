@@ -169,3 +169,9 @@ isList value = value ~ [[] -> True, _ :: _ -> True, _ -> False]
 # one more than xs. A family of lists is a type function's clauses (Vect Z a =
 # Nil and Vect (S k) a = Cons a (Vect k a)); any of this shape is the same type.
 Vect n a = Nil -> Vect Z a | Cons a (Vect k a) -> Vect (S k) a
+# Any value taken apart: a function as the type it takes and itself (which
+# applied gives the rest), any other value as itself. Built, Takes t k is k
+# taking only t. What a function is, the checker leaves to the run.
+Takes = view (t, k -> (k : t -> b))
+    (f | intrinsics.isFunction f -> [intrinsics.inputOf f, (f : Dynamic)])
+Gives = view (v -> v) (v | !intrinsics.isFunction v -> [v])

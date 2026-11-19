@@ -4211,12 +4211,6 @@ export class Interpreter {
         }
         return p.args.every((q, i) => this.matchPattern(q, fields[i], binds));
     }
-    // Whether a Takes or Gives pattern is the builtin view, not a program's own
-    // constructor of that name.
-    private builtinView(tag: string): boolean {
-        const own = this.env.get(tag), value = own && this.reference(own);
-        return value?.kind === "native" && value.name === tag && !value.tag;
-    }
     // Whether a value is a function, as typeOf tells (a type, which converts
     // what it is applied to, is none).
     private isFunction(v: Value): boolean {
@@ -5504,13 +5498,9 @@ export class Interpreter {
                 if (!arity) this.nullaryViews.set(build, view);
                 return view;
             }
-            // Takes t k is k, taking only t; Gives v is v.
-            case "Takes": {
-                const f = this.force(args[1]);
-                if (!this.isFunction(f)) throw new APNError("runtime", "Takes expects a type and a function", { hint: "write Takes Int (x -> x + 1)" });
-                return { kind: "contract", target: f, from: this.asType(args[0]) ?? args[0], to: { kind: "type", name: "$any" } };
-            }
-            case "Gives": return args[0];
+            // The two reads of a value Takes takes a function apart by.
+            case "intrinsics.isFunction": return mkBool(this.isFunction(args[0]));
+            case "intrinsics.inputOf": return this.accepted(args[0]);
             case "S": {
                 if (!isNumeric(a)) throw new APNError("runtime", "S expects a natural number (a UInt)");
                 const n = castNumeric("UInt", a);
@@ -7052,13 +7042,6 @@ export class Interpreter {
                 // fields, or does not match (a variant of the tag is its own).
                 const view = v.kind === "variant" && v.tag === p.tag ? undefined : this.viewNamed(p.tag);
                 if (view) return this.matchView(view, p, v, binds);
-                // Takes t k and Gives v take any value apart: a function as the
-                // type it accepts and itself, any other value as itself.
-                if ((p.tag === "Takes" && p.args.length === 2 || p.tag === "Gives" && p.args.length === 1) && this.builtinView(p.tag)) {
-                    const takes = this.isFunction(v);
-                    if (p.tag === "Gives") return !takes && this.matchPattern(p.args[0], v, binds);
-                    return takes && this.matchPattern(p.args[0], this.accepted(v), binds) && this.matchPattern(p.args[1], v, binds);
-                }
                 // Z and S k take a natural number apart: 0, or k + 1 (k a UInt).
                 if (isNumeric(v) && (p.tag === "Z" && !p.args.length || p.tag === "S" && p.args.length === 1)) {
                     let n: bigint;

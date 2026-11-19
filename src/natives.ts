@@ -20,8 +20,8 @@ export const NATIVES: Array<[string, number]> = [
     ["S", 1],
     // view build match: a pattern defined by a function taking values apart.
     ["view", 2],
-    // Any value taken apart: a function is Takes t k, any other Gives v.
-    ["Takes", 2], ["Gives", 1],
+    // Whether a value is a function, and the type one takes (the prelude's Takes).
+    ["intrinsics.isFunction", 1], ["intrinsics.inputOf", 1],
     // to T x writes x as a T; from T x reads it back (methods, like map).
     ["to", 2], ["from", 2],
     // tag owner ctor fields: a value made by ctor, belonging to owner.

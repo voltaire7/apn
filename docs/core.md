@@ -29,7 +29,7 @@ built-in behaves exactly as its APN definition ([intrinsics](intrinsics.md)).
 | 2 | Clauses: lambdas with patterns and guards, tried most specific first | `p \| g -> e` | present |
 | 3 | A scope binding its names for all of itself | `{ xs = 1 :: xs; ... }` | present |
 | 4 | Making data: a tagged value | `intrinsics.tag` | present |
-| 5 | Views: a pattern defined by a function that takes a value apart | `view build match` | present; `S`, `Takes` still special-cased |
+| 5 | Views: a pattern defined by a function that takes a value apart | `view build match` | present; `S`/`Z` still special-cased |
 | 6 | Sets: types as values, union, intersection, refinement, membership | `A \| B`, `x : T` | present |
 | 7 | Actions as values, run only by statements and `<-` | `x <- m` | present |
 | 8 | Code as data: a list keeps its items as written | `[x + 1]` | present |
@@ -54,23 +54,20 @@ needs.
 
 `intrinsics.tag` makes a constructor's values, and a constructor pattern takes
 them apart. A **view** is the same pattern over a value that is not stored that
-way: a number is not stored as `S (S Z)`, nor a function as `Takes`. Today
-each view is written into the interpreter's matcher, the checker's binding, a
-hand-written checker type and the linter, so one view costs four places. As a
-primitive, a view is a builder and a matcher, given by a function rather than a
-keyword ([views](semantics.md#patterns-variants-and-scope)); the built-in views
-are to be written this way:
+way: a number is not stored as `S (S Z)`, nor a function as `Takes`. A view is
+a builder and a matcher, given by a function rather than a keyword
+([views](semantics.md#patterns-variants-and-scope)). `Takes` and `Gives` are the
+prelude's ([intrinsics](intrinsics.md#functions-takes-and-gives)); `S` and `Z`
+are still written into the interpreter's matcher, the checker and the linter,
+and are to become:
 
 ```apn
 S = view (k -> k + 1) (n | n > 0 -> [n - 1])
-Takes = view (t, k -> (k : t -> b)) (f | isFunction f -> [inputOf f, f])
-Gives = view (v -> v) (v | !isFunction v -> [v])
+Z = view 0 (0 -> [])
 ```
 
 The matcher gives the fields or does not match. One arity per name holds for
-free: the builder takes as many arguments as the matcher gives fields. `view`
-is the primitive; `isFunction` and `inputOf` are the two reads of a value that
-`Takes` needs, natives reading values as data (6). A
+free: the builder takes as many arguments as the matcher gives fields. A
 constructor made by `tag` would be the view whose matcher reads the tag, so
 views would be the one way to take data apart.
 
@@ -93,7 +90,7 @@ they were written in, so quoting needs no form of its own. Evaluation is lazy;
 
 | Today | In the core |
 | --- | --- |
-| `S`/`Z` and `Takes`/`Gives` written into the matcher, checker and linter | prelude views |
+| `S`/`Z` written into the matcher, checker and linter | prelude views, as `Takes`/`Gives` are |
 | Typed patterns `(x : Int32)` as their own pattern | a view matching members of `Int32`, binding the converted value |
 | A checker rule written by hand for each native (`Takes`, `S`, ...) | the type of its definition |
 | Natives with an APN definition in [intrinsics](intrinsics.md) (list functions, maps, `truthy`, `++`, `get`, `with`, ranges, the list and action instances) | prelude definitions, with the interpreter's version kept as a faster way to compute the same thing |

@@ -1478,8 +1478,8 @@ factorial 20                     # 2432902008176640000, a UInt
 S (S Z)                          # 2, a UInt
 ```
 
-Every value is taken apart the same way by `Takes` and `Gives`, a function as
-a list of what it takes: `Takes t k` matches a function, binding `t` to the type
+Every value is taken apart the same way by `Takes` and `Gives`, the prelude's
+[views](#patterns-variants-and-scope), a function as a list of what it takes: `Takes t k` matches a function, binding `t` to the type
 it takes (what `typeOf` gives as its input, any value where that is unwritten) and
 `k` to the function itself, which applied gives the rest, again a `Takes` or a
 `Gives`; `Gives v` matches any other value, binding it. Built, `Takes t k` is `k`

@@ -2652,17 +2652,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     p.args.forEach((q, n) => bind(q, fields[n] ?? variable(), scope, e, bound));
                     return;
                 }
-                // Takes t k and Gives v, the builtin view: any value, a function
-                // taken apart as the type it accepts and itself, any other as
-                // itself. Which one it is the run decides, unless the type says.
-                if ((p.tag === "Takes" && p.args.length === 2 || p.tag === "Gives" && p.args.length === 1) && entry?.builtin) {
-                    const value = resolve(expected);
-                    if (p.tag === "Gives") { bind(p.args[0], expected, scope, e, bound); return; }
-                    const [input, output] = value.k === "fn" ? [value.input, value.output] : [variable(), variable()];
-                    bind(p.args[0], { k: "type", value: input }, scope, e, bound);
-                    bind(p.args[1], value.k === "fn" ? expected : fn(input, output), scope, e, bound);
-                    return;
-                }
                 // The built-in Type (a program's own constructor named Type is its own).
                 if (p.tag === "Type" && !isConstructor(entry)) {
                     const payload: Ty = { k: "type", value: variable() };
@@ -8416,12 +8405,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Natural numbers are UInt: Z is UInt 0, S n the next one (converting n as UInt n does).
     scope.set("Z", { type: atom("UInt"), number: { kind: "int", v: 0n, typeName: "UInt" } });
     scope.set("S", { type: fn(atom("UInt"), atom("UInt"), undefined, true) });
-    // Any value taken apart: Takes t k is k taking only t, Gives v is v.
-    {
-        const input = variable(), output = variable(), given = variable();
-        scope.set("Takes", { type: fn({ k: "type", value: input }, fn(fn(input, output), fn(input, output))) });
-        scope.set("Gives", { type: fn(given, given) });
-    }
+    // Whether a value is a function, and the type one takes (the prelude's Takes).
+    scope.set("intrinsics.isFunction", { type: fn(variable(), atom("Bool")) });
+    scope.set("intrinsics.inputOf", { type: fn(variable(), { k: "type", value: variable() }) });
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
     scope.set("intrinsics.match", { type: { k: "intrinsic", name: "match", arity: 2 } });
     scope.set("intrinsics.tag", { type: { k: "intrinsic", name: "tag", arity: 3 } });
@@ -8450,6 +8436,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         scope.set(name, rule ? { ...entry, type: { k: "intrinsic", name: rule[0], arity: rule[1] } } : entry);
     }
     for (const entry of scope.values()) { entry.inherited = true; entry.builtin = true; }
+    for (const [name, entry] of scope) if (entry.view) viewNames.add(name);
     if (options.initial) for (const [name, entry] of copyTypeScope(options.initial)) scope.set(name, entry);
     // The prelude's own instances (lists' >>=) are its own: the intrinsics
     // the checker types already cover them.
