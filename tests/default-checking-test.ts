@@ -1188,8 +1188,7 @@ Deno.test("a list compared with one value hints at comparing its items, statical
     ]) {
         try { run(session(), source); } catch (error) {
             const e = error as { message: string; hint?: string };
-            const hint = `\`${section} * xs\` compares each item, \`all ${section} xs\` every one`
-                + (source.includes("import") ? "" : " (from std/sequence)");
+            const hint = `try \`${section} * xs\` or \`all ${section} xs\`` + (source.includes("import") ? "" : " (std/sequence)");
             if (!e.message.startsWith("cannot compare") || e.hint !== hint) {
                 throw new Error(`${source}: ${e.message} (${e.hint})`);
             }

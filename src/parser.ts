@@ -3062,7 +3062,7 @@ export function exprToSource(e: Expr, where: Place = END): string {
 export function itemComparisonHint(op: BinOp, value: Expr, listLeft: boolean, module?: string): string {
     const item: Expr = { t: "var", name: "$S" };
     const section = exprToSource({ t: "lambda", params: ["$S"], body: { t: "binop", op, l: listLeft ? item : value, r: listLeft ? value : item } });
-    return `\`${section} * xs\` compares each item, \`all ${section} xs\` every one` + (module ? ` (from ${module})` : "");
+    return `try \`${section} * xs\` or \`all ${section} xs\`` + (module ? ` (${module})` : "");
 }
 function bareSource(e: Expr, where: Place): string {
     const of = (x: Expr, at: Place = END) => exprToSource(x, at);
