@@ -1448,7 +1448,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const single = (x: Ty) => numeric(x) || x.k === "atom" && ["String", "Char", "Bool"].includes(x.name);
             const listLeft = a.k === "list" && single(b), listRight = b.k === "list" && single(a);
             const hint = written && (listLeft || listRight)
-                ? itemComparisonHint(written.op, listLeft ? written.r : written.l, listLeft, topScope?.has("all") ? undefined : standardModule("all"))
+                ? itemComparisonHint(written.op, listLeft ? written.r : written.l, listLeft)
                 : undefined;
             return problem(`cannot compare ${text(a)} and ${text(b)}`, undefined, hint);
         }

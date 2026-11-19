@@ -3057,12 +3057,11 @@ export function exprToSource(e: Expr, where: Place = END): string {
     return fits(where, e) ? bareSource(e, where) : `(${bareSource(e, END)})`;
 }
 // The hint for a list compared with one value ([1,2,3] < 2): its items
-// compared, each or every one, by the section the printer writes; module is
-// where all comes from, when the program has not opened it.
-export function itemComparisonHint(op: BinOp, value: Expr, listLeft: boolean, module?: string): string {
+// compared, each or every one, by the section the printer writes.
+export function itemComparisonHint(op: BinOp, value: Expr, listLeft: boolean): string {
     const item: Expr = { t: "var", name: "$S" };
     const section = exprToSource({ t: "lambda", params: ["$S"], body: { t: "binop", op, l: listLeft ? item : value, r: listLeft ? value : item } });
-    return `try \`${section} * xs\` or \`all ${section} xs\`` + (module ? ` (${module})` : "");
+    return `try \`${section} * xs\` or \`all ${section} xs\``;
 }
 function bareSource(e: Expr, where: Place): string {
     const of = (x: Expr, at: Place = END) => exprToSource(x, at);

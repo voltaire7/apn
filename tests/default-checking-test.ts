@@ -1181,14 +1181,13 @@ Deno.test("a list compared with one value hints at comparing its items, statical
         ["print ([1,2,3] < 2)", "(< 2)"],
         ["print (2 >= [1,2,3])", "(2 >=)"],
         ["n = 1\nprint ([1,2,3] <= n + 1)", "(<= (n + 1))"],
-        ['[..] <- import "std/sequence"\nprint ([1,2,3] < 2)', "(< 2)"],
         // At runtime too, of the values compared (a rational's section parenthesized).
         ["xs = ([1,2,3] : Dynamic)\nprint (2 >= xs)", "(2 >=)"],
         ["xs = ([1,2,3] : Dynamic)\nprint (xs < -1/2)", "(< (-1/2))"],
     ]) {
         try { run(session(), source); } catch (error) {
             const e = error as { message: string; hint?: string };
-            const hint = `try \`${section} * xs\` or \`all ${section} xs\`` + (source.includes("import") ? "" : " (std/sequence)");
+            const hint = `try \`${section} * xs\` or \`all ${section} xs\``;
             if (!e.message.startsWith("cannot compare") || e.hint !== hint) {
                 throw new Error(`${source}: ${e.message} (${e.hint})`);
             }

@@ -13,7 +13,7 @@ import { buildExecutable } from "./compile.ts";
 import { standardNative } from "./standard-natives.ts";
 import { ACTIONS, NATIVE_EXPORTS, NATIVES, RETIRED_NATIVES, STANDARD_NATIVES, TAKES_UNDECIDED } from "./natives.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
-import { bundledText, IMPORT_ONE, loadPath, type ModuleFile, readLoad, resolveModule, sourcePath, standardModule, unknownModule } from "./modules.ts";
+import { bundledText, IMPORT_ONE, loadPath, type ModuleFile, readLoad, resolveModule, sourcePath, unknownModule } from "./modules.ts";
 import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_CLASSES, NUMERIC_TYPES, OWN_SCALAR_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
 import { ACTION_SHOWN, APNError, didYouMean, missingTypeParameters, placeholderError, typeApplied, withArticle } from "./errors.ts";
@@ -2112,7 +2112,7 @@ export class Interpreter {
                 const listLeft = this.isList(l) && single(r), listRight = this.isList(r) && single(l);
                 if (listLeft || listRight) {
                     throw new APNError("runtime", `cannot compare ${this.renderString(l)} and ${this.renderString(r)}`, {
-                        hint: itemComparisonHint(op, this.valueToExpr(listLeft ? r : l), listLeft, this.env.get("all") ? undefined : standardModule("all")) });
+                        hint: itemComparisonHint(op, this.valueToExpr(listLeft ? r : l), listLeft) });
                 }
                 const [small, large] = op[0] === "<" ? [read(l), read(r)] : [read(r), read(l)];
                 return mkBool(this.subset(small, large) && (op.length === 2 || !this.subset(large, small)));
