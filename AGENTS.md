@@ -135,6 +135,12 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   elements with `demand()`. Self-referential lists (`x = 1:x`, Fibonacci
   streams) must stay productive and interruptible; failed thunks release
   their busy flags.
+- **Infinite recursion is intended.** A program that never finishes (`x = x`,
+  `f = g` with `g = f`, a loop with no base case) runs until interrupted: that
+  is its meaning, not a bug. Never turn it into an error, add cycle or
+  termination detection, or propose doing so; keep it interruptible, nothing
+  more. (The linter's warnings about calls that cannot shrink are advice, not
+  this.)
 - **Numbers:** integers and rationals are exact (`bigint`); never round
   silently, never allow integer wraparound or imaginary-part loss; indexes
   and counts require exact integers.
