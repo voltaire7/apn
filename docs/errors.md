@@ -16,8 +16,11 @@ rendered by `formatError(err, color)`:
 - **Type errors** name an unknown name, where it is written, before any
   other error its unknown value leads to: `unbound variable 'x'`, or
   `unknown constructor 'Some' in a pattern`. A name the standard library
-  exports gets a hint naming the import (``add `std <- import "std"; use
-  std.option` to use `okOr` ``); others get `did you mean '...'?`.
+  exports gets a hint naming the import (``add `[..] <- import "std/option"`
+  to use `okOr` ``), unless the program defines it locally elsewhere (inside
+  another definition, block or record, in this input or an earlier one): there
+  it is out of scope, and the import is no answer. Others get
+  `did you mean '...'?`.
 - Code in a hint is in backticks: ``bind a value with `=` ``, ``bind its
   result first: `x <- action` ``.
 - Messages carry no `Parser:`/`Lexer:`/`Runtime:` prefixes — the headline

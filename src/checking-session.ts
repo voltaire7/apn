@@ -27,6 +27,8 @@ export class CheckingSession {
     valueTypes = new Map<string, unknown>();
     patternTypes = new WeakMap<Expr, unknown>();
     bridge?: TypeBridge;
+    // Names defined in local scopes so far (see CheckOptions.localNames).
+    private localNames = new Set<string>();
     /** Names the interpreter can resolve, so the checker can tell a typo from a runtime-only builtin. */
     runtimeNames?: () => Iterable<string>;
     /** The program's input when checking right before a run (see CheckOptions.inputs). */
@@ -78,6 +80,7 @@ export class CheckingSession {
             strict: true, initial, library, before, file,
             runtimeNames: !library && this.runtimeNames ? new Set(this.runtimeNames()) : undefined,
             inputs: library ? undefined : this.inputs,
+            localNames: library ? undefined : this.localNames,
             mutation: () => this.mutation,
             openedElsewhere: () => [...this.opaqueUses].some(p => p !== program),
             instances: this.instances,

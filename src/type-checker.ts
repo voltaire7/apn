@@ -229,6 +229,10 @@ type Formula = { items: FormulaItem[] };
 type FormulaItem = { expr?: Expr; scope?: Scope; type?: Ty; binds?: Map<string, Entry>; open?: Map<string, { expr: Expr; within?: Expr }>; slot?: Ty };
 export interface CheckOptions {
     strict?: boolean;
+    /** Names defined inside a definition, block or record, in this check or one
+     * before it (a REPL session's): unbound, such a name is out of scope, not
+     * a missing import. */
+    localNames?: Set<string>;
     /** A whole file, a block run once: its last statement, once one ran, is
      * in its monad too (a REPL input's is shown instead). */
     file?: boolean;
@@ -398,6 +402,7 @@ export function isModuleType(t: Ty): boolean { return t.k === "record" && t.fiel
 // The record r ++ [...] joins, as the written record's items see it (as at runtime).
 const JOINED = "[..]joined";
 function openHint(module: string): string { return `add \`[..] <- import "${module}"\``; }
+function importHint(name: string, module: string): string { return `${openHint(module)} to use \`${name}\``; }
 // The names a module type holds, for a record a module made.
 function moduleOf(t: Ty): TypeScope | undefined {
     const module = resolve(t);
@@ -840,6 +845,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const extendedFunctions = new Map<string, Ty>();
     type Unbound = { expr: Expr; name: string; hint?: string; inPattern?: boolean; within?: Expr };
     let firstUnbound: Unbound | undefined;
+    // The program's top-level scope, and the names defined in any other (see CheckOptions).
+    let topScope: Scope | undefined;
+    const localNames = options.localNames ?? new Set<string>();
     // The names bound nowhere that the list item being inferred reads, by
     // where it reads them: code may read a name a list joined before binds.
     let openNames: Map<string, Unbound> | undefined;
@@ -2337,7 +2345,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const module = standardModule(name), now = RETIRED_NATIVES[name];
         const holder = scope && [...scope].find(([, entry]) => moduleOf(entry.type)?.has(name))?.[0];
         return now ? `write \`${now} x\`` : holder ? `write \`${holder}.${name}\`, or \`[..] = ${holder}\` to open its names`
-            : module ? `${openHint(module)} to use \`${name}\`` : undefined;
+            : module ? importHint(name, module) : undefined;
     }
 
     // Whether a value of a type is, or holds, an action (a function giving one
@@ -7769,6 +7777,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return t.k === "variant";
     }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
+        if (scope !== topScope) localNames.add(name);
         try { defineIn(name, clauses, scope, location); }
         finally { if (ownDefinitions.has(scope)) ownDefinitions.get(scope)!.add(name); else ownDefinitions.set(scope, new Set([name])); }
     }
@@ -8204,6 +8213,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // The built-in types; the prelude declares List and Vect (read below).
     const scope: Scope = new Map(TYPE_NAMES.filter(name => name !== "List" && name !== "Vect").map((name) => [name, { type: { k: "type", value: atom(name) } }]));
+    topScope = scope;
     const a = variable(), b = variable();
     for (
         const [name, type] of Object.entries({
@@ -8590,7 +8600,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (whole(at)) { pos = at; len = name.length; break; }
             }
         }
-        issues.push({ message: firstUnbound.inPattern ? `unknown constructor '${firstUnbound.name}' in a pattern` : `unbound variable '${firstUnbound.name}'`, hint: firstUnbound.hint, pos, len, source: loc?.source, file: loc?.file });
+        // A name the program defines elsewhere, locally, is out of scope here:
+        // the library module that also defines it is no answer.
+        const module = standardModule(name);
+        const hint = module && localNames.has(name) && firstUnbound.hint === importHint(name, module) ? undefined : firstUnbound.hint;
+        issues.push({ message: firstUnbound.inPattern ? `unknown constructor '${firstUnbound.name}' in a pattern` : `unbound variable '${firstUnbound.name}'`, hint, pos, len, source: loc?.source, file: loc?.file });
     } else if (options.strict && dynamicBoundaries && !issues.length) {
         const loc = firstUnknown && sourceLocations.get(firstUnknown);
         issues.push({ message: `cannot establish static types: ${dynamicBoundaries} unresolved dynamic boundaries; mark runtime code with Dynamic`,

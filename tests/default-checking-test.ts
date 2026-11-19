@@ -1174,6 +1174,19 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
     }
     if (run(session(), 'std <- import "std"\n[..] = std.option\nfunc (Some x::xs) = [x,xs]; func [Some 1, None]') !== "[1, [None]]") throw new Error("with the import");
 });
+// A name the program defines locally elsewhere (inside f), in this input or one
+// before it, is out of scope where it is read: no module defining it is hinted.
+Deno.test("an unbound name defined locally elsewhere is not hinted to a module", () => {
+    for (const inputs of [["f = { code = [1]; code }\nprint code"], ["f = { code = [1]; code }", "print code"]]) {
+        const checking = session();
+        try { for (const input of inputs) run(checking, input); } catch (error) {
+            const e = error as { message: string; hint?: string };
+            if (e.message !== "unbound variable 'code'" || e.hint) throw new Error(`${inputs}: ${e.message} (${e.hint})`);
+            continue;
+        }
+        throw new Error(`accepted: ${inputs}`);
+    }
+});
 // An unbound name is reported where it is written, with the standard module
 // exporting it, before any check of what it would have been.
 for (const [source, name, module] of [
