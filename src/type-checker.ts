@@ -5985,13 +5985,32 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A list argument whose type has no length, where one is required, given
     // the length its value has when evaluation knows it (toList 3 for a
     // recursive toList): undefined when nothing changes.
-    // (Measured within a tenth of the budget, at most 30000 steps, even when
-    // checking is unbounded: a length only sharpens the call's type, and an
-    // endless list, xs = 0 :: xs, has none to find.)
+    // (Measured only where that is cheap, within 300 steps even when checking
+    // is unbounded: a length only sharpens the call's type, an endless list,
+    // xs = 0 :: xs, has none to find, and a step of a computed list, an
+    // element of primes, may cost much more than one.)
+    const measured = new WeakMap<object, bigint | null>();
     function measuredList(required: Ty, argument: Entry): Entry | undefined {
         const t = resolve(required), a = resolve(argument.type);
         if (t.k !== "list" || !t.length && !t.items || a.k !== "list" || a.length || a.items) return undefined;
-        const n = peek(() => budgetDepth ? knownLength(argument) : budgeted(() => knownLength(argument), Math.min(Math.ceil(EVALUATION_BUDGET / 10), 30000)), undefined);
+        const cap = Math.min(Math.ceil(EVALUATION_BUDGET / 10), 300);
+        // (Measured once: a list known to be endless, or too long to walk, is
+        // not walked again at each call typed with it.)
+        const known = measured.get(argument.cell ? argument.cell : argument);
+        if (known !== undefined) return known === null ? undefined : { ...argument, type: { ...a, length: constant(known) } };
+        const n = peek(() => {
+            if (!budgetDepth) return budgeted(() => knownLength(argument), cap);
+            // (Within an evaluation under way: its steps, at most cap more,
+            // and running out of them only leaves the length unknown.)
+            const limit = evaluationLimit, flags = [incomplete, exhausted, deepCut] as const;
+            evaluationLimit = Math.min(limit, evaluations + cap);
+            try {
+                const length = knownLength(argument);
+                if (exhausted && !flags[1]) { [incomplete, exhausted, deepCut] = flags; return undefined; }
+                return length;
+            } finally { evaluationLimit = limit; }
+        }, undefined);
+        measured.set(argument.cell ? argument.cell : argument, n ?? null);
         return n === undefined ? undefined : { ...argument, type: { ...a, length: constant(n) } };
     }
     function knownLength(k: Known | undefined): bigint | undefined {
@@ -8449,7 +8468,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     native("exit", [int], io(empty));
     scope.set("intrinsics.truthy", { type: { k: "intrinsic", name: "truthy", arity: 1 } });
     native("length", [list(variable())], int);
-    { const t = variable(); native("take", [int, list(t)], list(t)); }
     { const a = variable(), b = variable(), c = variable(); native("zipWith", [fn(a, fn(b, c)), list(a), list(b)], list(c)); }
     for (const name of ["foldl", "foldr"]) {
         const a = variable(), b = variable();

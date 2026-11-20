@@ -299,8 +299,8 @@ is 300000 steps per value; `apn --check-budget=N` sets it, and
 `--check-budget=none` lifts it, so the checker decides what takes longer, and
 runs forever on what never finishes. A list's length that only sharpens a
 call's type (the list a function taking lists apart by length is given) is
-measured within a tenth of the budget, at most 30000 steps even with `none`,
-and left unknown past it: an endless list has none to find (`rest fibs`, for
+measured only where that is cheap, within 300 steps even with `none`, and left
+unknown past them: an endless list has none to find (`rest fibs`, for
 `rest (_ :: xs) = xs`, `rest [] = fail "empty"` and `fibs = 0 :: 1 ::
 zipWith (+) fibs (rest fibs)`). Either way checking performs no effect: the budget bounds work, not what
 the code may do.

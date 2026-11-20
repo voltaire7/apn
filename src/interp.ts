@@ -5228,10 +5228,12 @@ export class Interpreter {
             const ref = this.reference(argsIn[0]);
             // A native the prelude models has its definition's type (the
             // definition's own recursive calls, described meanwhile, the native's).
-            const definition = ref.kind === "native" && !ref.applied.length && !ref.tag && !this.describingModeled.has(ref.name) ? this.modeledDefinitions.get(ref.name) : undefined;
+            // (Given some of its arguments, the definition given them: take 2.)
+            const definition = ref.kind === "native" && !ref.tag && !this.describingModeled.has(ref.name) ? this.modeledDefinitions.get(ref.name) : undefined;
             if (definition && ref.kind === "native") {
                 this.describingModeled.add(ref.name);
-                try { return this.callNative("typeOf", [definition]); } finally { this.describingModeled.delete(ref.name); }
+                try { return this.callNative("typeOf", [ref.applied.reduce((f: Value, x) => this.apply(f, x), definition)]); }
+                finally { this.describingModeled.delete(ref.name); }
             }
             // A view's type is its builder's.
             if (ref.kind === "native" && ref.view && ref.build && !ref.applied.length) return this.callNative("typeOf", [ref.build]);

@@ -132,10 +132,12 @@ so moving a native to the prelude is checked by a test that exists.
    the other clauses; and a clause `fail message` gives its function no result
    type of its own, so `first [] = fail "empty"` leaves `first (x :: _) = x`
    a function of a list of any length (all done, for any function). Moved
-   (`MODELED` in `src/natives.ts`): `head`, `tail`, `null`, `drop`, `filter`,
-   `iterate`; the interpreter does not run their definitions, so they cannot
-   join the native. Each of the others meets a checker gap first: `take` makes
-   checking the library loop; `foldl` uses `seq`, which the prelude does not
-   see; `foldr (++)` over strings mistypes a `Char` as an `Int`; `zipWith`
+   (`MODELED` in `src/natives.ts`): `head`, `tail`, `null`, `take`, `drop`,
+   `filter`, `iterate`; the interpreter does not run their definitions, so they
+   cannot join the native. Each of the others meets a checker gap first:
+   `foldl`'s accumulator, typed through its clauses, keeps a starting `[]` as
+   the empty list's type when it grows (`myFoldl visit [0, []] s` fails with a
+   program's own fold today too), and it needs `seq`, now `std/function`'s
+   only; `foldr (++)` over strings mistypes a `Char` as an `Int`; `zipWith`
    loses lengths and a `Float` (`zip [0..n] xs`); `length`, `enumerate`, the
    map functions, `truthy` and the operators wait for their own trials.

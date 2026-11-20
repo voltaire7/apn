@@ -195,7 +195,7 @@ checked: as they are used, at runtime, rather than before the program runs.
 # Functions
 
 A native is a function bound to JavaScript. Those with an APN definition are
-given one here, or are the prelude's (`head`, `tail`, `null`, `drop`,
+given one here, or are the prelude's (`head`, `tail`, `null`, `take`, `drop`,
 `filter` and `iterate`, which the checker types and evaluates from it, and
 `typeOf` describes; `MODELED` in `src/natives.ts` lists them);
 `tests/intrinsics-test.ts` runs the definitions against the natives on the same
@@ -209,9 +209,6 @@ length [] = 0
 length (_ :: xs) = 1 + length xs
 length (text : String) = length (to (List Char) text)
 length (m : HashMap _ _) = length (pairs m)
-take 0 _ = []
-take (n : UInt) [] = []
-take (n : UInt) (x :: xs) = x :: take (n - 1) xs
 foldl f acc [] = acc
 foldl f acc (x :: xs) = {
     next = f acc x
