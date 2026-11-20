@@ -221,11 +221,16 @@ Where they were written does not matter: `len xs = 0` before `len (x::rest) =
 ...` still leaves `len [1,2]` to the second, and a later clause with an
 equivalent pattern replaces an earlier one. When no equation matches, the
 error names the function: `no clause of 'len'
-matches the given arguments`. When what is known of the arguments already
-rules out every clause (a literal, a constructor, a list's length: `pred 0`
-for `pred (S k) = k`), it is a static error. Guards are not allowed on definition clauses;
-use `~` with guarded pattern lambdas instead (see
-[pattern functions](pattern-functions.md)).
+matches the given arguments`. A call that certainly fails is a static error:
+one where what is known of the arguments rules out every clause (a literal, a
+constructor, a list's length: `pred 0` for `pred (S k) = k`), or certainly
+takes a clause that is `fail message` (`first []` for `first [] = fail
+"empty"`, reported with the message). Only a call that is certainly evaluated
+counts: a statement's value, what a strict operator or native such as `print`
+demands of it, a condition, a block's statements. One in a list item, another
+function's argument, a branch or an unused binding waits until it is used, and
+may never be (`[pred 0, 2] 1` is 2). A clause may have a guard (`f n | n > 0 =
+n`, see [pattern functions](pattern-functions.md)).
 
 There is no `if`/`then`/`else`; use the ternary `cond ? a : b`, which is
 `truthy cond a b` as if written in its place: the condition's

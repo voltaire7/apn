@@ -1174,6 +1174,27 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
     }
     if (run(session(), 'std <- import "std"\n[..] = std.option\nfunc (Some x::xs) = [x,xs]; func [Some 1, None]') !== "[1, [None]]") throw new Error("with the import");
 });
+// A call certainly evaluated that certainly fails is a static error: no clause
+// takes its known arguments, or the one it takes is fail message. One nothing
+// demands (a list item, an unused binding) waits until used.
+Deno.test("a call certainly evaluated that certainly fails is a static error", () => {
+    for (const [source, message] of [
+        ['first [] = fail "empty"\nfirst (x :: _) = x\nprint (first [])', "this call fails whenever it runs: empty"],
+        ['msg n = fail ("bad " ++ to String n)\nprint (msg 3)', "this call fails whenever it runs: bad 3"],
+        ["pred (S k) = k\n1 + pred 0", "no clause of 'pred' matches these arguments"],
+    ]) {
+        try { run(session(), source); } catch (error) {
+            if ((error as Error).message !== message) throw new Error(`${source}: ${(error as Error).message}`);
+            continue;
+        }
+        throw new Error(`accepted: ${source}`);
+    }
+    for (const [source, value] of [
+        ['first [] = fail "empty"\nfirst (x :: _) = x\nlater = [first [], 2]\nlater 1', "2"],
+        ["pred (S k) = k\nunused = pred 0\n[pred 0, 2] 1", "2"],
+        ['todo x = fail "todo"\n[first = 1, second = todo 1].first', "1"],
+    ]) if (run(session(), source) !== value) throw new Error(source);
+});
 // A list compared with one value is no comparison of sets: the hint compares
 // its items, each or every one, with the section as written.
 Deno.test("a list compared with one value hints at comparing its items, statically or at runtime", () => {

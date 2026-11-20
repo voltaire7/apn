@@ -832,6 +832,8 @@ function copy(
 
 // Inference never evaluates APN. Dependency callbacks provide static module
 // interfaces; unsupported operations require an explicit Dynamic boundary.
+// Operators that evaluate their operands (&& and || their left one first).
+const STRICT_OPERATORS = new Set(["+", "-", "*", "/", "%", "^", "==", "!=", "<", ">", "<=", ">=", "&&", "||"]);
 export function checkTypes(program: TopLevel[], options: CheckOptions = {}): CheckResult {
     const issues: TypeIssue[] = [];
     // How often each name is bound: a top-level value bound once can keep its
@@ -5361,8 +5363,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : peek(() => budgeted(() => evaluateKnown(arg, env, declared.scope, 0)), undefined));
     }
     // A complete call of a named function none of whose clauses can match what
-    // is known of its arguments (first Nil for first (Cons x _) = x) fails
-    // whenever it runs: report it now.
+    // is known of its arguments (first Nil for first (Cons x _) = x), or whose
+    // one clause it certainly takes is fail message (head [] for head [] = fail
+    // "head of empty list"), fails whenever it runs: report it now.
     // Whether only a value's shape decides a pattern: literals, constructors,
     // list shapes. A typed pattern (Int n) is left to its conversion.
     function decidedByShape(p: Pattern, scope: Scope): boolean {
@@ -5370,7 +5373,44 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : p.p === "list" ? p.v.every(q => decidedByShape(q, scope)) : p.p === "cons" ? decidedByShape(p.head, scope) && decidedByShape(p.tail, scope)
             : p.p !== "schema" && p.p !== "typeBind" && p.p !== "as";
     }
+    // The expressions a statement certainly evaluates when it runs: its value,
+    // what a strict operator or native demands of it, a ternary's condition, a
+    // block's statements and what x <- m runs. A list's items, another
+    // function's arguments, a branch and a definition's body wait until used,
+    // so a call there that would fail is no error (an expression nothing
+    // demands never fails).
+    const demanded = new WeakSet<Expr>();
+    function markDemanded(e: Expr, scope: Scope): void {
+        demanded.add(e);
+        switch (e.t) {
+            case "block":
+                for (const s of e.stmts) {
+                    if (s.t === "patDef" && s.eager) markDemanded(s.value, scope);
+                    else if (s.t !== "stmDef" && s.t !== "patDef" && s.t !== "typeDef" && s.t !== "setItem" && s.t !== "setFields") markDemanded(s, scope);
+                }
+                return;
+            case "ternary": markDemanded(e.cond, scope); return;
+            case "unop": markDemanded(e.e, scope); return;
+            case "binop":
+                if (!STRICT_OPERATORS.has(e.op)) return;
+                markDemanded(e.l, scope);
+                if (e.op !== "&&" && e.op !== "||") markDemanded(e.r, scope);
+                return;
+            case "pipe": case "app": {
+                const args: Expr[] = [];
+                let head: Expr = e;
+                for (;;) {
+                    if (head.t === "app") { args.unshift(head.a); head = head.f; }
+                    else if (head.t === "pipe") { args.unshift(head.x); head = head.f; }
+                    else break;
+                }
+                if (head.t === "var" && STRICT_NATIVES.has(head.name) && !READS_CODE.has(head.name) && scope.get(head.name)?.builtin) args.forEach(a => markDemanded(a, scope));
+                return;
+            }
+        }
+    }
     function noClauseMatches(e: Expr, scope: Scope): void {
+        if (!demanded.has(e)) return;
         const args: Expr[] = [];
         let head: Expr = e;
         while (head.t === "app") { args.unshift(head.a); head = head.f; }
@@ -5379,12 +5419,30 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // leaves 1 + 2 to +), so no clause matching is no failure.
         if (PRELUDE_OPERATORS.has(head.name)) return;
         const entry = scope.get(head.name);
-        if (!entry || entry.builtin || !trustsShape(entry)) return;
+        if (!entry || !trustsShape(entry)) return;
         const summary = summaryAt(entry.type, args.length);
         if (!summary) return;
         const entries = args.map(a => ({ type: inferred.get(a) ?? dynamic, ...needed(valueEntry(a, scope)) }));
         const fails = (c: ClauseOrder) => peek(() => c.params.some((p, n) => decidedByShape(p, scope) && definitelyFails(p, entries[n], 0, 0)), false);
-        if (summary.clauses.length && summary.clauses.every(fails)) problem(`no clause of '${head.name}' matches these arguments`, e, "the definition's patterns don't cover this input");
+        if (!entry.builtin && summary.clauses.length && summary.clauses.every(fails)) problem(`no clause of '${head.name}' matches these arguments`, e, "the definition's patterns don't cover this input");
+        const failing = certainFail(summary, entries);
+        if (failing) problem(failing, e);
+    }
+    // The message of the fail a call certainly reaches: the one clause its
+    // arguments certainly take, unguarded, being fail message (its message
+    // known, or not).
+    function certainFail(summary: Summary, entries: Entry[]): string | undefined {
+        const candidates = peek(() => possibleClauses(summary.clauses, entries), []);
+        if (candidates.length !== 1 || !candidates[0].matches) return undefined;
+        const clause = candidates[0].clause;
+        if (clause.guard) return undefined;
+        let body = clause.body;
+        while (body.t === "block" && body.style === "(" && body.stmts.length === 1) body = body.stmts[0];
+        if (body.t !== "app" || body.f.t !== "var" || body.f.name !== "fail" || !summary.scope.get("fail")?.builtin) return undefined;
+        const env = new Map<string, Known>();
+        clause.params.forEach((p, n) => bindKnown(p, entries[n], env, clause.refutable));
+        const message = peek(() => budgeted(() => evaluateKnown(body.a, env, summary.scope, 0))?.string, undefined);
+        return message === undefined ? "this call reaches fail whenever it runs" : `this call fails whenever it runs: ${message}`;
     }
     // A value computed left waiting (over no parameters) is computed when a
     // check depends on it, as computed would have.
@@ -8617,6 +8675,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             else if (statement.t === "type") declare(statement.def, scope);
             else if (statement.t === "expr") {
+                markDemanded(statement.value, scope);
                 executeTopLevel(statement.value, scope);
                 const type = infer(statement.value, scope);
                 // ([..] = r binds, and gives no value.)

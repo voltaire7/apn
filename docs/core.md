@@ -127,8 +127,8 @@ so moving a native to the prelude is checked by a test that exists.
    evaluates as it does any prelude function; the interpreter (and the
    checker's evaluator) keep the native only as a faster way to compute. Moving
    `head` and `tail` this way showed what the checker must learn first, each a
-   rule its hand-written native types now stand in for: a demanded `fail` it
-   reaches on known values is a static error (`head []`, from `head [] = fail
-   ...`); a clause's own patterns type a call on a list of mixed items
+   rule its hand-written native types now stand in for: a call certainly
+   evaluated that certainly takes a clause `fail message` is a static error
+   (`head []`, from `head [] = fail ...`; done); a clause's own patterns type a call on a list of mixed items
    (`head [1, "a"]` is an `Int`), not one element type for the whole list; and
    evaluating through a definition costs no more than its native.
