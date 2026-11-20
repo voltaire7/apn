@@ -195,17 +195,15 @@ checked: as they are used, at runtime, rather than before the program runs.
 # Functions
 
 A native is a function bound to JavaScript. Those with an APN definition are
-given one here; `tests/intrinsics-test.ts` runs the definitions against the
-natives on the same inputs, and they differ at most in an error's wording. Each clause takes only what
+given one here, or are the prelude's (`head` and `tail`, which the checker
+types and evaluates from it; `MODELED` in `src/natives.ts` lists them);
+`tests/intrinsics-test.ts` runs the definitions against the natives on the same
+inputs, and they differ at most in an error's wording. Each clause takes only what
 it is written with, so a definition's patterns say what the native accepts.
 
 ## Lists
 
 ```apn
-head (x :: _) = x
-head [] = fail "head of empty list"
-tail (_ :: xs) = xs
-tail [] = fail "tail of empty list"
 null [] = True
 null (text : String) = text == ""
 null (m : HashMap _ _) = null (pairs m)

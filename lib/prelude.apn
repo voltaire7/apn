@@ -161,6 +161,11 @@ with = intrinsics.with
 # A list is empty or an element on a list: endless lists, whose unfoldings
 # never end, are lists too ([Int..] is Cons Int [Int..]).
 List a = Nil | Cons a (List a)
+# A list's first element, and the list after it.
+head (x :: _) = x
+head [] = fail "head of empty list"
+tail (_ :: xs) = xs
+tail [] = fail "tail of empty list"
 # Whether a value is a list, of any elements, demanding only its first cell.
 isList value = value ~ [[] -> True, _ :: _ -> True, _ -> False]
 [] >>= f = []

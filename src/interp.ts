@@ -11,7 +11,7 @@ import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { captureSnapshot } from "./snapshot.ts";
 import { buildExecutable } from "./compile.ts";
 import { standardNative } from "./standard-natives.ts";
-import { ACTIONS, NATIVE_EXPORTS, NATIVES, RETIRED_NATIVES, STANDARD_NATIVES, TAKES_UNDECIDED } from "./natives.ts";
+import { ACTIONS, MODELED, NATIVE_EXPORTS, NATIVES, RETIRED_NATIVES, STANDARD_NATIVES, TAKES_UNDECIDED } from "./natives.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { bundledText, IMPORT_ONE, loadPath, type ModuleFile, readLoad, resolveModule, sourcePath, unknownModule } from "./modules.ts";
 import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_CLASSES, NUMERIC_TYPES, OWN_SCALAR_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
@@ -429,6 +429,9 @@ export class Interpreter {
         // Without the prelude (apn --no-prelude) a program has only the intrinsics.
         if (getPreludeUsed()) {
             this.run(parseDocument(preludeSource));
+            // A native the prelude defines runs as itself, its definition's faster
+            // way (see MODELED); the prelude's own uses of it too.
+            for (const name of MODELED) this.env.setLocal(name, outer.get(name)!);
             // Bind each operator to its value itself, so evaluation finds the intrinsic.
             // (fail, which marks code still to write, is the prelude's too.)
             for (const [name, value] of this.env.bindings()) this.preludeBindings.set(name, this.reference(value));

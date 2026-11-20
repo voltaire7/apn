@@ -132,4 +132,5 @@ so moving a native to the prelude is checked by a test that exists.
    the other clauses; and a clause `fail message` gives its function no result
    type of its own, so `first [] = fail "empty"` leaves `first (x :: _) = x`
    a function of a list of any length (all done, for any function). `head` and
-   `tail` move next.
+   `tail` have moved (`MODELED` in `src/natives.ts`); the other natives with a
+   definition in [intrinsics](intrinsics.md) are next.

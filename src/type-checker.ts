@@ -8408,8 +8408,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     for (
         const [name, type] of Object.entries({
             print: fn(a, io(list(variable(), constant(0n)))),
-            head: fn(list(a), a),
-            tail: fn(list(a), list(a)),
             filter: fn(fn(a, b), fn(list(a), list(a))),
             length: fn(dynamic, atom("Int")),
             typeOf: fn(a, { k: "type", value: b }),
@@ -8466,13 +8464,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const summary: Summary = { scope, clauses: [{ index: 0, place: 0, params: [{ p: "var", name: "a" }, { p: "var", name: "b" }], body: { t: "var", name: "b" }, refutable: new Set() }] };
         for (let t = resolve(seq.type), n = 0; t.k === "fn" && n < 2; t = resolve(t.output), n++) t.summary = summary;
     } }
-    // head and tail take a list apart as their definitions do (head (x :: _) =
-    // x), so a list's known items keep their own types (see typedCall).
-    for (const [name, head, tail, body] of [["head", "x", "_", "x"], ["tail", "_", "xs", "xs"]]) {
-        const entry = scope.get(name), part = (n: string): Pattern => n === "_" ? { p: "wildcard" } : { p: "var", name: n };
-        const t = entry && resolve(entry.type);
-        if (t?.k === "fn") t.summary = { scope, clauses: [{ index: 0, place: 0, params: [{ p: "cons", head: part(head), tail: part(tail) }], body: { t: "var", name: body }, refutable: new Set() }] };
-    }
     native("toString", [variable()], str);
     native("intToString", [int], str);
     native("format", [str, list(variable())], str);

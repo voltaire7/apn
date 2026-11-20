@@ -68,6 +68,10 @@ export const ACTIONS = new Map(Object.entries({
     readStdin: "String", getArgs: "[String]", sendRequest: "Record", bracket: "a", withFile: "a",
     withLibrary: "a", entropy: "Int", currentTime: "Int", zoneOffset: "Int",
 }));
+// Natives the prelude defines in APN: the definition is what each one means, and
+// what the checker types and evaluates; the interpreter runs the native in its
+// place, a faster way to compute the same thing (tests/intrinsics-test.ts).
+export const MODELED = new Set(["head", "tail"]);
 // Natives that show their argument as text, which an action has none of.
 export const SHOWS = new Set(["print", "emit", "toString"]);
 // Natives that take an undecided value as it is: they show it or pass it on.

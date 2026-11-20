@@ -3,6 +3,7 @@
 // native does on the same inputs, run unchecked.
 import { Interpreter } from "../src/interp.ts";
 import { parseDocument } from "../src/parser.ts";
+import { MODELED } from "../src/natives.ts";
 
 const doc = Deno.readTextFileSync(new URL("../docs/intrinsics.md", import.meta.url));
 // The APN blocks of a section, by its heading.
@@ -15,7 +16,10 @@ const blocks = (heading: string): string[] => {
 // each with the lines that continue it.
 const named = (block: string): string =>
     block.split(/\n(?=[^\s\]}])/).filter(d => /^[a-z][A-Za-z]* /.test(d) && !/^[a-z]+ (&&|\|\||\$|\+\+|>>=|<\*>) /.test(d)).join("\n");
-const definitions = [blocks("Lists")[0], blocks("Maps")[0], ...blocks("Truth, operators and indexing").slice(0, 2)].map(named).join("\n");
+// The natives the prelude defines (MODELED) are tested by its definitions.
+const prelude = Deno.readTextFileSync(new URL("../lib/prelude.apn", import.meta.url));
+const modeled = prelude.split("\n").filter(line => [...MODELED].some(name => line.startsWith(name + " "))).join("\n");
+const definitions = [blocks("Lists")[0], blocks("Maps")[0], ...blocks("Truth, operators and indexing").slice(0, 2)].map(named).join("\n") + "\n" + modeled;
 const names = [...new Set([...definitions.matchAll(/^([a-z][A-Za-z]*) /gm)].map(m => m[1]))];
 const own = new RegExp(`(?<![\\w.])(${names.join("|")})\\b`, "g");
 const renamed = (source: string) => source.replace(own, (_, n: string) => `my${n[0].toUpperCase()}${n.slice(1)}`);

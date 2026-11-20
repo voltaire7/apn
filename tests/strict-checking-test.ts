@@ -204,15 +204,15 @@ for (const [source, error] of [
     ['f r = null r.xs ? "none" : "k" ++ head r.xs\nf [xs = [], n = 1]', ""],
     // Inside a typed call, a list known empty has no first item to take, and a
     // && or || its left side decides does not run its right.
-    ['f p = head (head p)\nf [[], "a"]', "length mismatch: expected at least 1, got 0"],
-    ['f r = 1 + head r.xs\nf [xs = [], n = "a"]', "length mismatch: expected at least 1, got 0"],
+    ['f p = head (head p)\nf [[], "a"]', "this call fails whenever it runs: head of empty list"],
+    ['f r = 1 + head r.xs\nf [xs = [], n = "a"]', "this call fails whenever it runs: head of empty list"],
     ['f r = null r.xs ? 0 : head r.xs\nf [xs = [], n = "a"]', ""],
     ['f p = length (head p) == 0 || head (head p) > 1\nf [[], "a"]', ""],
-    ['f p = True && head (head p)\nf [[], "a"]', "length mismatch"],
+    ['f p = True && head (head p)\nf [[], "a"]', "this call fails whenever it runs: head of empty list"],
     // Outside one too: an empty list is known empty, and a known condition,
     // && or || takes its side, the other typed only where it can be.
-    ['head []', "length mismatch: expected at least 1, got 0"],
-    ['xs = []\nhead xs', "length mismatch: expected at least 1, got 0"],
+    ['head []', "this call fails whenever it runs: head of empty list"],
+    ['xs = []\nhead xs', "this call fails whenever it runs: head of empty list"],
     ['xs = []\nnull xs ? 0 : head xs', ""],
     ['False ? head [] : 0', ""],
     ['print (False && head [])\nprint (True || head [])', ""],
