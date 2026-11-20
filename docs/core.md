@@ -82,6 +82,21 @@ for membership, converting where `T` declares a conversion
 ([values are sets](semantics.md#values-are-sets)). The static checker is the
 same sets decided early: what it cannot decide is checked as the program runs.
 
+A typed pattern `(x : T)` is membership read as a pattern, as `[a, b] = xs` is
+a list read as one ([symmetry](symmetry.md)), not a view. A view takes a value
+apart by a function of the value; a typed pattern asks which set the value is
+in, which the value alone does not say:
+
+```apn
+f (xs : List Int) = "ints"
+f [1,2.5]                 # "ints": the checker typed the list List Int
+kind (b : Box t) = t      # kind (Box 1.5) is Float: t is a type, no part of b
+```
+
+`(xs : List Int)` decides by the type the checker gave the value, and
+`(b : Box t)` binds a type variable; a matcher sees neither, and the checker
+would still need a rule to give the binding the type `T`.
+
 ### 7–9. Effects, code, order
 
 An action is a function of the world ([intrinsics](intrinsics.md#effects-and-references)),
@@ -93,7 +108,6 @@ they were written in, so quoting needs no form of its own. Evaluation is lazy;
 
 | Today | In the core |
 | --- | --- |
-| Typed patterns `(x : Int32)` as their own pattern | a view matching members of `Int32`, binding the converted value |
 | A checker rule written by hand for each native (`Takes`, `S`, ...) | the type of its definition |
 | Natives with an APN definition in [intrinsics](intrinsics.md) (list functions, maps, `truthy`, `++`, `get`, `with`, ranges, the list and action instances) | prelude definitions, with the interpreter's version kept as a faster way to compute the same thing |
 
@@ -102,11 +116,6 @@ so moving a native to the prelude is checked by a test that exists.
 
 ## Open questions
 
-- **How a view is typed.** The checker must read the fields' types from the
-  matcher (`n | n > 0 -> [n - 1]` gives a `UInt`), as it reads a clause's.
-- **Whether typed patterns are views.** `(x : T)` both tests and converts; a
-  view that binds the converted value would cover it, but a program's own `to`
-  instances must still take part.
 - **Whether records need a form of their own.** A record is already code, a list
   of bindings; its literal, access (`v.x`) and update forms are sugar for `get`
   and `with`, but the parser keeps them as nodes of their own.
@@ -114,7 +123,12 @@ so moving a native to the prelude is checked by a test that exists.
 ## Order of work
 
 1. Views as a primitive; `S`/`Z` and `Takes`/`Gives` move to the prelude (done).
-2. Typed patterns as views, if the open question above allows it.
-3. The checker types natives from their definitions where they have one.
-4. Natives with a definition move to the prelude; the interpreter keeps them
-   only as faster ways to compute.
+2. Natives with a definition move to the prelude, which the checker types and
+   evaluates as it does any prelude function; the interpreter (and the
+   checker's evaluator) keep the native only as a faster way to compute. Moving
+   `head` and `tail` this way showed what the checker must learn first, each a
+   rule its hand-written native types now stand in for: a demanded `fail` it
+   reaches on known values is a static error (`head []`, from `head [] = fail
+   ...`); a clause's own patterns type a call on a list of mixed items
+   (`head [1, "a"]` is an `Int`), not one element type for the whole list; and
+   evaluating through a definition costs no more than its native.
