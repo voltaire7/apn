@@ -61,7 +61,9 @@ type Ty =
     // function's code, so they are trusted only at a direct call by name.
     // shared: a constructor sharing its type's name (Box x = _, Nothing = _),
     // which is that type where a type is expected (sharedType).
-    | { k: "fn"; input: Ty; output: Ty; shared?: boolean; constructs?: boolean; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; summary?: Summary; applied?: Entry[] }
+    // used: the function a value's use made (xs n): what is applied may be
+    // a function, or a value get indexes (a list, a record, a map).
+    | { k: "fn"; input: Ty; output: Ty; used?: boolean; shared?: boolean; constructs?: boolean; binder?: string; coerce?: boolean; checks?: Ty[]; pattern?: Pattern; selfName?: string; shape?: Shape; args?: Ty[]; clauses?: ClauseOrder[]; callArgs?: Entry[]; summary?: Summary; applied?: Entry[] }
     // formula: a list literal's code; open: the names its code reads that are
     // bound nowhere yet (a list joined before it may bind them), by where read.
     // endless: infinitely many elements, [Int..] ([1..], a range of a type).
@@ -1397,6 +1399,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (a.k === "union") return union(a.choices.map(x => operation(t.op, t.args.length === 1 ? [x] : [x, b])));
         if (b?.k === "union") return union(b.choices.map(x => operation(t.op, [a, x])));
         if (["pairs", "keys", "values", "enumerate", "length"].includes(t.op)) {
+            // A value only its use made a function (xs n) may be a collection
+            // get indexes: the run decides.
+            if (a.k === "fn" && a.used) { runtimeChecks++; return t.op === "length" ? atom("Int") : explicitDynamic; }
             if (t.op === "length") {
                 if (a.k === "list" || a.k === "record" || a.k === "map" || a.k === "atom" && a.name === "String") return atom("Int");
                 return problem(`length requires a collection; got ${text(a)}`);
@@ -1668,7 +1673,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (actual.k === "mutable" && expected.k !== "mutable") return unify(expected, actual.value, e, seen);
         if (expected.k === "mutable" && actual.k === "mutable") return unify(expected.value, actual.value, e, seen);
-        if (expected.k === "fn" && (actual.k === "overload" || actual.k === "type" || actual.k === "intrinsic")) {
+        // A value applied where only its use made it a function (xs n) may be
+        // one get indexes: applied, as the run applies it.
+        const indexed = expected.k === "fn" && expected.used && (actual.k === "list" || actual.k === "record" || actual.k === "map");
+        if (expected.k === "fn" && (actual.k === "overload" || actual.k === "type" || actual.k === "intrinsic" || indexed)) {
             unify(expected.output, operation("call", [actual, expected.input]), e, seen);
             return;
         }
@@ -3827,7 +3835,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const self = !choosing ? definingSelf.find(d => d.byType && resolve(d.pending) === f) : undefined;
             if (self) return selfCall(self, argument);
             const result = variable();
-            unify(f, fn(argument.type, result), e);
+            unify(f, { ...fn(argument.type, result) as Extract<Ty, { k: "fn" }>, used: true }, e);
             return result;
         }
         if (f.k === "fn") {

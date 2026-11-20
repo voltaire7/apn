@@ -746,7 +746,9 @@ prelude's `intrinsics.get`, which indexes lists, records and HashMaps as
 described here, and the prelude's clauses `get True a = _ -> a` and
 `get False _ = b -> b`, so a Bool applied to two values is one of them
 (`True "yes" "no"` is `"yes"`; the other is never evaluated). Numbers, strings
-and characters cannot be applied. Assigning is its counterpart `with`: `xs 2 = x` binds `xs` to
+and characters cannot be applied. A parameter applied (`at xs n = xs n`) may
+be either, so the checker takes it as a function only where nothing else is
+given: `at [1,2] 1`, `at [a = 1] "a"` and `at (x -> x * 2) 4` all check. Assigning is its counterpart `with`: `xs 2 = x` binds `xs` to
 `with xs 2 x`, a copy with that slot replaced. Clauses for `get` and `with`
 extend them, so a type of the program's own can be indexed and assigned to,
 wherever it is applied (`map g`, too); other values keep the builtin meaning.

@@ -1174,6 +1174,18 @@ Deno.test("an unknown constructor in a pattern is named, with the module that de
     }
     if (run(session(), 'std <- import "std"\n[..] = std.option\nfunc (Some x::xs) = [x,xs]; func [Some 1, None]') !== "[1, [None]]") throw new Error("with the import");
 });
+// A parameter applied (xs n) may be a function or a value get indexes: a list,
+// a record or a map passed to it checks, a number still does not.
+Deno.test("an applied parameter takes a function or a value get indexes", () => {
+    const at = "at xs n = n < length xs ? xs n : fail \"x\"\n";
+    for (const [source, value] of [
+        [at + "at [1,2] 1", "2"],
+        ["field r k = r k\nfield (x -> x * 2) 4", "8"],
+        ["field r k = r k\nfield [a = 1] \"a\"", "1"],
+        ["field r k = r k\nfield ([[\"a\", 7]] : HashMap _ _) \"a\"", "7"],
+    ]) if (run(session(), source) !== value) throw new Error(source);
+    rejected(session(), "at xs n = xs n\nat 5 1");
+});
 // A call certainly evaluated that certainly fails is a static error: no clause
 // takes its known arguments, or the one it takes is fail message. One nothing
 // demands (a list item, an unused binding) waits until used.
