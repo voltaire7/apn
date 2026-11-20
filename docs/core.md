@@ -135,9 +135,13 @@ so moving a native to the prelude is checked by a test that exists.
    (`MODELED` in `src/natives.ts`): `head`, `tail`, `null`, `take`, `drop`,
    `filter`, `iterate`; the interpreter does not run their definitions, so they
    cannot join the native. Each of the others meets a checker gap first:
-   `foldl`'s accumulator, typed through its clauses, keeps a starting `[]` as
-   the empty list's type when it grows (`myFoldl visit [0, []] s` fails with a
-   program's own fold today too), and it needs `seq`, now `std/function`'s
-   only; `foldr (++)` over strings mistypes a `Char` as an `Int`; `zipWith`
+   `foldl`'s accumulator, typed through its clauses, can keep a starting `[]`
+   as the empty list's type when it grows: an argument's `[]` given where a
+   list of any length goes now widens (`take 2 (iterate (s -> snd (myFoldl
+   visit [0, []] s)) [1,2])` checks), but a function's own type taken through
+   a fold's `[]` clause (`g s = snd (myFoldl visit [0, []] s)`) still binds
+   its parameter to `[]`, and an accumulator that grows by one per step carries
+   a length `iterate` cannot settle (`std/search`'s breadth-first search); it
+   also needs `seq`, now `std/function`'s only; `foldr (++)` over strings mistypes a `Char` as an `Int`; `zipWith`
    loses lengths and a `Float` (`zip [0..n] xs`); `length`, `enumerate`, the
    map functions, `truthy` and the operators wait for their own trials.

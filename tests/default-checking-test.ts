@@ -1186,6 +1186,15 @@ Deno.test("an applied parameter takes a function or a value get indexes", () => 
     ]) if (run(session(), source) !== value) throw new Error(source);
     rejected(session(), "at xs n = xs n\nat 5 1");
 });
+// The empty list met by a list of any length is a list of any length: a fold
+// whose accumulator starts [] and grows, through clauses on [] and x :: xs.
+Deno.test("an accumulator that starts empty grows", () => {
+    const fold = '[..] <- import "std/function"\nmyFoldl f acc [] = acc\nmyFoldl f acc (x :: xs) = myFoldl f (f acc x) xs\n'
+        + "visit acc node = node > 2 ? acc : [fst acc, node :: snd acc]\n";
+    for (const [source, value] of [
+        [fold + "take 2 (iterate (s -> snd (myFoldl visit [0, []] s)) [1,2])", "[[1,2],[2,1]]"],
+    ]) if (run(session(), source) !== value) throw new Error(source);
+});
 // A clause that is fail message gives no value, so it gives its function no
 // type: a list of unknown length given to one that takes it apart keeps its
 // items' type (a pair here, which [x,y] takes apart).

@@ -1700,6 +1700,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     problem(`length mismatch: expected ${zero === expected ? 0 : n}, got ${zero === expected ? n : 0}`, e);
                 }
             }
+            // A place that takes the empty list, given a list of any length,
+            // takes lists of any length (a [] clause's parameter beside an
+            // x :: xs clause's, an accumulator [] that grows). An empty value
+            // given where any list goes stays empty (Cons 2 Nil, a tail).
+            if (empty(expected) && !actual.items && !actual.length && !actual.endless) { expected.items = undefined; expected.length = undefined; }
             // An endless list ([Int..]) has no length a finite one has.
             for (const [a, b, first] of [[expected, actual, true], [actual, expected, false]] as const) {
                 const n = knownLength(b);
@@ -3411,6 +3416,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             .filter(x => empty(x) || !variables(x).size && !waiting(x));
         return new Set(parts.map(x => text(resolve(x)))).size > 1 || children(r).some(child => holdsMixed(child, seen));
     };
+    // An empty list given where a list of any length goes, in a part of an
+    // argument (the [] of a fold's accumulator [0, []]), is a list of any
+    // length from then on: what the parameter holds grows. One given where a
+    // length is followed (Cons 2 Nil's tail, Vect k a) stays empty.
+    function widenEmpty(parameter: Ty, argument: Ty, seen = new Set<Ty>()): void {
+        const p = resolve(parameter), a = resolve(argument);
+        if (seen.has(a)) return;
+        seen.add(a);
+        if (p.k !== "list" || a.k !== "list") return;
+        if (a.items?.length === 0 && !p.items && !p.length && !p.endless) { a.items = undefined; a.length = undefined; return; }
+        if (p.items && a.items && p.items.length === a.items.length) p.items.forEach((t, n) => widenEmpty(t, a.items![n], seen));
+    }
     function application(f: Ty, argument: Entry, e: Expr, builtin = false, ascribed = false): Ty {
         spend(e);
         f = resolve(f);
@@ -3929,6 +3946,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return instantiated.output;
             }
             try {
+                widenEmpty(f.input, argument.type);
                 if (options.strict && !f.coerce) unify(f.input, argument.type, e);
                 else convert(f.input, argument.type, e, false, new Map(), !!f.coerce, !!f.coerce);
                 if (f.coerce) castKnown(f.input, argument, e);
