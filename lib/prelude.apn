@@ -165,6 +165,10 @@ List a = Nil | Cons a (List a)
 isList value = value ~ [[] -> True, _ :: _ -> True, _ -> False]
 [] >>= f = []
 (x :: rest) >>= f = f x ++ (rest >>= f)
+# The natural numbers (UInt), as views: Z is 0 and S n the one after n, and
+# their patterns take a number apart, one converting as (n : UInt) does.
+Z = view (0 : UInt) ((n : UInt) | n == 0 -> [])
+S = view ((k : UInt) -> k + 1) ((n : UInt) | n > 0 -> [n - 1])
 # The length-indexed list, the same values: Nil has length zero, and Cons x xs
 # one more than xs. A family of lists is a type function's clauses (Vect Z a =
 # Nil and Vect (S k) a = Cons a (Vect k a)); any of this shape is the same type.

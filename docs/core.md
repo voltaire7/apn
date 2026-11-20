@@ -29,7 +29,7 @@ built-in behaves exactly as its APN definition ([intrinsics](intrinsics.md)).
 | 2 | Clauses: lambdas with patterns and guards, tried most specific first | `p \| g -> e` | present |
 | 3 | A scope binding its names for all of itself | `{ xs = 1 :: xs; ... }` | present |
 | 4 | Making data: a tagged value | `intrinsics.tag` | present |
-| 5 | Views: a pattern defined by a function that takes a value apart | `view build match` | present; `S`/`Z` still special-cased |
+| 5 | Views: a pattern defined by a function that takes a value apart | `view build match` | present |
 | 6 | Sets: types as values, union, intersection, refinement, membership | `A \| B`, `x : T` | present |
 | 7 | Actions as values, run only by statements and `<-` | `x <- m` | present |
 | 8 | Code as data: a list keeps its items as written | `[x + 1]` | present |
@@ -56,15 +56,18 @@ needs.
 them apart. A **view** is the same pattern over a value that is not stored that
 way: a number is not stored as `S (S Z)`, nor a function as `Takes`. A view is
 a builder and a matcher, given by a function rather than a keyword
-([views](semantics.md#patterns-variants-and-scope)). `Takes` and `Gives` are the
-prelude's ([intrinsics](intrinsics.md#functions-takes-and-gives)); `S` and `Z`
-are still written into the interpreter's matcher, the checker and the linter,
-and are to become:
+([views](semantics.md#patterns-variants-and-scope)). The built-in views are the
+prelude's: `Takes` and `Gives` ([intrinsics](intrinsics.md#functions-takes-and-gives)),
+and `Z` and `S`:
 
 ```apn
-S = view (k -> k + 1) (n | n > 0 -> [n - 1])
-Z = view 0 (0 -> [])
+Z = view (0 : UInt) ((n : UInt) | n == 0 -> [])
+S = view ((k : UInt) -> k + 1) ((n : UInt) | n > 0 -> [n - 1])
 ```
+
+The checker runs a view's builder and matcher on what it knows, as it runs any
+pure code, so `Vect (S k) a` and `factorial 3` in a type are computed through
+them.
 
 The matcher gives the fields or does not match. One arity per name holds for
 free: the builder takes as many arguments as the matcher gives fields. A
@@ -90,7 +93,6 @@ they were written in, so quoting needs no form of its own. Evaluation is lazy;
 
 | Today | In the core |
 | --- | --- |
-| `S`/`Z` written into the matcher, checker and linter | prelude views, as `Takes`/`Gives` are |
 | Typed patterns `(x : Int32)` as their own pattern | a view matching members of `Int32`, binding the converted value |
 | A checker rule written by hand for each native (`Takes`, `S`, ...) | the type of its definition |
 | Natives with an APN definition in [intrinsics](intrinsics.md) (list functions, maps, `truthy`, `++`, `get`, `with`, ranges, the list and action instances) | prelude definitions, with the interpreter's version kept as a faster way to compute the same thing |
@@ -111,7 +113,7 @@ so moving a native to the prelude is checked by a test that exists.
 
 ## Order of work
 
-1. Views as a primitive; `S`/`Z` and `Takes`/`Gives` move to the prelude.
+1. Views as a primitive; `S`/`Z` and `Takes`/`Gives` move to the prelude (done).
 2. Typed patterns as views, if the open question above allows it.
 3. The checker types natives from their definitions where they have one.
 4. Natives with a definition move to the prelude; the interpreter keeps them

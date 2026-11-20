@@ -199,11 +199,9 @@ export function describeType(value: Value, element = false): string {
                     result = c.result;
                     p.args.forEach((a, i) => pattern(a, env, locals, c.fields[i] ?? fresh()));
                 } else {
+                    // A typed pattern binds a value of its type ((x : UInt8) a UInt8).
                     result = named(p.tag);
-                    // Numeric patterns strip explicit storage annotations from their payload.
-                    const payload = /^(U?Int)(8|16|32|64|128)?$/.test(p.tag) ? named("Int")
-                        : /^Float(32|64)?$/.test(p.tag) ? named("Float") : result;
-                    p.args.forEach(a => pattern(a, env, locals, payload));
+                    p.args.forEach(a => pattern(a, env, locals, result));
                 }
                 break;
             }
@@ -279,7 +277,12 @@ export function describeType(value: Value, element = false): string {
                     return apply(apply(inspect(env.get(e.op)!), l), r);
                 }
                 const a = resolve(l), b = resolve(r);
-                if (["+", "-", "*"].includes(e.op) && a.tag === "name" && b.tag === "name" && a.name === b.name && NUMERIC_TYPES.includes(a.name)) return a;
+                if (["+", "-", "*"].includes(e.op) && a.tag === "name" && b.tag === "name" && NUMERIC_TYPES.includes(a.name) && NUMERIC_TYPES.includes(b.name)) {
+                    if (a.name === b.name) return a;
+                    // An integer literal takes the other operand's type, as at runtime (k + 1).
+                    if (e.r.t === "int") return a;
+                    if (e.l.t === "int") return b;
+                }
                 // The remaining overloaded operators have no single sound static rule.
                 return fresh();
             }

@@ -16,8 +16,6 @@ export const NATIVES: Array<[string, number]> = [
     ...[...PRIMITIVE_OPERATORS.keys()].map((name): [string, number] => [name, 2]),
     // Functor, Applicative and Monad, for actions, lists and Option-like variants.
     ["intrinsics.bind", 2], ["intrinsics.negate", 1], ["intrinsics.range", 3], ["intrinsics.ap", 2], ["intrinsics.return", 1], ["intrinsics.throw", 1], ["intrinsics.source", 1],
-    // Natural numbers are UInt: Z is UInt 0, S n the next one.
-    ["S", 1],
     // view build match: a pattern defined by a function taking values apart.
     ["view", 2],
     // Whether a value is a function, and the type one takes (the prelude's Takes).

@@ -24,6 +24,10 @@ export function functionSource(v: Extract<Value, { kind: "closure" | "clauseFn" 
         const text = `${params.length ? params.join(", ") : "()"} -> ${source(v.body)}`;
         return applied.length ? `(${text})${applied.map(a => ` ${argument(a)}`).join("")}` : text;
     }
+    // A view shows as its builder.
+    if (v.kind === "native" && v.build && !v.applied.length && ["closure", "clauseFn", "native"].includes(v.build.kind)) {
+        return functionSource(v.build as Extract<Value, { kind: "closure" | "clauseFn" | "native" }>);
+    }
     if (v.kind === "native") {
         // An operator's intrinsic shows as the operator: (+), and (1 +) given 1.
         const op = PRIMITIVE_OPERATORS.get(v.name);

@@ -38,12 +38,15 @@ error, as only a `Bool` is one.
 ## Natural numbers: `UInt`
 
 ```apn
-UInt = Z | S UInt              # S (S Z) is 2
+UInt = Z | S UInt              # S (S Z) is 2, the model
+Z = view (0 : UInt) ((n : UInt) | n == 0 -> [])                  # the prelude's
+S = view ((k : UInt) -> k + 1) ((n : UInt) | n > 0 -> [n - 1])
 add Z m = m
 add (S n) m = S (add n m)
 ```
 
-A `UInt` is stored as a bigint, and `Z` and `S` are its constructors as a view:
+A `UInt` is stored as a bigint, and `Z` and `S` are its constructors as
+[views](semantics.md#patterns-variants-and-scope):
 `f (S k) = k` takes `5` apart as `S 4`, and `S (S Z)` prints `2`. A natural is
 a list of units, `List []`, its length the only thing it keeps: the two have
 the same shape (`Z` is `Nil`, `S n` is `Cons [] n`).

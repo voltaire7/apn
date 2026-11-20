@@ -18,7 +18,7 @@ for (const [source, expected] of [
     ['f x = { y = x; y }; typeOf f', 'a -> a'],
     ['f x = { g y = x; g }; typeOf f', 'a -> b -> a'],
     ['f x = x; typeOf (y -> f y)', 'a -> a'],
-    ['f (x : Int32) = x; typeOf f', 'Int32 -> Int'],
+    ['f (x : Int32) = x; typeOf f', 'Int32 -> Int32'],
     // A list's type is exact: its items, as written.
     ['typeOf [1,2,3,4]', '[Int,Int,Int,Int]'],
     ['typeOf []', '[]'],

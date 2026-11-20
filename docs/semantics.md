@@ -1238,9 +1238,8 @@ fact 5                          # 120
 Nat 4                           # 5
 ```
 
-The fields' types are what the matcher gives, and what its pattern takes apart
-is what the matcher takes. Which values a view's pattern matches only the
-matcher decides, so the checker leaves it to the run.
+The fields' types are what the matcher gives. Which values a view's pattern
+matches only the matcher decides, so the checker leaves it to the run.
 
 A type in a pattern takes its parameters, then a value. Applied to exactly its
 parameters it matches a type value, each name binding the part in its place:
@@ -1464,7 +1463,7 @@ and `to T` is the conversion as a function (`map (to Int) [1.0,2.0]`). A number 
 prints `123`), as a named subtype's value does (`5 : Count` prints `5`); `typeOf`
 gives the type.
 
-`UInt` is the natural numbers, with built-in constructors `Z` (`(0 : UInt)`) and
+`UInt` is the natural numbers, with the prelude's constructors `Z` (`(0 : UInt)`) and
 `S` (`S n` is `n + 1`, converting `n` as `(n : UInt)` does). The patterns `Z` and
 `S k` take a number apart: `Z` matches 0, and `S k` matches any number from 1
 up, binding `k` to one less, as a `UInt`. Like a `(n : UInt)` pattern, they accept

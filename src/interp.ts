@@ -79,7 +79,6 @@ const STACK_LIMIT = 512; // below V8's own JS stack, so APN errors first
 // The names editors color as built-in functions (the natives and do).
 // The names natives are bound by (each intrinsic is a field of intrinsics).
 export const NATIVE_NAMES = new Set(["do", ...NATIVES.map(([name]) => name.split(".")[0])]);
-const ZERO: Value = { kind: "int", v: 0n, typeName: "UInt" };
 // The types the prelude declares (Vect n a = ..., List a = [] | a :: List a);
 // a list union is bound to the list type (see listUnion).
 const PRELUDE_TYPES = new Set(["Vect", "List"]);
@@ -385,7 +384,6 @@ export class Interpreter {
         const callerDir = this.sourceDir;
         const builtins = new Env();
         for (const type of TYPE_NAMES) if (!PRELUDE_TYPES.has(type)) builtins.setLocal(type, { kind: "type", name: type });
-        builtins.setLocal("Z", ZERO);
         bindNatives(builtins, [...NATIVES, ...STANDARD_NATIVES]);
         for (const [name, value] of this.preludeBindings) builtins.setLocal(name, value);
         const scope = new Env(builtins);
@@ -424,7 +422,6 @@ export class Interpreter {
 
     constructor() {
         for (const name of TYPE_NAMES) if (!PRELUDE_TYPES.has(name)) this.env.setLocal(name, { kind: "type", name });
-        this.env.setLocal("Z", ZERO);
         bindNatives(this.env, NATIVES);
         const outer = this.env;
         this.env = new Env(outer);
@@ -5212,6 +5209,8 @@ export class Interpreter {
         if (STANDARD_NATIVES.some(([n]) => n === name)) return standardNative(this, name, argsIn);
         if (name === "typeOf") {
             const ref = this.reference(argsIn[0]);
+            // A view's type is its builder's.
+            if (ref.kind === "native" && ref.view && ref.build && !ref.applied.length) return this.callNative("typeOf", [ref.build]);
             if (ref.kind === "closure" || ref.kind === "clauseFn" || ref.kind === "native") {
                 return { kind: "type", inspect: true, name: "Function", description: describeType(ref) };
             }
@@ -5493,7 +5492,7 @@ export class Interpreter {
                 // A nullary view is the value it builds wherever it is used, so
                 // that value is what its name holds: it remembers the view.
                 const build = arity ? args[0] : this.force(args[0]);
-                const view: Value = { kind: "native", name: "view", arity, applied: [], view: match,
+                const view: Value = { kind: "native", name: "view", arity, applied: [], view: match, build,
                     invoke: (xs: Value[]) => xs.reduce((f: Value, x) => this.apply(f, x), build) };
                 if (!arity) this.nullaryViews.set(build, view);
                 return view;
@@ -5501,11 +5500,6 @@ export class Interpreter {
             // The two reads of a value Takes takes a function apart by.
             case "intrinsics.isFunction": return mkBool(this.isFunction(args[0]));
             case "intrinsics.inputOf": return this.accepted(args[0]);
-            case "S": {
-                if (!isNumeric(a)) throw new APNError("runtime", "S expects a natural number (a UInt)");
-                const n = castNumeric("UInt", a);
-                return { kind: "int", v: (n as { v: bigint }).v + 1n, typeName: "UInt" };
-            }
             case "intToString":
                 if (a.kind !== "int") throw new Error("Runtime: intToString expects int");
                 return mkStr(String(a.v));
@@ -7042,12 +7036,6 @@ export class Interpreter {
                 // fields, or does not match (a variant of the tag is its own).
                 const view = v.kind === "variant" && v.tag === p.tag ? undefined : this.viewNamed(p.tag);
                 if (view) return this.matchView(view, p, v, binds);
-                // Z and S k take a natural number apart: 0, or k + 1 (k a UInt).
-                if (isNumeric(v) && (p.tag === "Z" && !p.args.length || p.tag === "S" && p.args.length === 1)) {
-                    let n: bigint;
-                    try { n = (castNumeric("UInt", v) as { v: bigint }).v; } catch { return false; }
-                    return p.tag === "Z" ? n === 0n : n > 0n && this.matchPattern(p.args[0], { kind: "int", v: n - 1n, typeName: "UInt" }, binds);
-                }
                 if (v.kind !== "variant" || v.tag !== p.tag) return false;
                 if (v.v.length !== p.args.length) return false;
                 for (let i = 0; i < p.args.length; i++) {

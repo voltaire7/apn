@@ -150,11 +150,14 @@ interface Known {
 // A function's clauses and defining scope, so a direct call by name can
 // evaluate what its result value is from what is known about the arguments.
 interface Summary { clauses: (ClauseOrder & { body: Expr; guard?: Expr })[]; scope: Scope }
+type ViewParts = { build: Expr; match: Expr; scope: Scope };
 interface Entry {
     type: Ty;
     // A view's matcher (Nat = view build match): its pattern's fields are what
-    // the matcher gives.
+    // the matcher gives. Its builder and matcher as written, which the static
+    // evaluator runs: the name is what build is, its pattern what match gives.
     view?: Ty;
+    viewParts?: ViewParts;
     // A constructor whose rules give values of other types (sin 0 = 0 before
     // sin x = _): what applying it gives, its type or one of theirs.
     widened?: Ty;
@@ -852,8 +855,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The program's top-level scope, and the names defined in any other (see CheckOptions).
     let topScope: Scope | undefined;
     const localNames = options.localNames ?? new Map<string, LocalName | undefined>();
-    // The names bound to views, whose patterns no known value decides here.
-    const viewNames = new Set<string>([...options.initial?.entries() ?? []].filter(([, entry]) => entry.view).map(([name]) => name));
+    // The views by name: a known value is taken apart by running the matcher.
+    const views = new Map<string, ViewParts>();
+    for (const [name, entry] of options.initial ?? []) if (entry.viewParts) views.set(name, entry.viewParts);
     // The scopes of record literals, whose names are fields.
     const recordScopes = new WeakSet<Scope>();
     // The names bound nowhere that the list item being inferred reads, by
@@ -2641,14 +2645,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     problem(`'${p.tag}' in a pattern takes ${parameters} type${parameters === 1 ? "" : "s"}, or ${parameters + 1} patterns for a value`, e,
                         `write (${p.tag} ${"_ ".repeat(parameters)}${value})`);
                 }
-                // A view's pattern: its fields are what its matcher gives, and
-                // what it takes apart is what the matcher takes.
+                // A view's pattern: its fields are what its matcher gives. Which
+                // values it takes apart only the matcher decides, as it runs.
                 if (entry?.view) {
                     const matcher = resolve(copy(entry.view));
                     const given = matcher.k === "fn" ? resolve(matcher.output) : undefined;
                     const fields = given?.k === "list" ? given.items ?? p.args.map(() => given.element) : p.args.map(() => variable());
                     if (fields.length !== p.args.length) problem(`${p.tag} takes ${fields.length} field${fields.length === 1 ? "" : "s"}, not ${p.args.length}`, e);
-                    if (matcher.k === "fn") unify(matcher.input, expected, e);
                     p.args.forEach((q, n) => bind(q, fields[n] ?? variable(), scope, e, bound));
                     return;
                 }
@@ -2660,7 +2663,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return;
                 }
                 // A bare type name matches that type itself, as a value: describe Int.
-                if (t.k === "type" && !p.args.length && !naturalPattern(p, scope)) {
+                if (t.k === "type" && !p.args.length) {
                     unify(expected, { k: "type", value: t.value }, e);
                     return;
                 }
@@ -5363,7 +5366,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Whether only a value's shape decides a pattern: literals, constructors,
     // list shapes. A typed pattern (Int n) is left to its conversion.
     function decidedByShape(p: Pattern, scope: Scope): boolean {
-        return p.p === "constr" ? (isConstructor(scope.get(p.tag)) || naturalPattern(p, scope)) && p.args.every(q => decidedByShape(q, scope))
+        return p.p === "constr" ? (isConstructor(scope.get(p.tag)) || !!scope.get(p.tag)?.viewParts) && p.args.every(q => decidedByShape(q, scope))
             : p.p === "list" ? p.v.every(q => decidedByShape(q, scope)) : p.p === "cons" ? decidedByShape(p.head, scope) && decidedByShape(p.tail, scope)
             : p.p !== "schema" && p.p !== "typeBind" && p.p !== "as";
     }
@@ -5988,6 +5991,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const entry = scope.get(e.name);
             if (!entry) return {};
             if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: constructorNames.get(e.name) ?? e.name };
+            if (entry.viewParts) return computed(e, scope);
             // A name bound to a known function (a typed call's argument) is it.
             if (entry.fn) return { fn: entry.fn };
             if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope } };
@@ -6002,7 +6006,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // computed, as its other spellings are.
             if (head.t !== "var") return computed(e, scope);
             const entry = scope.get(head.name);
-            if ((NUMERIC_TYPES.includes(head.name) || EVALUATED_NATIVES.has(head.name) || ["truthy", "Mutable", "to", "from", "S"].includes(head.name)) && entry?.builtin) return computed(e, scope);
+            if ((NUMERIC_TYPES.includes(head.name) || EVALUATED_NATIVES.has(head.name) || ["truthy", "Mutable", "to", "from"].includes(head.name)) && entry?.builtin || entry?.viewParts) return computed(e, scope);
             if (/^[A-Z]/.test(head.name)) {
                 // A constructor applied to all its fields.
                 let t = resolve(entry?.type ?? dynamic);
@@ -6305,9 +6309,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         } else if (p.p === "constr" && value.tag === p.tag && value.payload?.length === p.args.length) {
             // A constructor's fields, as the value was built (rest in Cons x rest).
             p.args.forEach((q, n) => bindKnown(q, demand(value.payload![n]) ?? {}, env, refutable));
-        } else if (p.p === "constr" && p.tag === "S" && p.args.length === 1) {
-            const n = naturalArgument(p, value);
-            if (n !== undefined && n > 0n) bindKnown(p.args[0], { number: { kind: "int", v: n - 1n, typeName: "UInt" } }, env, refutable);
+        } else if (p.p === "constr" && views.has(p.tag)) {
+            // A view's fields, as its matcher gives them.
+            const fields = viewFields(p.tag, value);
+            if (fields) p.args.forEach((q, n) => bindKnown(q, fields[n] ?? {}, env, refutable));
         } else if (p.p === "schema" && p.type.t === "app" && p.type.f.t === "app" && p.type.f.f.t === "var" && p.type.f.f.name === "Vect"
             && [p.type.f.a, p.type.a].every(x => x.t === "placeholder" || x.t === "var" && /^[a-z]/.test(x.name) && !refutable.has(x.name))) {
             // (xs : Vect n a), n and a free: the whole list, n its length if known.
@@ -6574,6 +6579,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (!entry) return undefined;
                 if (/^[A-Z]/.test(e.name) && resolve(entry.type).k === "variant") return { tag: constructorNames.get(e.name) ?? e.name };
                 if (entry.lazyTop) return forceLazyTop(entry.lazyTop, depth);
+                // A view's name is what its builder is.
+                if (entry.viewParts) return evaluateKnown(entry.viewParts.build, new Map(), entry.viewParts.scope, depth + 1);
                 const type = /^[A-Z]/.test(e.name) && resolve(entry.type).k === "type" ? { type: entry.type } : {};
                 if (!entry.mono && isFunction(entry.type)) return { fn: { e, env: [], scope }, ...type };
                 if (type.type) return type;
@@ -6989,12 +6996,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const element = value(args[0])?.type, t = element && resolve(element);
             return t?.k === "type" ? { type: { k: "type", value: list(t.value) } } : undefined;
         }
-        // S n: the natural after n, as at runtime.
-        if (head.name === "S" && builtin && args.length === 1) {
-            const n = numericOf(readMutable(value(args[0])));
-            if (n === undefined) return undefined;
-            return attempt(() => { const k = castNumeric("UInt", n) as { v: bigint }; return { kind: "int", v: k.v + 1n, typeName: "UInt" } as Numeric; });
-        }
+        // view build match is what build is (its pattern runs match: see viewFields).
+        if (head.name === "view" && builtin && args.length === 2) return value(args[0]);
         if (head.name === "truthy" && builtin && args.length === 1) {
             const b = truth(value(args[0]));
             return b === undefined ? undefined : { boolean: b };
@@ -7005,7 +7008,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const n = numericOf(readMutable(value(args[0])));
             return n === undefined ? undefined : attempt(() => castNumeric(head.name, n, ["Float", "Float32", "Float64"].includes(head.name)));
         }
-        if (/^[A-Z]/.test(head.name)) {
+        if (/^[A-Z]/.test(head.name) && !entry?.viewParts) {
             let t = resolve(entry?.type ?? dynamic);
             for (let n = 0; n < args.length && t.k === "fn"; n++) t = resolve(t.output);
             return t.k === "variant" ? { tag: constructorNames.get(head.name) ?? head.name, ...args.length ? { payload: args.map(a => value(a) ?? {}) } : {} } : undefined;
@@ -7023,6 +7026,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A named function applied: its clauses, or its result's shape.
     function evaluateNamedCall(head: Extract<Expr, { t: "var" }>, args: Expr[], entry: Entry | undefined, env: Map<string, Known>, scope: Scope, depth: number, apply: (f: Known | undefined, given: Known[]) => Known | undefined): Known | Tail | undefined {
         const value = (x: Expr) => evaluateKnown(x, env, scope, depth);
+        // A view applied: its builder applied.
+        if (entry?.viewParts) return apply(value(head), args.map(a => value(a) ?? {}));
         if (entry && args.length === 1 && gotten(resolve(entry.type))) return apply(value(head), [value(args[0]) ?? {}]);
         if (!trustsShape(entry)) return undefined;
         const values = args.map(a => lazyValue(() => value(a), { exprs: [a], env }));
@@ -7241,14 +7246,31 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (n.kind === "float") return { float: n.v };
         return { number: n };
     }
-    // A known number p takes apart as Z or S k: its value as a natural, or -1
-    // when it is none (negative or not an integer). Values are the runtime's
-    // test, so a program's own Z and S variants are unaffected.
-    function naturalArgument(p: Pattern, argument: Known): bigint | undefined {
-        if (p.p !== "constr" || !(p.tag === "Z" && !p.args.length || p.tag === "S" && p.args.length === 1) || argument.tag !== undefined) return undefined;
-        const number = knownNumberOf(argument);
-        if (!number) return undefined;
-        try { return (castNumeric("UInt", number) as { v: bigint }).v; } catch { return -1n; }
+    // What a view's matcher takes from a known value, run as the run runs it:
+    // the fields it gives, null when it certainly takes nothing, undefined when
+    // that is not known here (a matcher of several clauses is left to the run).
+    function viewFields(tag: string, argument: Known): Known[] | null | undefined {
+        const parts = views.get(tag);
+        let match = parts?.match;
+        while (match?.t === "block" && match.style === "(" && match.stmts.length === 1) match = match.stmts[0];
+        if (!parts || match?.t !== "patternLambda" && match?.t !== "lambda" || match.params.length !== 1) return undefined;
+        const [param] = match.t === "lambda" ? [{ p: "var", name: match.params[0] } as Pattern] : match.params;
+        const names = patternNames(param), refutable = new Set(names.filter((x, i) => names.indexOf(x) !== i));
+        const value = demand(argument) ?? {};
+        const rank = peek(() => rankClause({ index: 0, place: 0, params: [param], refutable, scope: parts.scope }, [{ type: knownType(value), ...value }]), undefined);
+        if (!rank) return undefined;
+        if (rank.fails) return null;
+        if (!rank.matches) return undefined;
+        const env = new Map<string, Known>();
+        bindKnown(param, value, env, refutable);
+        const guard = match.t === "patternLambda" ? match.guard : undefined;
+        if (guard) {
+            const holds = truth(evaluateKnown(guard, env, parts.scope, 0));
+            if (holds === undefined) return undefined;
+            if (!holds) return null;
+        }
+        const given = evaluateKnown(match.body, env, parts.scope, 0);
+        return given?.items ?? undefined;
     }
     // Does this argument always match p? Only what the checker knows exactly
     // qualifies (list lengths, literal values, exact types); repeated names never do.
@@ -7260,10 +7282,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (p.p === "string") return argument.string === p.v;
         if (p.p === "char") return argument.char === p.v;
         if (p.p === "range") return !!argument.index && !argument.index.terms.size && argument.index.constant >= p.lo && argument.index.constant <= p.hi;
-        // A view's matcher decides at runtime.
-        if (p.p === "constr" && viewNames.has(p.tag)) return false;
-        const n = naturalArgument(p, argument);
-        if (n !== undefined) return p.p === "constr" && (p.tag === "Z" ? n === 0n : n > 0n && irrefutable(p.args[0]));
+        // A view's: the fields its matcher certainly gives.
+        if (p.p === "constr" && views.has(p.tag)) return !!viewFields(p.tag, argument) && p.args.every(irrefutable);
         // A value of a program's own type, as it is, binding it whole.
         if (p.p === "constr" && p.typed && p.args.length === 1 && !TYPE_NAMES.includes(p.tag)) return score === 1 && irrefutable(p.args[0]);
         // A constructor the argument was visibly built with, its fields bound plainly.
@@ -7301,9 +7321,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (p.p === "char") return argument.char !== undefined && argument.char !== p.v;
         if (p.p === "range") return !!argument.index && !argument.index.terms.size && (argument.index.constant < p.lo || argument.index.constant > p.hi);
         if (p.p === "constr" && TYPE_NAMES.includes(p.tag)) return low === -1000 && high === -1000;
-        if (p.p === "constr" && viewNames.has(p.tag)) return false;
-        const n = naturalArgument(p, argument);
-        if (n !== undefined) return p.p === "constr" && (p.tag === "Z" ? n !== 0n : n <= 0n);
+        // A view's whose matcher certainly takes nothing from the value.
+        if (p.p === "constr" && views.has(p.tag)) return viewFields(p.tag, argument) === null;
         // A typed pattern names a type, not a constructor: (s : Shape) takes Circle 1.
         if (p.p === "constr") return !p.typed && argument.tag !== undefined && argument.tag !== p.tag;
         if (p.p === "list") return listLength(argument, p.v.length) === false || p.v.some((q, n) => itemFails(q, argument, n));
@@ -7481,10 +7500,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Whether a pattern converts the value it matches (Int n, a schema, a
     // contract), in whole or in a part ([UInt8 a,UInt8 b], (Float x):rest).
     // Only real type patterns can project Dynamic arguments.
-    // Z or S k taking apart a natural number (the builtin Z and S, not a variant's).
-    function naturalPattern(p: Pattern, scope: Scope): boolean {
-        return p.p === "constr" && (p.tag === "Z" && !p.args.length || p.tag === "S" && p.args.length === 1) && !!scope.get(p.tag)?.builtin;
-    }
     function patternConverts(p: Pattern, scope: Scope): boolean {
         switch (p.p) {
             // A collection type of free names alone (List a, Vect n _, HashMap k v)
@@ -7492,7 +7507,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             case "schema": return !freeListType(p.type, scope);
             case "int": return true;
             case "constr": {
-                if (naturalPattern(p, scope)) return true;
+                // A view's matcher may convert (S k binds a UInt).
+                if (scope.get(p.tag)?.viewParts) return true;
                 const constructor = resolve(scope.get(p.tag)?.type ?? dynamic);
                 if (constructor.k === "type" && !variables(constructor.value).size || constructor.k === "record" || constructor.k === "list") return true;
                 // A variant whose payload patterns convert (Some (Float x)).
@@ -7838,8 +7854,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (clauses.length === 1 && !clause.params.length && body?.t === "app" && body.f.t === "app" && body.f.f.t === "var" && body.f.f.name === "view"
                 && scope.get("view")?.builtin && entry) {
                 entry.view = infer(body.a, scope);
-                viewNames.add(name);
-            }
+                entry.viewParts = { build: body.f.a, match: body.a, scope };
+                views.set(name, entry.viewParts);
+            } else views.delete(name);
         }
         finally { if (ownDefinitions.has(scope)) ownDefinitions.get(scope)!.add(name); else ownDefinitions.set(scope, new Set([name])); }
     }
@@ -8402,9 +8419,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         scope.set("view", { type: fn(built, fn(fn(variable(), variable()), built)) });
     }
     native("for", [list(variable()), variable()], io(empty));
-    // Natural numbers are UInt: Z is UInt 0, S n the next one (converting n as UInt n does).
-    scope.set("Z", { type: atom("UInt"), number: { kind: "int", v: 0n, typeName: "UInt" } });
-    scope.set("S", { type: fn(atom("UInt"), atom("UInt"), undefined, true) });
     // Whether a value is a function, and the type one takes (the prelude's Takes).
     scope.set("intrinsics.isFunction", { type: fn(variable(), atom("Bool")) });
     scope.set("intrinsics.inputOf", { type: fn(variable(), { k: "type", value: variable() }) });
@@ -8436,7 +8450,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         scope.set(name, rule ? { ...entry, type: { k: "intrinsic", name: rule[0], arity: rule[1] } } : entry);
     }
     for (const entry of scope.values()) { entry.inherited = true; entry.builtin = true; }
-    for (const [name, entry] of scope) if (entry.view) viewNames.add(name);
+    for (const [name, entry] of scope) if (entry.viewParts) views.set(name, entry.viewParts);
     if (options.initial) for (const [name, entry] of copyTypeScope(options.initial)) scope.set(name, entry);
     // The prelude's own instances (lists' >>=) are its own: the intrinsics
     // the checker types already cover them.
@@ -8536,6 +8550,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             if (v.tag === d.name) t = { ...t, shared: true } as Ty;
             scope.set(v.tag, { type: t, declaration: d, ownTag: v.tag });
+            views.delete(v.tag);
         }
         // A constructor's logic is a clause of its fields giving a value
         // of its type (Percent (Float x) = x > 100 ? Percent 100.0 : _).
