@@ -229,7 +229,10 @@ takes a clause that is `fail message` (`first []` for `first [] = fail
 counts: a statement's value, what a strict operator or native such as `print`
 demands of it, a condition, a block's statements. One in a list item, another
 function's argument, a branch or an unused binding waits until it is used, and
-may never be (`[pred 0, 2] 1` is 2). A clause may have a guard (`f n | n > 0 =
+may never be (`[pred 0, 2] 1` is 2). A clause that is `fail message` gives no
+value, so it gives its function no result type of its own: `first [] = fail
+"empty"` leaves `first (x :: _) = x` a function of a list of any length,
+giving its first item's type. A clause may have a guard (`f n | n > 0 =
 n`, see [pattern functions](pattern-functions.md)).
 
 There is no `if`/`then`/`else`; use the ternary `cond ? a : b`, which is

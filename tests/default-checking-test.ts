@@ -1186,6 +1186,17 @@ Deno.test("an applied parameter takes a function or a value get indexes", () => 
     ]) if (run(session(), source) !== value) throw new Error(source);
     rejected(session(), "at xs n = xs n\nat 5 1");
 });
+// A clause that is fail message gives no value, so it gives its function no
+// type: a list of unknown length given to one that takes it apart keeps its
+// items' type (a pair here, which [x,y] takes apart).
+Deno.test("a fail clause gives its function no type", () => {
+    const first = 'first (x :: _) = x\nfirst [] = fail "empty"\n';
+    for (const [source, value] of [
+        [first + "f (segs : List [Int,Int]) = {\n    [x,y] = first segs\n    x + y\n}\nf [[1,2],[3,4]]", "3"],
+        [first + "segs = ([[1,2],[3,4]] : List [Int,Int])\n[x,y] = first segs\nx + y", "3"],
+        [first + 'first [1, "a"] + 1', "2"],
+    ]) if (run(session(), source) !== value) throw new Error(source);
+});
 // A call certainly evaluated that certainly fails is a static error: no clause
 // takes its known arguments, or the one it takes is fail message. One nothing
 // demands (a list item, an unused binding) waits until used.

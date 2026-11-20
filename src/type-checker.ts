@@ -8265,10 +8265,39 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const orders = new Map<string, ClauseOrder[]>(), places = clausePlaces(clauses, containsIn(scope));
         const definition: Definition = { name, clauses };
         const firstKey = new Map<string, string>();
-        for (const [index, c] of clauses.entries()) {
+        // (Clauses that are fail message last: their result is the others'.)
+        const failing = (c: { body: Expr }) => !!failMessage(c.body, scope);
+        for (const [index, c] of [...clauses.entries()].sort(([, a], [, b]) => Number(failing(a)) - Number(failing(b)))) {
             const t = inferDefinition(definition, false, () => functionType(c.params, c.body, scope, name));
             const head = resultHead(t, c.params.length);
             if (head) recordHead(c.body, head);
+            // A clause that is fail message gives no value: it joins a group of
+            // clauses that do whose inputs, at any list length, are its own,
+            // and widens them to take its own too (head [] = fail "..." leaves
+            // head a function of any list giving what head (x :: _) = x gives).
+            // Typed last, after the clauses that give values; it is still
+            // checked, and dispatched as written.
+            // (Each input list of any length, as either clause may take it.)
+            const anyLength = (x: Ty) => {
+                let f = resolve(x);
+                for (let n = 0; n < c.params.length && f.k === "fn"; n++, f = resolve(f.output)) {
+                    const input = resolve(f.input);
+                    if (input.k === "list" && !input.endless) { input.length = undefined; input.items = undefined; }
+                }
+                return x;
+            };
+            const joined = failMessage(c.body, scope) ? [...groups.entries()].find(([, group]) => succeeds(() => {
+                const vars = new Map<Ty, Ty>();
+                unify(anyLength(withoutResult(copy(group, vars), c.params.length)), anyLength(withoutResult(copy(t, vars), c.params.length)), c.body);
+            })) : undefined;
+            if (joined) {
+                const [joinedKey, group] = joined;
+                anyLength(group); anyLength(t);
+                unify(group, t, c.body);
+                const names = c.params.flatMap(patternNames);
+                orders.get(joinedKey)!.push({ index, place: places[index], params: c.params, refutable: new Set([name, ...names.filter((x, n) => names.indexOf(x) !== n)]), scope });
+                continue;
+            }
             // A clause naming the function as a parameter (x x = x) takes only
             // the function itself, which its input type cannot say.
             let key = `${c.params.some(bindsSelf) ? "self:" : ""}${domain(t)}`, existing = groups.get(key);

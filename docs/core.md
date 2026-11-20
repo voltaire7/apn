@@ -129,7 +129,7 @@ so moving a native to the prelude is checked by a test that exists.
    Moving `head` and `tail` this way needs the checker to treat a clause
    `fail message` as no value: a call certainly evaluated that certainly takes
    one is a static error, and a call typed for mixed items takes its type from
-   the other clauses (both done, for any function). What still blocks it: a
-   function taking a list apart by `x :: xs`, given a list of unknown length,
-   is rejected where its result's shape matters (`[x,y] = first segs` for
-   `segs : List [Int,Int]`, with a program's own `first` today too).
+   the other clauses; and a clause `fail message` gives its function no result
+   type of its own, so `first [] = fail "empty"` leaves `first (x :: _) = x`
+   a function of a list of any length (all done, for any function). `head` and
+   `tail` move next.
