@@ -195,8 +195,9 @@ checked: as they are used, at runtime, rather than before the program runs.
 # Functions
 
 A native is a function bound to JavaScript. Those with an APN definition are
-given one here, or are the prelude's (`head` and `tail`, which the checker
-types and evaluates from it; `MODELED` in `src/natives.ts` lists them);
+given one here, or are the prelude's (`head`, `tail`, `null`, `drop`,
+`filter` and `iterate`, which the checker types and evaluates from it, and
+`typeOf` describes; `MODELED` in `src/natives.ts` lists them);
 `tests/intrinsics-test.ts` runs the definitions against the natives on the same
 inputs, and they differ at most in an error's wording. Each clause takes only what
 it is written with, so a definition's patterns say what the native accepts.
@@ -204,10 +205,6 @@ it is written with, so a definition's patterns say what the native accepts.
 ## Lists
 
 ```apn
-null [] = True
-null (text : String) = text == ""
-null (m : HashMap _ _) = null (pairs m)
-null _ = False
 length [] = 0
 length (_ :: xs) = 1 + length xs
 length (text : String) = length (to (List Char) text)
@@ -215,11 +212,6 @@ length (m : HashMap _ _) = length (pairs m)
 take 0 _ = []
 take (n : UInt) [] = []
 take (n : UInt) (x :: xs) = x :: take (n - 1) xs
-drop 0 xs = xs
-drop (n : UInt) [] = []
-drop (n : UInt) (_ :: xs) = drop (n - 1) xs
-filter keep [] = []
-filter keep (x :: xs) = keep x ? x :: filter keep xs : filter keep xs
 foldl f acc [] = acc
 foldl f acc (x :: xs) = {
     next = f acc x
@@ -229,7 +221,6 @@ foldr f z [] = z
 foldr f z (x :: xs) = f x (foldr f z xs)
 zipWith f (x :: xs) (y :: ys) = f x y :: zipWith f xs ys
 zipWith _ _ _ = []
-iterate f x = x :: iterate f (f x)
 enumerate xs = zipWith (i, x -> [i,x]) [0..] xs
 ```
 

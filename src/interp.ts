@@ -428,10 +428,20 @@ export class Interpreter {
         this.env.setLocal("fail", { kind: "native", name: "fail", arity: 1, applied: [] });
         // Without the prelude (apn --no-prelude) a program has only the intrinsics.
         if (getPreludeUsed()) {
-            this.run(parseDocument(preludeSource));
-            // A native the prelude defines runs as itself, its definition's faster
-            // way (see MODELED); the prelude's own uses of it too.
-            for (const name of MODELED) this.env.setLocal(name, outer.get(name)!);
+            // A native the prelude defines (see MODELED) runs as itself: its
+            // definition, which the checker reads, is not run, so it neither
+            // binds the name nor joins the native; typeOf describes it.
+            const prelude = parseDocument(preludeSource);
+            const modeled = (s: TopLevel): s is Extract<TopLevel, { t: "def" }> => s.t === "def" && MODELED.has(s.name);
+            this.run(prelude.filter(s => !modeled(s)));
+            for (const name of MODELED) {
+                const clauses = prelude.filter(modeled).filter(s => s.name === name).flatMap(s => s.clauses);
+                if (!clauses.length) continue;
+                const scope = new Env(this.env);
+                const definition: Value = { kind: "clauseFn", name, clauses, arity: clauses[0].params.length, env: scope, applied: [] };
+                scope.setLocal(name, definition);
+                this.modeledDefinitions.set(name, definition);
+            }
             // Bind each operator to its value itself, so evaluation finds the intrinsic.
             // (fail, which marks code still to write, is the prelude's too.)
             for (const [name, value] of this.env.bindings()) this.preludeBindings.set(name, this.reference(value));
@@ -4195,6 +4205,10 @@ export class Interpreter {
         const view = v.kind === "native" && v.view ? v : this.nullaryViews.get(v);
         return view?.kind === "native" ? view : undefined;
     }
+    // The prelude's definition of each native it models (see MODELED): what
+    // typeOf describes the native as.
+    private modeledDefinitions = new Map<string, Value>();
+    private describingModeled = new Set<string>();
     // The value each nullary view builds, and the view (see view).
     private nullaryViews = new WeakMap<Value, Value>();
     // A view's pattern, its fields matched against what its matcher gives.
@@ -5212,6 +5226,13 @@ export class Interpreter {
         if (STANDARD_NATIVES.some(([n]) => n === name)) return standardNative(this, name, argsIn);
         if (name === "typeOf") {
             const ref = this.reference(argsIn[0]);
+            // A native the prelude models has its definition's type (the
+            // definition's own recursive calls, described meanwhile, the native's).
+            const definition = ref.kind === "native" && !ref.applied.length && !ref.tag && !this.describingModeled.has(ref.name) ? this.modeledDefinitions.get(ref.name) : undefined;
+            if (definition && ref.kind === "native") {
+                this.describingModeled.add(ref.name);
+                try { return this.callNative("typeOf", [definition]); } finally { this.describingModeled.delete(ref.name); }
+            }
             // A view's type is its builder's.
             if (ref.kind === "native" && ref.view && ref.build && !ref.applied.length) return this.callNative("typeOf", [ref.build]);
             if (ref.kind === "closure" || ref.kind === "clauseFn" || ref.kind === "native") {
@@ -6960,6 +6981,8 @@ export class Interpreter {
             case "float": return isNumeric(v) && equalNumbers(v, { kind: "float", v: p.v });
             case "list": {
                 if (v.kind === "record") {
+                    // [] is the empty record, and no other: [a = 1] == [] is False.
+                    if (!p.v.length) return v.v.length === 0;
                     // A var-only list pattern destructures a record by field name:
                     //   [x, y]  matches  [x = 1, y = 2]  binding x=1, y=2
                     const fields = new Map<string, Value>();

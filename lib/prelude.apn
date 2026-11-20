@@ -166,6 +166,16 @@ head (x :: _) = x
 head [] = fail "head of empty list"
 tail (_ :: xs) = xs
 tail [] = fail "tail of empty list"
+null [] = True
+null (text : String) = text == ""
+null (m : HashMap _ _) = null (pairs m)
+null _ = False
+drop 0 xs = xs
+drop (n : UInt) [] = []
+drop (n : UInt) (_ :: xs) = drop (n - 1) xs
+filter keep [] = []
+filter keep (x :: xs) = keep x ? x :: filter keep xs : filter keep xs
+iterate f x = x :: iterate f (f x)
 # Whether a value is a list, of any elements, demanding only its first cell.
 isList value = value ~ [[] -> True, _ :: _ -> True, _ -> False]
 [] >>= f = []

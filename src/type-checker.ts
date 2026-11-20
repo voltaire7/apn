@@ -8408,7 +8408,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     for (
         const [name, type] of Object.entries({
             print: fn(a, io(list(variable(), constant(0n)))),
-            filter: fn(fn(a, b), fn(list(a), list(a))),
             length: fn(dynamic, atom("Int")),
             typeOf: fn(a, { k: "type", value: b }),
         })
@@ -8449,15 +8448,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     { const n = variable(); native("intrinsics.range", [n, variable(), variable()], list(n)); }
     native("exit", [int], io(empty));
     scope.set("intrinsics.truthy", { type: { k: "intrinsic", name: "truthy", arity: 1 } });
-    native("null", [variable()], bool);
     native("length", [list(variable())], int);
-    for (const name of ["take", "drop"]) { const t = variable(); native(name, [int, list(t)], list(t)); }
-    { const t = variable(); native("iterate", [fn(t, t), t], list(t)); }
+    { const t = variable(); native("take", [int, list(t)], list(t)); }
+    { const a = variable(), b = variable(), c = variable(); native("zipWith", [fn(a, fn(b, c)), list(a), list(b)], list(c)); }
     for (const name of ["foldl", "foldr"]) {
         const a = variable(), b = variable();
         native(name, [fn(name === "foldl" ? b : a, fn(name === "foldl" ? a : b, b)), b, list(a)], b);
     }
-    { const a = variable(), b = variable(), c = variable(); native("zipWith", [fn(a, fn(b, c)), list(a), list(b)], list(c)); }
     { const a = variable(), b = variable(); native("seq", [a, b], b); }
     { const seq = scope.get("seq"); if (seq) {
         setShape(seq.type, { arg: 1 });

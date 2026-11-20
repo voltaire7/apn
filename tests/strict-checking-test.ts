@@ -225,7 +225,7 @@ for (const [source, error] of [
     // Calls a function decided are told apart by it.
     ['f g p = g 1 > 0 ? "k" ++ head p : "none"\n[f (x -> x - 5) [1, "a"], f (x -> x + 5) [1, "a"]]', "cannot append String and Int"],
     // A length a typed call cannot find is unknown, as anywhere: rejected.
-    ['f [a,b] = a\ng p = f (filter (x -> True) p)\ng [1, "a"]', "cannot establish static types"],
+    ['f [a,b] = a\ng p = f (filter (x -> True) p)\ng ([1,2] : List Int)', "cannot establish static types"],
 ] as const) Deno.test(`a recursive typed call ends: ${source}`, () => {
     const issues = checkSource(source, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
     if (error ? !issues.includes(error) : issues) throw new Error(issues || "accepted");

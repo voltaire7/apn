@@ -131,6 +131,11 @@ so moving a native to the prelude is checked by a test that exists.
    one is a static error, and a call typed for mixed items takes its type from
    the other clauses; and a clause `fail message` gives its function no result
    type of its own, so `first [] = fail "empty"` leaves `first (x :: _) = x`
-   a function of a list of any length (all done, for any function). `head` and
-   `tail` have moved (`MODELED` in `src/natives.ts`); the other natives with a
-   definition in [intrinsics](intrinsics.md) are next.
+   a function of a list of any length (all done, for any function). Moved
+   (`MODELED` in `src/natives.ts`): `head`, `tail`, `null`, `drop`, `filter`,
+   `iterate`; the interpreter does not run their definitions, so they cannot
+   join the native. Each of the others meets a checker gap first: `take` makes
+   checking the library loop; `foldl` uses `seq`, which the prelude does not
+   see; `foldr (++)` over strings mistypes a `Char` as an `Int`; `zipWith`
+   loses lengths and a `Float` (`zip [0..n] xs`); `length`, `enumerate`, the
+   map functions, `truthy` and the operators wait for their own trials.

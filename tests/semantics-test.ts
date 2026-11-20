@@ -363,6 +363,11 @@ print t
 `, ["[1, [2,3,4]]", "[5, 6, [7]]", "[9]"]);
 failure("take rejects negative counts", "print (take -1 [])", "non-negative int");
 failure("drop rejects non-integer counts", "print (drop 1.0 [])", "non-negative int");
+example("[] matches the empty record, and no other", `
+w [] = "empty"
+w _ = "other"
+print [w [a = 1], w []]
+`, ['["other","empty"]']);
 failure("head still rejects empty lists", "print (head [])", "head of empty list");
 failure("finite indexing still checks bounds", "print ([1,2] 2)", "out of range");
 
