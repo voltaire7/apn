@@ -125,10 +125,11 @@ so moving a native to the prelude is checked by a test that exists.
 1. Views as a primitive; `S`/`Z` and `Takes`/`Gives` move to the prelude (done).
 2. Natives with a definition move to the prelude, which the checker types and
    evaluates as it does any prelude function; the interpreter (and the
-   checker's evaluator) keep the native only as a faster way to compute. Moving
-   `head` and `tail` this way showed what the checker must learn first, each a
-   rule its hand-written native types now stand in for: a call certainly
-   evaluated that certainly takes a clause `fail message` is a static error
-   (`head []`, from `head [] = fail ...`; done); a clause's own patterns type a call on a list of mixed items
-   (`head [1, "a"]` is an `Int`), not one element type for the whole list; and
-   evaluating through a definition costs no more than its native.
+   checker's evaluator) keep the native only as a faster way to compute.
+   Moving `head` and `tail` this way needs the checker to treat a clause
+   `fail message` as no value: a call certainly evaluated that certainly takes
+   one is a static error, and a call typed for mixed items takes its type from
+   the other clauses (both done, for any function). What still blocks it: a
+   function taking a list apart by `x :: xs`, given a list of unknown length,
+   is rejected where its result's shape matters (`[x,y] = first segs` for
+   `segs : List [Int,Int]`, with a program's own `first` today too).

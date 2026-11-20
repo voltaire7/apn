@@ -3360,7 +3360,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 try {
                     clause.params.forEach((param, n) => bindArgument(param, args[n], scope, e));
                     if (clause.guard) infer(clause.guard, scope);
-                    results.push(infer(clause.body, scope));
+                    // A clause that is fail message gives the call no value: one
+                    // it certainly takes fails it, as its body would.
+                    const result = infer(clause.body, scope);
+                    const failing = failMessage(clause.body, summary.scope);
+                    if (failing && certain) problem(failText(failing, scope), e);
+                    if (!failing) results.push(result);
                 } catch (error) {
                     if (certain || costly(error)) throw error;
                     if (!error || typeof error !== "object" || !("message" in error)) throw error;
@@ -5436,6 +5441,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const failing = certainFail(summary, entries);
         if (failing) problem(failing, e);
     }
+    // A body that is fail message (the builtin fail): its message; it gives no value.
+    function failMessage(body: Expr, scope: Scope): Expr | undefined {
+        while (body.t === "block" && body.style === "(" && body.stmts.length === 1) body = body.stmts[0];
+        return body.t === "app" && body.f.t === "var" && body.f.name === "fail" && scope.get("fail")?.builtin ? body.a : undefined;
+    }
     // The message of the fail a call certainly reaches: the one clause its
     // arguments certainly take, unguarded, being fail message (its message
     // known, or not).
@@ -5444,13 +5454,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (candidates.length !== 1 || !candidates[0].matches) return undefined;
         const clause = candidates[0].clause;
         if (clause.guard) return undefined;
-        let body = clause.body;
-        while (body.t === "block" && body.style === "(" && body.stmts.length === 1) body = body.stmts[0];
-        if (body.t !== "app" || body.f.t !== "var" || body.f.name !== "fail" || !summary.scope.get("fail")?.builtin) return undefined;
+        const failing = failMessage(clause.body, summary.scope);
+        if (!failing) return undefined;
         const env = new Map<string, Known>();
         clause.params.forEach((p, n) => bindKnown(p, entries[n], env, clause.refutable));
-        const message = peek(() => budgeted(() => evaluateKnown(body.a, env, summary.scope, 0))?.string, undefined);
-        return message === undefined ? "this call reaches fail whenever it runs" : `this call fails whenever it runs: ${message}`;
+        return failText(failing, summary.scope, env);
+    }
+    // What a call reaching fail message reports: the message, where it is known.
+    function failText(message: Expr, scope: Scope, env = new Map<string, Known>()): string {
+        const text = peek(() => budgeted(() => evaluateKnown(message, env, scope, 0))?.string, undefined);
+        return text === undefined ? "this call reaches fail whenever it runs" : `this call fails whenever it runs: ${text}`;
     }
     // A value computed left waiting (over no parameters) is computed when a
     // check depends on it, as computed would have.
@@ -5972,10 +5985,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A list argument whose type has no length, where one is required, given
     // the length its value has when evaluation knows it (toList 3 for a
     // recursive toList): undefined when nothing changes.
+    // (Measured within a tenth of the budget, at most 30000 steps, even when
+    // checking is unbounded: a length only sharpens the call's type, and an
+    // endless list, xs = 0 :: xs, has none to find.)
     function measuredList(required: Ty, argument: Entry): Entry | undefined {
         const t = resolve(required), a = resolve(argument.type);
         if (t.k !== "list" || !t.length && !t.items || a.k !== "list" || a.length || a.items) return undefined;
-        const n = peek(() => knownLength(argument), undefined);
+        const n = peek(() => budgetDepth ? knownLength(argument) : budgeted(() => knownLength(argument), Math.min(Math.ceil(EVALUATION_BUDGET / 10), 30000)), undefined);
         return n === undefined ? undefined : { ...argument, type: { ...a, length: constant(n) } };
     }
     function knownLength(k: Known | undefined): bigint | undefined {

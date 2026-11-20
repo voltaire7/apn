@@ -1194,6 +1194,8 @@ Deno.test("a call certainly evaluated that certainly fails is a static error", (
         ['first [] = fail "empty"\nfirst (x :: _) = x\nprint (first [])', "this call fails whenever it runs: empty"],
         ['msg n = fail ("bad " ++ to String n)\nprint (msg 3)', "this call fails whenever it runs: bad 3"],
         ["pred (S k) = k\n1 + pred 0", "no clause of 'pred' matches these arguments"],
+        // Inside a call typed for its arguments too: first [] is certainly taken.
+        ['first (x :: _) = x\nfirst [] = fail "empty"\nf p = first (first p)\nprint (f [[], "a"])', "this call fails whenever it runs: empty"],
     ]) {
         try { run(session(), source); } catch (error) {
             if ((error as Error).message !== message) throw new Error(`${source}: ${(error as Error).message}`);
