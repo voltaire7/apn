@@ -3360,10 +3360,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try {
             for (const { clause, matches } of possibleClauses(summary.clauses, args).sort((a, b) => a.clause.place - b.clause.place)) {
                 const scope: Scope = new Map(summary.scope);
-                if (!succeeds(() => clause.params.forEach((param, n) => bindArgument(param, args[n], new Map(scope), e)))) continue;
                 const certain = matches && !clause.guard;
+                // (A list of unknown length that a clause's pattern may take
+                // apart keeps its length: the run may take another clause. A
+                // parameter not yet known is a list, of a length still open.)
+                const given = certain ? args : args.map((argument, n) => {
+                    const q = clause.params[n].p;
+                    if (q !== "list" && q !== "cons") return argument;
+                    if (resolve(argument.type).k === "var") unify(argument.type, list(variable()), e);
+                    const a = resolve(argument.type);
+                    return a.k === "list" && !a.items && !a.length && !a.endless ? { ...argument, type: { ...a } } : argument;
+                });
+                if (!succeeds(() => clause.params.forEach((param, n) => bindArgument(param, given[n], new Map(scope), e)))) continue;
                 try {
-                    clause.params.forEach((param, n) => bindArgument(param, args[n], scope, e));
+                    clause.params.forEach((param, n) => bindArgument(param, given[n], scope, e));
                     if (clause.guard) infer(clause.guard, scope);
                     // A clause that is fail message gives the call no value: one
                     // it certainly takes fails it, as its body would.

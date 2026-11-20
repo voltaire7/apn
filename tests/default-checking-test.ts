@@ -1193,6 +1193,9 @@ Deno.test("an accumulator that starts empty grows", () => {
         + "visit acc node = node > 2 ? acc : [fst acc, node :: snd acc]\n";
     for (const [source, value] of [
         [fold + "take 2 (iterate (s -> snd (myFoldl visit [0, []] s)) [1,2])", "[[1,2],[2,1]]"],
+        // (The [] clause may take s: it leaves s of any length to the others.)
+        [fold + "g s = snd (myFoldl visit [0, []] s)\ng [1,2]", "[2,1]"],
+        [fold + "g s = myFoldl (acc, x -> acc) [7, [8,9]] s\ng [1]", "[7, [8,9]]"],
     ]) if (run(session(), source) !== value) throw new Error(source);
 });
 // A clause that is fail message gives no value, so it gives its function no

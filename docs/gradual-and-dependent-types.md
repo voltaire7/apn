@@ -548,7 +548,10 @@ a function's parameters is known only in a call typed for its arguments; its
 own definition types both branches. A function of several clauses is typed so as
 the run dispatches it: each clause that may take the arguments, up to one
 that certainly does (`f [] = ""; f (x :: _) = "k" ++ x` takes `["a", 1]`),
-the call any of their results. A typed part takes its argument converted and
+the call any of their results. A list of unknown length that a clause may
+take apart keeps its length open for the others (`g s = snd (myFoldl visit
+[0, []] s)` takes `s` of any length through `myFoldl f z [] = z`). A typed
+part takes its argument converted and
 checks a known value as a call does (`g [(a : UInt8), (b : String)] = a`
 rejects `g [300, "x"]`). Where the typed body fails, the call does: in a
 clause that certainly takes the arguments, or in every one that may (one
