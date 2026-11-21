@@ -528,8 +528,11 @@ So do the parameters of a function of one clause given a list (or record)
 whose items differ in type: `f p = "k" ++ head p` takes `["a", 1]` and rejects
 `[1, "a"]`, its body typed for its arguments from that one on, a later one
 too (`g p q = p ++ head q` takes `"!" ["a", 1]`), also through a partial
-application kept as a value. An empty list is an item of its own type
-(`[[], "a"]` is mixed, whatever its element would be).
+application kept as a value, or a function passed as one (`iterate step
+[frontier = [0], d = 1]` types each `step` call for its state). An empty list
+is an item of its own type (`[[], "a"]` is mixed, whatever its element would
+be), and a record's field of unknown parts is known by its kind (`[frontier =
+unique starts, distances = m]` is mixed: a `List a` is no `HashMap`).
 
 A list known empty, anywhere, has nothing to take apart: `head []`, or `head
 xs` after `xs = []`, is an error, as at runtime. A condition whose value is

@@ -997,7 +997,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (const choice of choices) {
             const value = resolve(choice);
             // The same type twice: an atom, or a closed structure (no type variables) written alike.
-            const closed = value.k === "atom" || value.k === "list" && !variables(value).size;
+            const closed = value.k === "atom" || (value.k === "list" || value.k === "map" || value.k === "record" && !(value.fields instanceof ModuleFields)) && !variables(value).size;
             const key = closed ? `${value.k}:${text(value)}` : undefined;
             if (kept.has(choice) || key !== undefined && closedTexts.has(key)) continue;
             // The same constructor where one side does not know an argument
@@ -1602,8 +1602,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (undecided.k === "union" && undecided.undecided) return ambiguous(undecided, e);
         }
         if (expected.k === "operation" || actual.k === "operation") {
-            if (expected.k === "operation" && actual.k !== "operation") expected.solution = actual.k === "list" ? list(actual.element) : actual;
-            if (actual.k === "operation" && expected.k !== "operation") actual.solution = expected.k === "list" ? list(expected.element) : expected;
+            // (Provisionally, a list of the other's elements, of a length the run
+            // finds; known items, a pair, stay what they are.)
+            const provisional = (t: Ty) => t.k === "list" && !t.items ? list(t.element) : t;
+            if (expected.k === "operation" && actual.k !== "operation") expected.solution = provisional(actual);
+            if (actual.k === "operation" && expected.k !== "operation") actual.solution = provisional(expected);
             requirements.push({ k: "operation", op: "require", args: [expected, actual] });
             return;
         }
@@ -3442,11 +3445,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (seen.has(r)) return false;
         seen.add(r);
         // (Only types known whole count: an unknown one is no different type.
-        // An empty list is known whole, whatever its element would be.)
+        // An empty list is known whole, whatever its element would be. A
+        // record's field of unknown parts is known by its kind: a List a is no
+        // HashMap.)
         const empty = (x: Ty) => { const t = resolve(x); return t.k === "list" && t.items?.length === 0; };
-        const parts = (r.k === "list" ? r.items ?? [] : r.k === "record" && !(r.fields instanceof ModuleFields) ? [...r.fields.values()] : [])
-            .filter(x => empty(x) || !variables(x).size && !waiting(x));
-        return new Set(parts.map(x => text(resolve(x)))).size > 1 || children(r).some(child => holdsMixed(child, seen));
+        const whole = (x: Ty) => empty(x) || !variables(x).size && !waiting(x);
+        const shaped = (x: Ty) => whole(x) || ["list", "map", "record", "fn"].includes(resolve(x).k);
+        const kind = (x: Ty) => { const t = resolve(x); return t.k === "atom" || t.k === "variant" ? t.name : t.k; };
+        const parts = r.k === "list" ? r.items ?? [] : r.k === "record" && !(r.fields instanceof ModuleFields) ? [...r.fields.values()] : [];
+        return new Set(parts.filter(whole).map(x => text(resolve(x)))).size > 1 || r.k === "record" && new Set(parts.filter(shaped).map(kind)).size > 1
+            || children(r).some(child => holdsMixed(child, seen));
     };
     // An empty list given where a list of any length goes, in a part of an
     // argument (the [] of a fold's accumulator [0, []]), is a list of any
@@ -5299,16 +5307,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return !!entry && !entry.mono && (!!entry.clauses || !!entry.builtin);
     }
     // A copy of a function type's result chain without shapes or collected args.
-    // (One carrying its arguments, applied, keeps its definition: with them it
-    // says what the rest of the call does, see typedCall.)
-    function withoutShapes(type: Ty, seen = new Map<Ty, Ty>(), carried = false): Ty {
+    // (It keeps its definition: a function passed as a value, step given to
+    // iterate, is typed for the arguments of each of its calls, see typedCall.)
+    function withoutShapes(type: Ty, seen = new Map<Ty, Ty>()): Ty {
         const t = resolve(type);
         if (t.k !== "fn" || !t.shape && !t.args && !t.summary && resolve(t.output).k !== "fn") return type;
         if (seen.has(t)) return seen.get(t)!;
-        const keep = carried || !!t.applied;
-        const result = { ...t, shape: undefined, args: undefined, summary: keep ? t.summary : undefined };
+        const result = { ...t, shape: undefined, args: undefined };
         seen.set(t, result);
-        result.output = withoutShapes(t.output, seen, keep);
+        result.output = withoutShapes(t.output, seen);
         return result;
     }
     // What the runtime knows about an argument's value from its static type.

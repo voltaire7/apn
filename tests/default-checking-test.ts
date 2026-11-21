@@ -1208,8 +1208,49 @@ Deno.test("a pair accumulator and a changing state", () => {
         [fold + "step fr = snd (myFoldl visit [0, []] fr)\nstep [1,7,2]", "[2,1]"],
         [fold + "step fr = snd (myFoldl visit [0, [9]] fr)\nstep [1,7,2]", "[2,1,9]"],
         ["h zs = [0] :: [tail zs]\nh [1]", "[[0],[]]"],
+        // (A function passed as a value keeps its clauses; a union holds a map type once.)
+        [fold + '[..] <- import "std/sequence"\nm0 = ([[0,0]] : HashMap _ _)\n'
+            + "seen acc node = has node (fst acc) ? acc : [fst acc, prepend node (snd acc)]\n"
+            + "snd (myFoldl seen [m0,[]] (filter (x -> x < 9) [1]))", "[1]"],
         [state + "take 2 (iterate step [frontier = [0], d = 1])", "[[frontier = [0], d = 1], [frontier = [], d = 1]]"],
     ]) if (run(session(), source) !== value) throw new Error(source);
+});
+// std/search's breadth-first search, its fold written in APN: a function passed
+// to iterate types each call for its state, and the state [frontier = starts,
+// ...] holds items of different kinds.
+Deno.test("a breadth-first search over a fold written in APN checks", () => {
+    const source = [
+        '[..] <- import "std/function"',
+        '[..] <- import "std/sequence"',
+        "myFoldl f acc [] = acc",
+        "myFoldl f acc (x :: xs) = {",
+        "    next = f acc x",
+        "    seq next (myFoldl f next xs)",
+        "}",
+        "bfsDistances neighbors starts = {",
+        "    initial = [",
+        "        frontier = unique starts",
+        "        distances = (map (x -> [x,0]) starts : HashMap _ _)",
+        "        depth = 0",
+        "    ]",
+        "    step state = {",
+        "        depth = state.depth + 1",
+        "        seq depth []",
+        "        visit acc node = has node (fst acc)",
+        "            ? acc",
+        "            : [insert [[node,depth]] (fst acc), prepend node (snd acc)]",
+        "        [next] = [myFoldl visit [state.distances,[]] (concatMap neighbors state.frontier)]",
+        "        seq (fst next)",
+        "            (seq (snd next)",
+        "                [frontier = reverse (snd next), distances = fst next, depth = depth])",
+        "    }",
+        "    [finished] = [head (filter (state -> null state.frontier) (iterate step initial))]",
+        "    finished.distances",
+        "}",
+        "bfsDistances (n -> n < 3 ? [n + 1] : []) [0]",
+    ].join("\n");
+    const value = run(session(), source);
+    if (value !== "([[0,0],[1,1],[2,2],[3,3]] : HashMap _ _)") throw new Error(value);
 });
 // A clause that is fail message gives no value, so it gives its function no
 // type: a list of unknown length given to one that takes it apart keeps its
