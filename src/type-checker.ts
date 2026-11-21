@@ -2745,11 +2745,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Whether x and y unify, tried on copies (nothing is bound or required).
     function fits(x: Ty, y: Ty): boolean {
         const vars = new Map<Ty, Ty>(), pending = requirements, saved = pending.length;
+        const unknown = [dynamicBoundaries, firstUnknown, unknownLength] as const;
         try { unify(copy(x, vars), copy(y, vars)); return true; }
         catch (error) {
             if (error && typeof error === "object" && "message" in error && "pos" in error) return false;
             throw error;
-        } finally { pending.length = saved; }
+        } finally { pending.length = saved; [dynamicBoundaries, firstUnknown, unknownLength] = unknown; }
     }
     // A record literal's known fields, in order: later entries win, a spread
     // (_) contributes its known fields, and a spread of unknown fields may
@@ -3089,8 +3090,29 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // A type onto a type of lists (Int :: List Int) is a list type
             // whose rest is that type, known when it runs.
             if (before.k === "type" && resolve(a).k === "type") { runtimeChecks++; return explicitDynamic; }
+            // (Onto known items, it is the literal of them: [0] :: [tail zs]
+            // is [[0], tail zs].)
+            if (before.k === "list" && before.items) {
+                const items = [a, ...before.items];
+                return { k: "list", element: union(items), items, length: constant(BigInt(items.length)) };
+            }
             if (before.k === "list" && !fits(list(a), before)) {
                 return list(union([a, before.element]), before.length ? indexAdd(before.length, constant(1n)) : undefined);
+            }
+            // Where it differs from the tail's elements only in the lengths
+            // of its lists (a state [frontier = [0]] onto states whose frontier
+            // the run finds), those are of any length, as in a literal.
+            if (before.k === "list") {
+                const boundaries = dynamicBoundaries, unknown = [firstUnknown, unknownLength] as const;
+                const keep = (t: Ty) => copy(t, new Map([...variables(t)].map(v => [v, v])));
+                const differs = succeeds(() => unify(list(keep(a)), keep(b), e)) && dynamicBoundaries !== boundaries;
+                dynamicBoundaries = boundaries; [firstUnknown, unknownLength] = unknown;
+                if (differs) {
+                    const head = keep(a), element = keep(before.element);
+                    withoutVaryingLengths(head, element);
+                    unify(head, element, e);
+                    return list(head, before.length ? indexAdd(before.length, constant(1n)) : undefined);
+                }
             }
             unify(list(a), b, e);
             const tail = resolve(b);
@@ -3650,13 +3672,28 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const lengths = [...new Set(known.filter(n => n !== undefined))], m = resolve(merged);
                 return lengths.length === 1 && steps.includes(lengths[0]) && m.k === "list" ? list(m.element, constant(lengths[0]!)) : merged;
             };
+            // (Items the results all hold, a step's [a, b], stay, each of the
+            // lengths the run finds: [fst acc, x :: snd acc] grows the second.)
+            const keptItems = (results: Ty[]): Ty | undefined => {
+                const n = lengthOf(results[0]);
+                const items = (x: Ty) => { const r = resolve(x); return r.k === "list" && r.items?.length === Number(n) ? r.items : undefined; };
+                if (n === undefined || !steps.includes(n) || !results.every(items)) return undefined;
+                const joined = items(results[0])!.map((item, i) => {
+                    const merged = withoutLengths(item);
+                    for (const other of results.slice(1)) unify(merged, withoutLengths(items(other)![i]), e);
+                    return merged;
+                });
+                return { k: "list", element: union(joined), items: joined, length: constant(n) };
+            };
             const whole = complete && accepted.some(a => a.free) ? principalOf(f) : undefined;
-            if (whole) { const result = application(whole, argument, e); return kept([lengthOf(result)], withoutLengths(result)); }
+            if (whole) { const result = application(whole, argument, e); return keptItems([result]) ?? kept([lengthOf(result)], withoutLengths(result)); }
             if (outputs.length === 1 || outputs.every(x => sameChoice(x, outputs[0]))) return outputs[0];
             // A complete call no ranking decides:
             // with results that differ only in their lengths (tk 0 _ = [] and
             // tk n (x :: r) = ...), it is a list whose length the run finds.
             if (complete && outputs.every(x => resolve(x).k === "list" && succeeds(() => unify(withoutLengths(copy(outputs[0])), withoutLengths(copy(x)), e)))) {
+                const items = keptItems(outputs);
+                if (items) return items;
                 const lengths = outputs.map(lengthOf), merged = withoutLengths(outputs[0]);
                 for (const other of outputs.slice(1)) unify(merged, withoutLengths(other), e);
                 return kept(lengths, merged);
@@ -7491,6 +7528,28 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Forget every list length in a (freshly copied) type graph. An
     // argument's data forgets only its own: a function's or an action's (an
     // action's [] result) is its contract, and stays.
+    // Two types with the lengths they disagree on forgotten in both: a list
+    // whose lengths differ (or are not both known) is one of any length; one
+    // of the same known length (a pair) keeps it, its items compared alike.
+    function withoutVaryingLengths(a: Ty, b: Ty, seen = new Set<Ty>()): void {
+        const x = resolve(a), y = resolve(b);
+        if (x === y || seen.has(x) || seen.has(y)) return;
+        seen.add(x); seen.add(y);
+        if (x.k === "list" && y.k === "list") {
+            const known = (t: Extract<Ty, { k: "list" }>) => t.items ? BigInt(t.items.length) : t.length && !t.length.terms.size ? t.length.constant : undefined;
+            const n = known(x);
+            if (n !== undefined && n === known(y) && x.items && y.items) { x.items.forEach((t, i) => withoutVaryingLengths(t, y.items![i], seen)); return; }
+            if (n === undefined || n !== known(y)) { for (const t of [x, y]) { t.length = undefined; t.items = undefined; } }
+            withoutVaryingLengths(x.element, y.element, seen);
+            return;
+        }
+        if (x.k === "fn" && y.k === "fn") { withoutVaryingLengths(x.input, y.input, seen); withoutVaryingLengths(x.output, y.output, seen); return; }
+        if (x.k === "record" && y.k === "record" && !(x.fields instanceof ModuleFields) && !(y.fields instanceof ModuleFields)) {
+            for (const [key, t] of x.fields) { const u = y.fields.get(key); if (u) withoutVaryingLengths(t, u, seen); }
+            return;
+        }
+        if (x.k === "variant" && y.k === "variant" && x.args.length === y.args.length) x.args.forEach((t, i) => withoutVaryingLengths(t, y.args[i], seen));
+    }
     function withoutLengths(type: Ty, data = false, seen = new Set<Ty>()): Ty {
         const t = resolve(type);
         if (seen.has(t) || data && (t.k === "fn" || t.k === "variant" && t.name === "IO")) return type;
@@ -7800,12 +7859,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const left = resolve(a), right = resolve(b);
         // Beside a list, a type not known yet (a call still waiting for its
         // argument) is a list of the same elements, of a length the run finds.
+        // (Beside known items, a pair, it holds as many, each joined to its own:
+        // a recursive call's result beside its base case's [0, [9]].)
         const open = (t: Ty) => t.k === "var" || t.k === "operation";
-        if (left.k === "list" && open(right)) { unify(list(left.element), right, e); return list(left.element); }
-        if (right.k === "list" && open(left)) { unify(list(right.element), left, e); return list(right.element); }
+        for (const [known, other] of [[left, right], [right, left]] as const) {
+            if (known.k !== "list" || !open(other)) continue;
+            if (!known.items?.length) { unify(list(known.element), other, e); return list(known.element); }
+            const items = known.items.map(() => variable());
+            unify({ k: "list", element: union(items), items, length: constant(BigInt(items.length)) }, other, e);
+            return choice(left, right, e);
+        }
         if (left.k === "list" && right.k === "list") {
             const join = (a: Ty, b: Ty): Ty => {
                 const x = resolve(a), y = resolve(b);
+                if (x.k === "list" && open(y) || y.k === "list" && open(x)) return choice(a, b, e);
                 if (x.k === "var" || y.k === "var") { unify(a, b, e); return a; }
                 if (x.k === "list" && y.k === "list") {
                     // Lists of the same type stay that type, lengths included.

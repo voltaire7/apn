@@ -136,9 +136,10 @@ so moving a native to the prelude is checked by a test that exists.
    `filter`, `iterate`; the interpreter does not run their definitions, so they
    cannot join the native. Each of the others meets a checker gap first:
    `foldl`'s accumulator, typed through its clauses, now grows from a starting
-   `[]` (`g s = snd (myFoldl visit [0, []] s)` checks), but one whose list
-   grows by none or one per step, inside a pair (`[fst acc, n > 5 ? snd acc :
-   n :: snd acc]`), carries a length the checker cannot settle (`std/search`'s
-   breadth-first search); it also needs `seq`, now `std/function`'s only; `foldr (++)` over strings mistypes a `Char` as an `Int`; `zipWith`
+   `[]`, inside a pair too (`g s = snd (myFoldl visit [0, []] s)` checks), and
+   `iterate` over a record whose list changes length checks; `std/search`'s
+   breadth-first search still does not, in its `[next] = [myFoldl ...]` form
+   over a record of the function's parameter (`frontier = starts`); it also
+   needs `seq`, now `std/function`'s only; `foldr (++)` over strings mistypes a `Char` as an `Int`; `zipWith`
    loses lengths and a `Float` (`zip [0..n] xs`); `length`, `enumerate`, the
    map functions, `truthy` and the operators wait for their own trials.

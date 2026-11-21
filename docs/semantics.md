@@ -75,7 +75,10 @@ literal: `[0 :: []]` is `[[0]]`.
 `::` always adds one element, the mirror of the cons pattern `x::xs`, which binds
 one element. Like a list literal, the result may mix element types:
 `[1,2]::[3,4]` is `[[1,2],3,4]` (as `[[1,2],3,4]` is), `1::["a"]` is `[1,"a"]`,
-and `[1]::[[3,4]]` is `[[1],[3,4]]`. It never joins lists; that is `++`
+and `[1]::[[3,4]]` is `[[1],[3,4]]`, its type the literal's too: `[0] :: [tail zs]`
+types as `[[0], tail zs]`, and onto a list of unknown items, lists whose lengths
+differ from theirs are of any length (a state `[frontier = [0], d = 1]` onto
+states whose frontier the run finds). It never joins lists; that is `++`
 (`[1,2] ++ [3,4]` is `[1,2,3,4]`).
 
 `( )` and `{ }` are interchangeable statement groups. Their value is the last

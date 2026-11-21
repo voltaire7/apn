@@ -1198,6 +1198,19 @@ Deno.test("an accumulator that starts empty grows", () => {
         [fold + "g s = myFoldl (acc, x -> acc) [7, [8,9]] s\ng [1]", "[7, [8,9]]"],
     ]) if (run(session(), source) !== value) throw new Error(source);
 });
+// A fold's step that grows a pair's list by none or one keeps the pair, and
+// :: types as the literal it stands for, so iterate over a changing state checks.
+Deno.test("a pair accumulator and a changing state", () => {
+    const fold = '[..] <- import "std/function"\nmyFoldl f acc [] = acc\nmyFoldl f acc (x :: xs) = myFoldl f (f acc x) xs\n'
+        + "visit acc node = [fst acc, node > 5 ? snd acc : node :: snd acc]\n";
+    const state = "step state = [frontier = filter (n -> n > 5) state.frontier, d = state.d]\n";
+    for (const [source, value] of [
+        [fold + "step fr = snd (myFoldl visit [0, []] fr)\nstep [1,7,2]", "[2,1]"],
+        [fold + "step fr = snd (myFoldl visit [0, [9]] fr)\nstep [1,7,2]", "[2,1,9]"],
+        ["h zs = [0] :: [tail zs]\nh [1]", "[[0],[]]"],
+        [state + "take 2 (iterate step [frontier = [0], d = 1])", "[[frontier = [0], d = 1], [frontier = [], d = 1]]"],
+    ]) if (run(session(), source) !== value) throw new Error(source);
+});
 // A clause that is fail message gives no value, so it gives its function no
 // type: a list of unknown length given to one that takes it apart keeps its
 // items' type (a pair here, which [x,y] takes apart).
