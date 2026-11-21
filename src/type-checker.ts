@@ -777,6 +777,8 @@ function copy(
     const go = (x: Ty) => copy(x, vars, subst, nodes, value);
     switch (t.k) {
         case "overload":
+            Object.assign(result, { choices: t.choices.map(go), ...t.whole ? { whole: go(t.whole) } : {} });
+            break;
         case "union":
             Object.assign(result, { choices: t.choices.map(go) });
             break;
@@ -8642,7 +8644,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("intrinsics.truthy", { type: { k: "intrinsic", name: "truthy", arity: 1 } });
     native("length", [list(variable())], int);
     { const a = variable(), b = variable(), c = variable(); native("zipWith", [fn(a, fn(b, c)), list(a), list(b)], list(c)); }
-    { const a = variable(), b = variable(); native("foldr", [fn(a, fn(b, b)), b, list(a)], b); }
     { const a = variable(), b = variable(); native("intrinsics.seq", [a, b], b); }
     { const seq = scope.get("intrinsics.seq"); if (seq) {
         setShape(seq.type, { arg: 1 });

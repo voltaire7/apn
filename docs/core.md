@@ -134,8 +134,8 @@ so moving a native to the prelude is checked by a test that exists.
    a function of a list of any length (all done, for any function). Moved
    (`MODELED` in `src/natives.ts`): `head`, `tail`, `null`, `take`, `drop`,
    `filter`, `iterate`, `foldl` (strict through `intrinsics.seq`, which
-   `std/function`'s `seq` is); the interpreter does not run their definitions,
-   so they cannot join the native. Each of the others meets a checker gap first:
-   `foldr (++)` over strings mistypes a `Char` as an `Int`; `zipWith`
+   `std/function`'s `seq` is), `foldr`; the interpreter does not run their
+   definitions, so they cannot join the native. Each of the others meets a
+   checker gap first: `zipWith`
    loses lengths and a `Float` (`zip [0..n] xs`); `length`, `enumerate`, the
    map functions, `truthy` and the operators wait for their own trials.

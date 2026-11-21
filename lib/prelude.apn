@@ -184,6 +184,8 @@ foldl f acc (x :: xs) = {
     next = f acc x
     intrinsics.seq next (foldl f next xs)
 }
+foldr f z [] = z
+foldr f z (x :: xs) = f x (foldr f z xs)
 # Whether a value is a list, of any elements, demanding only its first cell.
 isList value = value ~ [[] -> True, _ :: _ -> True, _ -> False]
 [] >>= f = []
