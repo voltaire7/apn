@@ -179,6 +179,11 @@ iterate f x = x :: iterate f (f x)
 take 0 _ = []
 take (n : UInt) [] = []
 take (n : UInt) (x :: xs) = x :: take (n - 1) xs
+foldl f acc [] = acc
+foldl f acc (x :: xs) = {
+    next = f acc x
+    intrinsics.seq next (foldl f next xs)
+}
 # Whether a value is a list, of any elements, demanding only its first cell.
 isList value = value ~ [[] -> True, _ :: _ -> True, _ -> False]
 [] >>= f = []

@@ -397,6 +397,11 @@ for (const source of [
     // A recursive call has the whole function's type: f rest is a number.
     'f [] = 0; f (x :: rest) = x + f rest; f ["a"]',
     'f [] = 0; f (x :: rest) = f rest + x; f ["a"]',
+    // A fold's step is checked against its accumulator, through foldl's
+    // clauses and a two-clause fold's alike, where the call cannot be decided.
+    'g [a,b] = [b, a ++ "x"]\nra f seed xs = foldl (value, _ -> f value) seed xs\nra g [1,2] [0,1,2]',
+    'fl f acc [] = acc; fl f acc (x :: rest) = fl f (f acc x) rest\ng [a,b] = [b, a ++ "x"]\n'
+        + 'ra f seed xs = fl (value, _ -> f value) seed xs\nra g [1,2] [0,1,2]',
 ]) Deno.test(`checker still rejects: ${source}`, () => rejected(session(), source));
 // Length-preserving builtins carry their input's length, and separate uses of
 // one generic function keep independent lengths.

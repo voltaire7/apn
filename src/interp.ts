@@ -5225,6 +5225,7 @@ export class Interpreter {
                 : this.checkedExecution ? this.protectDynamicWrite(target.v, value, "Mutable") : value;
             return { kind: "list", v: [] };
         }
+        if (name === "intrinsics.seq") { this.demand(argsIn[0]); return argsIn[1]; }
         if (STANDARD_NATIVES.some(([n]) => n === name)) return standardNative(this, name, argsIn);
         if (name === "typeOf") {
             const ref = this.reference(argsIn[0]);

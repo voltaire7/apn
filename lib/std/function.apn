@@ -1,7 +1,7 @@
 # Small functions that compose into larger programs.
 [
     bracket = bracket
-    seq = seq
+    seq = intrinsics.seq
     do = do
 
     id x = x

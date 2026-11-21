@@ -33,7 +33,7 @@ built-in behaves exactly as its APN definition ([intrinsics](intrinsics.md)).
 | 6 | Sets: types as values, union, intersection, refinement, membership | `A \| B`, `x : T` | present |
 | 7 | Actions as values, run only by statements and `<-` | `x <- m` | present |
 | 8 | Code as data: a list keeps its items as written | `[x + 1]` | present |
-| 9 | Evaluation order: laziness by default, `seq` to force, `fail` to stop | `seq a b` | present |
+| 9 | Evaluation order: laziness by default, `intrinsics.seq` to force, `fail` to stop | `seq a b` | present |
 
 Literals (numbers, characters, strings) are spellings of values whose models
 are in [intrinsics](intrinsics.md). The natives no APN definition can replace
@@ -133,11 +133,9 @@ so moving a native to the prelude is checked by a test that exists.
    type of its own, so `first [] = fail "empty"` leaves `first (x :: _) = x`
    a function of a list of any length (all done, for any function). Moved
    (`MODELED` in `src/natives.ts`): `head`, `tail`, `null`, `take`, `drop`,
-   `filter`, `iterate`; the interpreter does not run their definitions, so they
-   cannot join the native. Each of the others meets a checker gap first:
-   `foldl`'s accumulator, typed through its clauses, now grows from a starting
-   `[]`, inside a pair too (`g s = snd (myFoldl visit [0, []] s)` checks), and
-   `std/search`'s breadth-first search checks with a `foldl` written in APN;
-   moving `foldl` needs `seq`, now `std/function`'s only; `foldr (++)` over strings mistypes a `Char` as an `Int`; `zipWith`
+   `filter`, `iterate`, `foldl` (strict through `intrinsics.seq`, which
+   `std/function`'s `seq` is); the interpreter does not run their definitions,
+   so they cannot join the native. Each of the others meets a checker gap first:
+   `foldr (++)` over strings mistypes a `Char` as an `Int`; `zipWith`
    loses lengths and a `Float` (`zip [0..n] xs`); `length`, `enumerate`, the
    map functions, `truthy` and the operators wait for their own trials.

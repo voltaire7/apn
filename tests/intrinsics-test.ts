@@ -12,13 +12,14 @@ const blocks = (heading: string): string[] => {
     if (!section) throw new Error(`no section ${heading}`);
     return [...section.matchAll(/```apn\n(.*?)```/gs)].map(m => m[1]);
 };
-// A block's definitions of named functions (not operators, a.b or a type's),
-// each with the lines that continue it.
+// A block's definitions, each with the lines that continue it.
+const definitionsOf = (block: string): string[] => block.split(/\n(?=[^\s\]}])/);
+// Its definitions of named functions (not operators, a.b or a type's).
 const named = (block: string): string =>
-    block.split(/\n(?=[^\s\]}])/).filter(d => /^[a-z][A-Za-z]* /.test(d) && !/^[a-z]+ (&&|\|\||\$|\+\+|>>=|<\*>) /.test(d)).join("\n");
+    definitionsOf(block).filter(d => /^[a-z][A-Za-z]* /.test(d) && !/^[a-z]+ (&&|\|\||\$|\+\+|>>=|<\*>) /.test(d)).join("\n");
 // The natives the prelude defines (MODELED) are tested by its definitions.
 const prelude = Deno.readTextFileSync(new URL("../lib/prelude.apn", import.meta.url));
-const modeled = prelude.split("\n").filter(line => [...MODELED].some(name => line.startsWith(name + " "))).join("\n");
+const modeled = definitionsOf(prelude).filter(d => [...MODELED].some(name => d.startsWith(name + " "))).join("\n");
 const definitions = [blocks("Lists")[0], blocks("Maps")[0], ...blocks("Truth, operators and indexing").slice(0, 2)].map(named).join("\n") + "\n" + modeled;
 const names = [...new Set([...definitions.matchAll(/^([a-z][A-Za-z]*) /gm)].map(m => m[1]))];
 const own = new RegExp(`(?<![\\w.])(${names.join("|")})\\b`, "g");

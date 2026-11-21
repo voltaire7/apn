@@ -41,7 +41,7 @@ type Index = { constant: bigint; terms: Map<string, bigint> };
 type Ty =
     // undecided: overloads differing only in result type, whose calls the
     // context decides; a union of their results is one of them, not either.
-    | { k: "overload"; choices: Ty[]; undecided?: boolean; name?: string; prefer?: true }
+    | { k: "overload"; choices: Ty[]; undecided?: boolean; name?: string; prefer?: true; whole?: Ty }
     | { k: "union"; choices: Ty[]; undecided?: boolean; name?: string }
     | { k: "mutable"; value: Ty }
     | { k: "map"; key: Ty; value: Ty }
@@ -976,8 +976,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function either(a: Ty, b: Ty, e?: Expr): Ty {
         // They unify unless that breaks what is still to be checked of their
         // variables: in x > 0 ? Some x : Some "neg", x is not made a String.
+        // (A record merge asks only that its operands are records: one of the
+        // variables inside its fields cannot break it.)
         const free = new Set([...variables(a), ...variables(b)]);
-        const pending = requirements.filter(r => r.k === "operation" && [...variables(r)].some(v => free.has(v)));
+        const pending = requirements.filter(r => r.k === "operation" && (r.op === "merge-record"
+            ? r.args.some(x => free.has(resolve(x))) : [...variables(r)].some(v => free.has(v))));
         const fits = succeeds(() => {
             const vars = new Map<Ty, Ty>();
             const checks = pending.map(r => copy(r, vars));
@@ -1103,8 +1106,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The deferred call being evaluated, so deferring it again keeps the same node.
     let evaluatingCall: Extract<Ty, { k: "operation" }> | undefined;
     // (A call deferred from an ascription, (x : t) with t not known yet, stays one.)
-    function deferredCall(f: Ty, argument: Entry, ascribed = false): Ty {
-        const result: Ty = { k: "operation", op: "call", ...ascribed ? { ascribed: true } : {}, args: [f, argument.type], known: { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, range: argument.range, mutable: argument.mutable, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr, payload: argument.payload, fields: argument.fields } };
+    // (Provisionally its solution, where the function's whole type gives one.)
+    function deferredCall(f: Ty, argument: Entry, ascribed = false, solution?: Ty): Ty {
+        const result: Ty = { k: "operation", op: "call", ...ascribed ? { ascribed: true } : {}, ...solution ? { solution } : {}, args: [f, argument.type], known: { index: argument.index, size: argument.size, items: argument.items, cell: argument.cell, range: argument.range, mutable: argument.mutable, fn: argument.fn, boolean: argument.boolean, string: argument.string, char: argument.char, float: argument.float, number: argument.number, tag: argument.tag, ref: argument.ref, call: argument.call, expr: argument.expr, payload: argument.payload, fields: argument.fields } };
         requirements.push(result);
         return resolve(result);
     }
@@ -1692,6 +1696,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return;
         }
         if (expected.k === "list" && actual.k === "list") {
+            // (Their shapes only: elements, or a pair's items each, lengths open.)
+            if (lengthsOpen) {
+                if (expected.items && actual.items && expected.items.length === actual.items.length) expected.items.forEach((t, n) => unify(t, actual.items![n], e, seen));
+                else unify(expected.element, actual.element, e, seen);
+                return;
+            }
             // An empty-list pattern carries no length, so recursion over lists of
             // unknown length still checks; a list known to be non-empty cannot match it.
             const knownLength = (t: Extract<Ty, { k: "list" }>) =>
@@ -2418,9 +2428,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // The builtin an expression names, itself or through a name bound to it
     // (g = typeOf): its typing rule is the value's, whatever it is called.
     function denotes(e: Expr, scope: Scope): string | undefined {
+        const named = intrinsicName(e, scope);
+        if (named) return named;
         if (e.t !== "var") return undefined;
         const entry = scope.get(e.name);
         return entry?.builtin ? e.name : entry?.denotes;
+    }
+    // The builtin an intrinsics.name stands for (the intrinsics record unbound
+    // by the program), as written: intrinsics.seq is "intrinsics.seq".
+    function intrinsicName(e: Expr, scope: Scope, env?: Map<string, Known>): string | undefined {
+        return e.t === "recordAccess" && !e.scoped && (!e.argument || e.argument.t === "var" && e.argument.name === e.field) && e.rec.t === "var"
+            && e.rec.name === "intrinsics" && !env?.has("intrinsics") && scope.get("intrinsics")?.builtin ? `intrinsics.${e.field}` : undefined;
     }
     function bind(p: Pattern, expected: Ty, scope: Scope, e: Expr, bound = new Set<string>()): void {
         switch (p.p) {
@@ -2746,6 +2764,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return found;
     }
     // Whether x and y unify, tried on copies (nothing is bound or required).
+    // Unify two types but for the lengths of their lists, which neither
+    // fixes nor compares (what clauses of one function share beside them).
+    let lengthsOpen = false;
+    function unifyShapes(a: Ty, b: Ty, e: Expr): void {
+        const outer = lengthsOpen;
+        lengthsOpen = true;
+        try { unify(a, b, e); } finally { lengthsOpen = outer; }
+    }
     function fits(x: Ty, y: Ty): boolean {
         const vars = new Map<Ty, Ty>(), pending = requirements, saved = pending.length;
         const unknown = [dynamicBoundaries, firstUnknown, unknownLength] as const;
@@ -3593,8 +3619,24 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     if (typed) return typed;
                 }
             }
+            // The choices of one definition share what they ask of a function
+            // argument and those after it (foldl's one f, which its [] and
+            // x :: xs clauses both take): each takes it where it fits, but for
+            // the lengths of its lists, which the run finds.
+            const shared = summary && own.every(c => c.k === "fn" && c.summary === summary)
+                ? f.whole ?? (isFunction(argument.type) ? principalOf(f) : undefined) : undefined;
+            // (An argument not known yet, a parameter's xs, is passed on as
+            // it is, keeping its own lengths, unless what it is asked is just
+            // as unknown: a seed the step's result must be.)
+            const asked = shared && resolve(shared), given = resolve(argument.type);
+            let rest: Ty | undefined;
+            if (asked?.k === "fn" && (given.k === "var" || given.k === "operation") && resolve(asked.input).k !== "var") rest = asked.output;
+            else if (asked?.k === "fn" && succeeds(() => unifyShapes(copy(asked.input), copy(argument.type), e))) {
+                unifyShapes(asked.input, argument.type, e);
+                rest = asked.output;
+            }
             const input = resolve(argument.type);
-            if (input.k === "var" || input.k === "operation") return deferredCall(f, argument, ascribed);
+            if (input.k === "var" || input.k === "operation") return deferredCall(f, argument, ascribed, rest && resolve(rest).k !== "fn" ? rest : undefined);
             // A value of a union of known types is one of them: each takes the
             // clause that accepts it, as the runtime dispatches, and every one must.
             // An empty list's element type is not one to know ([] | Vect 1 Int).
@@ -3707,7 +3749,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return kept(lengths, merged);
             }
             // Partial calls (an intrinsic's too) stay choices the next argument decides.
-            if (outputs.every((x) => ["fn", "intrinsic"].includes(resolve(x).k))) return { k: "overload", choices: outputs, undecided: f.undecided, name: f.name };
+            if (outputs.every((x) => ["fn", "intrinsic"].includes(resolve(x).k))) return { k: "overload", choices: outputs, undecided: f.undecided, name: f.name, ...rest ? { whole: rest } : {} };
             if (f.undecided) return { k: "union", choices: outputs, undecided: true, name: f.name };
             return union(outputs);
         }
@@ -7056,10 +7098,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (e.ascribed && head.t === "var" && args.length === keeps[head.name] && !env.has(head.name) && scope.get(head.name)?.builtin) {
             return new Tail(args[args.length - 1], env, scope, depth);
         }
-        // An operator's intrinsic called (intrinsics.add a b) is its builtin meaning.
-        const intrinsic = head.t === "recordAccess" && !head.scoped && (!head.argument || head.argument.t === "var" && head.argument.name === head.field) && head.rec.t === "var" && head.rec.name === "intrinsics"
-            && !env.has("intrinsics") && scope.get("intrinsics")?.builtin ? PRIMITIVE_OPERATORS.get(`intrinsics.${head.field}`) : undefined;
+        // An operator's intrinsic called (intrinsics.add a b) is its builtin
+        // meaning, and so is any other (intrinsics.seq a b).
+        const named = intrinsicName(head, scope, env);
+        const intrinsic = named ? PRIMITIVE_OPERATORS.get(named) : undefined;
         if (intrinsic && args.length === 2) return evaluateOperator(intrinsic, args[0], args[1], env, scope, depth);
+        if (named && EVALUATED_NATIVES.has(named)) {
+            const made = evaluateBuiltinApp(e, { t: "var", name: named }, args, { type: variable(), builtin: true }, env, scope, depth);
+            if (made !== NOT_BUILTIN) return made;
+        }
         // A lambda (or operator section): too few arguments give a function
         // value, extra ones apply its result.
         if (head.t === "lambda") {
@@ -7084,6 +7131,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (t.k === "overload") t = resolve(t.choices[0]);
             for (let n = 0; n < args.length; n++) t = t?.k === "fn" ? resolve(t.output) : undefined;
             if (t?.k === "fn") return { fn: { e, env: [...env], scope } };
+        }
+        // A name bound to a builtin (std/function's seq = intrinsics.seq) runs as it.
+        const standsFor = !entry?.builtin && entry?.denotes ? entry.denotes : undefined;
+        if (standsFor && (scope.get(standsFor)?.builtin || EVALUATED_NATIVES.has(standsFor))) {
+            const made = evaluateBuiltinApp(e, { ...head, name: standsFor }, args, { type: variable(), builtin: true }, env, scope, depth);
+            if (made !== NOT_BUILTIN) return made;
         }
         if (entry?.builtin || /^[A-Z]/.test(head.name)) {
             const made = evaluateBuiltinApp(e, head, args, entry, env, scope, depth);
@@ -7244,7 +7297,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return n === undefined ? undefined : { index: constant(n) };
             }
             // assert c x is x, as Haskell's (c is checked when it runs).
-            case "seq": case "assert": args[0](); return args[1]();
+            case "intrinsics.seq": case "assert": args[0](); return args[1]();
             // Effects are actions, run statically where the program runs them;
             // print, echo, emit, debug and set yield []. Printing
             // renders, forcing every element in order.
@@ -8354,11 +8407,20 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // written with one naming of their variables, so a clause tying two
         // together (f x x, (x : t) (y : t)) is not one that leaves them free.
         // A variant's clauses (f None, f (Some x)) share its type.
-        const domain = (t: Ty, seen = new Set<Ty>(), names = new Map<Ty, string>()): string => {
+        // (A parameter every clause writes as a plain name takes what each
+        // clause's body asks of it, as one type: foldl f acc [] = acc beside
+        // foldl f acc (x :: xs) = ... f acc x ... has one f.)
+        const plain = (n: number) => clauses.every(c => ["var", "wildcard"].includes(c.params[n]?.p ?? ""));
+        const domain = (t: Ty, seen = new Set<Ty>(), names = new Map<Ty, string>(), n = 0): string => {
             t = resolve(t);
             if (seen.has(t)) return "recursive";
             seen.add(t);
             if (t.k !== "fn") return "";
+            // (One tied to another parameter, f x x, keeps its name.)
+            const inputs: Ty[] = [];
+            for (let r = resolve(t.output), m = 0; r.k === "fn" && m < 64; r = resolve(r.output), m++) inputs.push(r.input);
+            const tied = (x: Ty) => resolve(x).k === "var" && inputs.some(y => variables(y).has(resolve(x)));
+            if (plain(n) && !tied(t.input)) return "*;" + domain(t.output, seen, names, n + 1);
             const input = resolve(t.input), shown = (x: Ty) => text(x, new Map(), new Set(), names);
             const patterns = (t.checks ?? []).flatMap(check => {
                 if (check.k === "operation" && check.op === "remainder") return [shown(check.args[1])];
@@ -8368,7 +8430,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return [shown(matcher.input)];
             }).join("&");
             // (A variable is marked: a type may print as one does, a = Int.)
-            return (input.k === "variant" ? input.name : input.k === "var" ? `*${shown(input)}` : shown(input)) + patterns + ";" + domain(t.output, seen, names);
+            return (input.k === "variant" ? input.name : input.k === "var" ? `*${shown(input)}` : shown(input)) + patterns + ";" + domain(t.output, seen, names, n + 1);
         };
         const bindsSelf = (p: Pattern): boolean => {
             switch (p.p) {
@@ -8461,6 +8523,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const arity = c.params.length;
                 if ((!merges(copy(existing), copy(t)) || emptyAgainstOpen(existing, t)) && (merges(withoutLengths(copy(existing)), withoutLengths(copy(t)))
                     || arity && merges(withoutResult(copy(existing), arity), withoutResult(copy(t), arity)))) {
+                    // Choices that differ only in list lengths share their
+                    // parameters but for those (foldl f acc []'s f is the other
+                    // clause's); each keeps its own result (f [] = "e").
+                    if (merges(withoutLengths(copy(existing)), withoutLengths(copy(t)))) {
+                        for (let a = resolve(existing), b = resolve(t), n = 0; n < arity && a.k === "fn" && b.k === "fn"; a = resolve(a.output), b = resolve(b.output), n++) {
+                            const x = a.input, y = b.input;
+                            if (succeeds(() => unifyShapes(copy(x), copy(y), c.body))) unifyShapes(x, y, c.body);
+                        }
+                    }
                     key = `${key}#${index}`;
                     existing = undefined;
                 }
@@ -8571,12 +8642,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("intrinsics.truthy", { type: { k: "intrinsic", name: "truthy", arity: 1 } });
     native("length", [list(variable())], int);
     { const a = variable(), b = variable(), c = variable(); native("zipWith", [fn(a, fn(b, c)), list(a), list(b)], list(c)); }
-    for (const name of ["foldl", "foldr"]) {
-        const a = variable(), b = variable();
-        native(name, [fn(name === "foldl" ? b : a, fn(name === "foldl" ? a : b, b)), b, list(a)], b);
-    }
-    { const a = variable(), b = variable(); native("seq", [a, b], b); }
-    { const seq = scope.get("seq"); if (seq) {
+    { const a = variable(), b = variable(); native("foldr", [fn(a, fn(b, b)), b, list(a)], b); }
+    { const a = variable(), b = variable(); native("intrinsics.seq", [a, b], b); }
+    { const seq = scope.get("intrinsics.seq"); if (seq) {
         setShape(seq.type, { arg: 1 });
         const summary: Summary = { scope, clauses: [{ index: 0, place: 0, params: [{ p: "var", name: "a" }, { p: "var", name: "b" }], body: { t: "var", name: "b" }, refutable: new Set() }] };
         for (let t = resolve(seq.type), n = 0; t.k === "fn" && n < 2; t = resolve(t.output), n++) t.summary = summary;

@@ -196,7 +196,7 @@ checked: as they are used, at runtime, rather than before the program runs.
 
 A native is a function bound to JavaScript. Those with an APN definition are
 given one here, or are the prelude's (`head`, `tail`, `null`, `take`, `drop`,
-`filter` and `iterate`, which the checker types and evaluates from it, and
+`filter`, `iterate` and `foldl`, which the checker types and evaluates from it, and
 `typeOf` describes; `MODELED` in `src/natives.ts` lists them);
 `tests/intrinsics-test.ts` runs the definitions against the natives on the same
 inputs, and they differ at most in an error's wording. Each clause takes only what
@@ -209,11 +209,6 @@ length [] = 0
 length (_ :: xs) = 1 + length xs
 length (text : String) = length (to (List Char) text)
 length (m : HashMap _ _) = length (pairs m)
-foldl f acc [] = acc
-foldl f acc (x :: xs) = {
-    next = f acc x
-    seq next (foldl f next xs)
-}
 foldr f z [] = z
 foldr f z (x :: xs) = f x (foldr f z xs)
 zipWith f (x :: xs) (y :: ys) = f x y :: zipWith f xs ys
@@ -346,7 +341,8 @@ reasons:
   `allocate`, `peek`, `poke`, `offset`, `nullPointer`). Each is an action, a
   function of the world: `print x` is `IO (world -> [[], write (to String x ++
   "\n") world])` for the world's `write`.
-- **Evaluation order**: `seq a b` is `b` once `a` is evaluated, and `fail
+- **Evaluation order**: `intrinsics.seq a b` (`std/function`'s `seq`) is `b`
+  once `a` is evaluated, and `fail
   message` stops with an error; a definition can use them, not make them.
 - **Reading values as data**: `typeOf`, `isType`, `==`, `<` and the other
   comparisons, `|` and `&` (`intrinsics.union`, `intrinsics.intersection`),

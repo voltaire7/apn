@@ -41,7 +41,6 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
             throw new APNError("runtime", `${name}: ${error instanceof Error ? error.message : error}`);
         }
     }
-    if (name === "seq") { i.demand(args[0]); return args[1]; }
     if (name === "fail") throw new APNError("runtime", str(args[0]));
     if (name === "chars") return mkList(textNatives.chars(str(args[0])).map((v): Value => ({ kind: "char", v })));
     if (name === "fromChars") return mkStr(textNatives.fromChars(i.items(args[0]).map((v) => {

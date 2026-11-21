@@ -349,7 +349,7 @@ as `Dynamic` data, and `metaEvalSyntax` runs such data, `toAST`'s included. `met
 it evaluates the evaluator's source, then runs the program with that evaluator.
 See [the proof, supported subset and primitive boundary](metacircular-evaluator.md).
 
-The standard-library native boundary is `seq`, `to (List Char)`,
+The standard-library native boundary is `to (List Char)`,
 `from (List Char)`, `upper`, `lower`, and the I/O primitives `readFile`, `readStdin`, `getArgs`. Sequence search, scans, merge sort, and text splitting,
 joining, replacement and trimming are implemented in APN.
 

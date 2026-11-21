@@ -553,7 +553,14 @@ the run dispatches it: each clause that may take the arguments, up to one
 that certainly does (`f [] = ""; f (x :: _) = "k" ++ x` takes `["a", 1]`),
 the call any of their results. A list of unknown length that a clause may
 take apart keeps its length open for the others (`g s = snd (myFoldl visit
-[0, []] s)` takes `s` of any length through `myFoldl f z [] = z`). A typed
+[0, []] s)` takes `s` of any length through `myFoldl f z [] = z`). Its
+clauses share what they ask of a parameter every one writes as a plain name
+(`foldl f acc [] = acc`'s `f` is the other clause's), and those differing
+only in list lengths share their parameters but for those lengths. So a call
+that cannot be decided yet checks a function argument, and those after it,
+against the function's whole type, its lists' lengths left open: `ra f seed
+xs = foldl (v, _ -> f v) seed xs` rejects `ra g [1,2] [0,1,2]` where `g [a,b]
+= [b, a ++ "x"]`, as the run would. A typed
 part takes its argument converted and
 checks a known value as a call does (`g [(a : UInt8), (b : String)] = a`
 rejects `g [300, "x"]`). Where the typed body fails, the call does: in a
