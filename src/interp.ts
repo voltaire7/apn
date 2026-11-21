@@ -3765,11 +3765,13 @@ export class Interpreter {
                 v.v.forEach(([key, val], i) => {
                     if (i) emit(", ");
                     emit(keySource(key), "key");
-                    // Inspect module actions without running halt; ordinary data
-                    // fields still render their memoized values.
+                    // A zero-argument function whose call runs statements (a
+                    // block, f = { print "hi" }) shows as one, so showing a module
+                    // runs nothing; any other (m0 = (5 : Int), x = inc 3) gives
+                    // its value, as a list's item does.
                     const field = this.force(val);
                     emit(slotField(v, key, field, x => this.force(x)) ? " : " : " = ");
-                    if (field.kind === "closure" && !field.params.length) emit(valueToString(field), field.kind);
+                    if (field.kind === "closure" && !field.params.length && field.body.t === "block") emit(valueToString(field), field.kind);
                     else this.render(field, emit, false, ancestors);
                 });
                 emit("]");

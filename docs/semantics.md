@@ -1285,9 +1285,11 @@ lexical, and a rebinding never changes what was written before it (see
 [bindings](#bindings-and-output)). Only the selected ternary branch runs.
 
 Record literals retain their existing field-expression evaluation behavior;
-records do not become uniformly lazy. Rendering resolves ordinary data fields
-but shows zero-argument definition fields as functions, so inspecting a module
-does not evaluate its `halt` action.
+records do not become uniformly lazy. Rendering resolves ordinary data fields,
+and a field holding a zero-argument function shows its value too (`m0 = ([[0,0]]
+: HashMap _ _)` then `[d = m0]` shows the map), except one whose call runs
+statements (a block, `bye = { print "bye" }`), which shows as a function, so
+inspecting a record runs nothing.
 
 ## Inspection and numbers
 

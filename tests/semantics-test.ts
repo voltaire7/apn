@@ -822,3 +822,11 @@ for (const path of ["../examples/features.apn", "fixtures/showcase.apn"]) Deno.t
     try { runSource(Deno.readTextFileSync(url), i, true, true); }
     finally { [console.log, Deno.stdout.writeSync] = [log, write]; }
 });
+
+// A record field holding a zero-argument function whose call runs statements
+// shows as one, so showing it runs nothing; any other shows its value.
+example("a record field holding a name's value shows the value",
+    'm0 = ([[0,0]] : HashMap _ _)\ninc n = n + 1\nx = inc 3\nprint [d = m0, e = x]',
+    ["[d = ([[0,0]] : HashMap _ _), e = 4]"]);
+example("a record field holding a block function shows as one",
+    'bye = { print "bye" }\nprint [d = bye]', ['[d = () -> { print "bye" }]']);
