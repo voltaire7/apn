@@ -402,6 +402,8 @@ for (const source of [
     'g [a,b] = [b, a ++ "x"]\nra f seed xs = foldl (value, _ -> f value) seed xs\nra g [1,2] [0,1,2]',
     'fl f acc [] = acc; fl f acc (x :: rest) = fl f (f acc x) rest\ng [a,b] = [b, a ++ "x"]\n'
         + 'ra f seed xs = fl (value, _ -> f value) seed xs\nra g [1,2] [0,1,2]',
+    // A call certainly taking a clause that fails fails, a catch-all after it unreached.
+    'zw f (x :: xs) (y :: ys) = f x y :: zw f xs ys\nzw _ _ _ = []\nzw (++) ["a"] [1]',
 ]) Deno.test(`checker still rejects: ${source}`, () => rejected(session(), source));
 // Length-preserving builtins carry their input's length, and separate uses of
 // one generic function keep independent lengths.
@@ -1213,6 +1215,9 @@ Deno.test("a pair accumulator and a changing state", () => {
         [fold + "step fr = snd (myFoldl visit [0, []] fr)\nstep [1,7,2]", "[2,1]"],
         [fold + "step fr = snd (myFoldl visit [0, [9]] fr)\nstep [1,7,2]", "[2,1,9]"],
         ["h zs = [0] :: [tail zs]\nh [1]", "[[0],[]]"],
+        // (Clauses' results of other lengths keep their items' shapes: pairs.)
+        ["pr a b = [a,b]\nzw f (x :: xs) (y :: ys) = f x y :: zw f xs ys\nzw _ _ _ = []\n"
+            + "g (xs : List Float) = map ([i,t] -> t + 0.5) (zw pr [0..1] xs)\ng [1.5,2.5]", "[2.0,3.0]"],
         // (A function passed as a value keeps its clauses; a union holds a map type once.)
         [fold + '[..] <- import "std/sequence"\nm0 = ([[0,0]] : HashMap _ _)\n'
             + "seen acc node = has node (fst acc) ? acc : [fst acc, prepend node (snd acc)]\n"

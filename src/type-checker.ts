@@ -3654,6 +3654,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // tries them: when only one may, its error is the call's (x + 1 in
             // f (x :: rest) = x + 1, given ["a"]; f [] cannot match it).
             const taking: unknown[] = [];
+            // (Choices that failed, with the arguments a complete call gave them.)
+            const failed: { clauses: ClauseOrder[]; args: Entry[]; error: unknown }[] = [];
             for (const choice of f.choices) {
                 const instance = copy(choice), node = resolve(instance);
                 choosing++;
@@ -3677,16 +3679,27 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     else if (node.k === "fn" && node.clauses) {
                         const args = [...node.callArgs ?? [], argument];
                         if (node.clauses.some(c => c.params.length === args.length && !rankClause(c, args).fails)) taking.push(error);
+                        failed.push({ clauses: node.clauses, args, error });
                     }
                 } finally { choosing--; }
+            }
+            type Ranked = { clause: ClauseOrder } & ReturnType<typeof rankClause>;
+            const before = (a: Ranked, b: Ranked) => a.low > b.high || a.low >= b.high && a.clause.place < b.clause.place;
+            // A complete call certainly taking a clause that fails, before any
+            // other could run, fails as the run does (zipWith (++) ["a"] [1]
+            // takes f x y :: ..., not zipWith _ _ _ = []).
+            if (accepted.length && accepted.every(a => a.clauses && a.call)) {
+                const ranked = accepted.flatMap(a => a.clauses!.map(c => ({ clause: c, ...rankClause(c, a.call!) })));
+                const taken = failed.flatMap(x => x.clauses.filter(c => c.params.length === x.args.length)
+                    .map(c => ({ clause: c, error: x.error, ...rankClause(c, x.args) }))).filter(r => r.matches);
+                const first = taken.find(d => ranked.every(r => r.fails || before(d, r)));
+                if (first) throw first.error;
             }
             // A complete call: drop choices none of whose clauses can run, because
             // each definitely fails or comes after a clause that definitely matches.
             if (accepted.length && accepted.every(a => a.clauses && a.call)) {
                 const ranked = accepted.flatMap(a => a.clauses!.map(c => ({ clause: c, ...rankClause(c, a.call!) })));
                 const sure = ranked.filter(r => r.matches);
-                const before = (a: typeof ranked[number], b: typeof ranked[number]) =>
-                    a.low > b.high || a.low >= b.high && a.clause.place < b.clause.place;
                 // Clauses with the same patterns differ only in result type
                 // (an undecided overload): neither hides the other.
                 const samePatterns = (a: typeof ranked[number], b: typeof ranked[number]) => !!f.undecided && clauseKey("", a.clause) === clauseKey("", b.clause);
@@ -3746,8 +3759,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (complete && outputs.every(x => resolve(x).k === "list" && succeeds(() => unify(withoutLengths(copy(outputs[0])), withoutLengths(copy(x)), e)))) {
                 const items = keptItems(outputs);
                 if (items) return items;
-                const lengths = outputs.map(lengthOf), merged = withoutLengths(outputs[0]);
-                for (const other of outputs.slice(1)) unify(merged, withoutLengths(other), e);
+                // (Its own length the run finds; its items keep theirs, a pair each.)
+                const lengths = outputs.map(lengthOf), first = resolve(outputs[0]) as Extract<Ty, { k: "list" }>;
+                const merged: Ty = { k: "list", element: first.element };
+                for (const other of outputs) unifyShapes(merged, other, e);
                 return kept(lengths, merged);
             }
             // Partial calls (an intrinsic's too) stay choices the next argument decides.

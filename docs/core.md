@@ -136,6 +136,12 @@ so moving a native to the prelude is checked by a test that exists.
    `filter`, `iterate`, `foldl` (strict through `intrinsics.seq`, which
    `std/function`'s `seq` is), `foldr`; the interpreter does not run their
    definitions, so they cannot join the native. Each of the others meets a
-   checker gap first: `zipWith`
-   loses lengths and a `Float` (`zip [0..n] xs`); `length`, `enumerate`, the
-   map functions, `truthy` and the operators wait for their own trials.
+   checker gap first: with `zipWith` defined, a function that only passes its
+   parameters on to it (`zip xs ys = zipWith pair xs ys`) has no type of its
+   own (`a -> b -> c`): the call waits for its arguments, so where the
+   function's own type is needed (`set body (move mouse body)` in the p5
+   soft-body example) its result is unknown, `zip`'s items unlinked from its
+   lists. Typing such a parameter as a list of the elements asked needs a
+   length variable for it, which the checker does not have (an open length is
+   any length); `length`, `enumerate`, the map functions, `truthy` and the
+   operators wait for their own trials.
