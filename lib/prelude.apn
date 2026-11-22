@@ -186,6 +186,10 @@ foldl f acc (x :: xs) = {
 }
 foldr f z [] = z
 foldr f z (x :: xs) = f x (foldr f z xs)
+length [] = 0
+length (_ :: xs) : Int = 1 + length xs
+length (text : String) : Int = length (to (List Char) text)
+length (m : HashMap _ _) : Int = length (pairs m)
 # Whether a value is a list, of any elements, demanding only its first cell.
 isList value = value ~ [[] -> True, _ :: _ -> True, _ -> False]
 [] >>= f = []

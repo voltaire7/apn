@@ -1078,6 +1078,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // (m : HashMap _ _), (xs : List _)), whose recursive calls all wait for it.
     const definingSelf: { pending: Ty; targets: Ty[]; byType: boolean }[] = [];
     // A recursive call the finished function decides (see definingSelf).
+    function withoutDecidedChecks(type: Ty, seen = new Set<Ty>()): void {
+        const t = resolve(type);
+        if (seen.has(t)) return;
+        seen.add(t);
+        if (t.k === "overload") { t.choices.forEach(c => withoutDecidedChecks(c, seen)); return; }
+        if (t.k !== "fn") return;
+        if (t.checks) t.checks = t.checks.filter(c => { const r = linkEnd(c); return !(r.k === "operation" && resolve(r).k !== "operation"); });
+        withoutDecidedChecks(t.output, seen);
+    }
     function selfCall(self: { targets: Ty[] }, argument: Entry): Ty {
         const target = variable();
         self.targets.push(target);
@@ -3717,6 +3726,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (!outputs.length && taking.length === 1) throw taking[0];
             // A Dynamic argument (a widened constructor's call) chooses when it runs.
             if (!outputs.length && isExplicit(resolve(argument.type))) { runtimeChecks++; return explicitDynamic; }
+            // A value only its use made a function (xs n) may be a collection
+            // a clause takes (length xs): the run decides.
+            if (!outputs.length && given.k === "fn" && given.used) { runtimeChecks++; const whole = principalOf(f), w = whole && resolve(whole); return w?.k === "fn" ? w.output : variable(); }
             if (!outputs.length) return problem(`no overload accepts ${text(argument.type)}`, e);
             // A complete call (a partial one's choices are functions, which its
             // next argument decides) whose result no input decides (a recursive
@@ -8607,7 +8619,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             scope.set(name, { type, nonGeneric, clauses });
         }
-        for (const target of self.targets) unify(target, type, location);
+        // A recursive call the finished function decides is an instance of it,
+        // as any later call is: len (text : String) = len (to (List Char) text)
+        // leaves len's list clauses taking lists of any element.
+        for (const target of self.targets) unify(target, instantiate({ type, nonGeneric }), location);
+        // Checks already decided (such a recursive call's) ask nothing more of
+        // a call: the function's type drops them, so its copies stay small.
+        if (self.targets.length) withoutDecidedChecks(type);
         }
     }
     // The built-in types; the prelude declares List and Vect (read below).
@@ -8617,7 +8635,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     for (
         const [name, type] of Object.entries({
             print: fn(a, io(list(variable(), constant(0n)))),
-            length: fn(dynamic, atom("Int")),
             typeOf: fn(a, { k: "type", value: b }),
         })
     ) scope.set(name, { type });
@@ -8657,7 +8674,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     { const n = variable(); native("intrinsics.range", [n, variable(), variable()], list(n)); }
     native("exit", [int], io(empty));
     scope.set("intrinsics.truthy", { type: { k: "intrinsic", name: "truthy", arity: 1 } });
-    native("length", [list(variable())], int);
     { const a = variable(), b = variable(), c = variable(); native("zipWith", [fn(a, fn(b, c)), list(a), list(b)], list(c)); }
     { const a = variable(), b = variable(); native("intrinsics.seq", [a, b], b); }
     { const seq = scope.get("intrinsics.seq"); if (seq) {
@@ -8699,7 +8715,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     for (const name of ["floor", "ceiling", "truncate", "round", "numerator", "denominator"]) native(name, [num], num);
     for (const name of ["min", "max", "atan2", "makeRectangular", "makePolar", "expt", "rationalize"]) native(name, [num, num], num);
     for (const name of ["quotient", "remainder", "modulo", "gcd", "lcm"]) native(name, [int, int], int);
-    for (const name of ["pairs", "keys", "values", "enumerate", "length"]) scope.set(name, { type: { k: "intrinsic", name } });
+    for (const name of ["pairs", "keys", "values", "enumerate"]) scope.set(name, { type: { k: "intrinsic", name } });
     for (const name of ["lookup", "has", "remove", "insert"]) {
         const key = variable(), value = variable(), map: Ty = { k: "map", key, value };
         native(name, [name === "insert" ? list(pair(key, value)) : key, map], name === "lookup" ? value : name === "has" ? bool : map);

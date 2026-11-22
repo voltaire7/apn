@@ -1215,6 +1215,9 @@ Deno.test("a pair accumulator and a changing state", () => {
         [fold + "step fr = snd (myFoldl visit [0, []] fr)\nstep [1,7,2]", "[2,1]"],
         [fold + "step fr = snd (myFoldl visit [0, [9]] fr)\nstep [1,7,2]", "[2,1,9]"],
         ["h zs = [0] :: [tail zs]\nh [1]", "[[0],[]]"],
+        // (A recursive call on another type is an instance of the function.)
+        ["len [] = 0\nlen (_ :: xs) = 1 + len xs\nlen (text : String) = len (to (List Char) text)\n"
+            + "len (m : HashMap _ _) = len (pairs m)\n[len [1,2,3], len \"ab\"]", "[3,2]"],
         // (Clauses' results of other lengths keep their items' shapes: pairs.)
         ["pr a b = [a,b]\nzw f (x :: xs) (y :: ys) = f x y :: zw f xs ys\nzw _ _ _ = []\n"
             + "g (xs : List Float) = map ([i,t] -> t + 0.5) (zw pr [0..1] xs)\ng [1.5,2.5]", "[2.0,3.0]"],
