@@ -196,7 +196,7 @@ checked: as they are used, at runtime, rather than before the program runs.
 
 A native is a function bound to JavaScript. Those with an APN definition are
 given one here, or are the prelude's (`head`, `tail`, `null`, `take`, `drop`,
-`filter`, `iterate`, `foldl`, `foldr`, `length` and `enumerate`, which the checker types and evaluates from it, and
+`filter`, `iterate`, `foldl`, `foldr`, `length`, `enumerate` and the map functions, which the checker types and evaluates from it, and
 `typeOf` describes; `MODELED` in `src/natives.ts` lists them);
 `tests/intrinsics-test.ts` runs the definitions against the natives on the same
 inputs, and they differ at most in an error's wording. Each clause takes only what
@@ -219,23 +219,8 @@ they are read, `foldr` stops where `f` does not read its second argument
 ## Maps
 
 A `HashMap` is an association list whose keys appear once, in the order they
-were first inserted; `pairs m` is that list. On it:
-
-```apn
-keys m = map head (pairs m)
-values m = map (entry -> entry 1) (pairs m)
-has key m = not (null (filter (entry -> head entry == key) (pairs m)))
-lookup key m = filter (entry -> head entry == key) (pairs m) ~ [
-    [] -> fail "HashMap key not found"
-    entry :: _ -> entry 1
-]
-remove key m = (filter (entry -> head entry != key) (pairs m) : HashMap _ _)
-insert entries m = foldl (map, entry -> put entry map) m entries
-# A key already there keeps its place.
-put [key,value] m = has key m
-    ? (map (entry -> head entry == key ? [key,value] : entry) (pairs m) : HashMap _ _)
-    : (pairs m ++ [[key,value]] : HashMap _ _)
-```
+were first inserted; `pairs m` is that list. `keys`, `values`, `has`, `lookup`,
+`remove` and `insert` are the prelude's, defined on it.
 
 ## Truth, operators and indexing
 

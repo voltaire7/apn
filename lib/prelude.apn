@@ -191,6 +191,24 @@ length (_ :: xs) : Int = 1 + length xs
 length (text : String) : Int = length (to (List Char) text)
 length (m : HashMap _ _) : Int = length (pairs m)
 enumerate xs = zipWith (i, x -> [i,x]) [0..] xs
+# A HashMap is an association list whose keys appear once, in the order they
+# were first inserted; pairs m is that list.
+keys (m : HashMap a b) : List a = map ([key,_] -> key) (pairs m)
+values (m : HashMap a b) : List b = map ([_,value] -> value) (pairs m)
+has (key : a) (m : HashMap a b) : Bool = not (null (filter ([k,_] -> k == key) (pairs m)))
+lookup (key : a) (m : HashMap a b) : b = filter ([k,_] -> k == key) (pairs m) ~ [
+    [] -> fail "HashMap key not found"
+    [_,value] :: _ -> value
+]
+remove (key : a) (m : HashMap a b) : HashMap a b =
+    (filter ([k,_] -> k != key) (pairs m) : HashMap _ _)
+insert (entries : List _) (m : HashMap a b) : HashMap a b = {
+    # A key already there keeps its place.
+    put [key,value] held = has key held
+        ? (map ([k,v] -> k == key ? [key,value] : [k,v]) (pairs held) : HashMap _ _)
+        : (pairs held ++ [[key,value]] : HashMap _ _)
+    foldl (held, entry -> put entry held) m entries
+}
 # Whether a value is a list, of any elements, demanding only its first cell.
 isList value = value ~ [[] -> True, _ :: _ -> True, _ -> False]
 [] >>= f = []

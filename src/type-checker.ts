@@ -1252,7 +1252,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             raw = t.args.map(resolve);
             const operands = [...raw];
             // A Mutable cell is read for its contents, as at runtime.
-            if (["+", "-", "*", "/", "%", "^", "++", "compare", "negate", "length", "pairs", "keys", "values"].includes(t.op)) {
+            if (["+", "-", "*", "/", "%", "^", "++", "compare", "negate", "length", "pairs"].includes(t.op)) {
                 for (let n = 0; n < operands.length; n++) {
                     while (operands[n].k === "mutable") operands[n] = resolve((operands[n] as Extract<Ty, { k: "mutable" }>).value);
                     // A value of the program's own type is the number its to instance makes.
@@ -1311,12 +1311,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (a.k !== "mutable") return problem("set expects a Mutable reference", undefined, "a value never changes: make a cell (i = Mutable 0), or bind a new version (i = i + 1)");
             convert(a.value, b, { t: "placeholder" });
             return io(list(variable(), constant(0n)));
-        }
-        if (t.op === "insert") {
-            if (b.k !== "map") return problem("insert expects a HashMap");
-            if (a.k === "record") return problem("insert takes an association list", undefined, 'write its entries as [key,value] pairs: insert [["a", 1]] m');
-            unify(list(pair(b.key, b.value)), a);
-            return b;
         }
         if (t.op === "negate") {
             if (a.k === "list") return { k: "list", element: operation("negate", [a.element]), ...sameLength(a) };
@@ -1413,7 +1407,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (a.k === "union" && a.undecided || b?.k === "union" && b.undecided) return ambiguous((a.k === "union" && a.undecided ? a : b) as Extract<Ty, { k: "union" }>);
         if (a.k === "union") return union(a.choices.map(x => operation(t.op, t.args.length === 1 ? [x] : [x, b])));
         if (b?.k === "union") return union(b.choices.map(x => operation(t.op, [a, x])));
-        if (["pairs", "keys", "values", "length"].includes(t.op)) {
+        if (["pairs", "length"].includes(t.op)) {
             // A value only its use made a function (xs n) may be a collection
             // get indexes: the run decides.
             if (a.k === "fn" && a.used) { runtimeChecks++; return t.op === "length" ? atom("Int") : explicitDynamic; }
@@ -1434,7 +1428,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // The pairs of a record not known (Record): its field names and any values.
             else if (a.k === "atom" && a.name === "Record" && t.op === "pairs") { key = atom("String"); value = variable(); }
             else return problem(`${t.op} requires a collection; got ${text(a)}`);
-            return list(t.op === "keys" ? key : t.op === "values" ? value : pair(key, value));
+            return list(pair(key, value));
         }
         // A named subtype keeps its name through arithmetic with itself or a
         // plain value of its base (Money 1 + 1.0 is a Money); two names do not mix.
@@ -8714,13 +8708,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     for (const name of ["floor", "ceiling", "truncate", "round", "numerator", "denominator"]) native(name, [num], num);
     for (const name of ["min", "max", "atan2", "makeRectangular", "makePolar", "expt", "rationalize"]) native(name, [num, num], num);
     for (const name of ["quotient", "remainder", "modulo", "gcd", "lcm"]) native(name, [int, int], int);
-    for (const name of ["pairs", "keys", "values"]) scope.set(name, { type: { k: "intrinsic", name } });
-    for (const name of ["lookup", "has", "remove", "insert"]) {
-        const key = variable(), value = variable(), map: Ty = { k: "map", key, value };
-        native(name, [name === "insert" ? list(pair(key, value)) : key, map], name === "lookup" ? value : name === "has" ? bool : map);
-    }
+    scope.set("pairs", { type: { k: "intrinsic", name: "pairs" } });
     scope.set("set", { type: { k: "intrinsic", name: "set", arity: 2 } });
-    scope.set("insert", { type: { k: "intrinsic", name: "insert", arity: 2 } });
     // The operators' intrinsics (intrinsics.add, ...), which the prelude binds.
     for (const [name, op] of PRIMITIVE_OPERATORS) scope.set(name, { type: { k: "intrinsic", name: op, arity: 2 } });
     // Functor, Applicative and Monad: map is a native; the rest is the prelude's.

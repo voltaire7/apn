@@ -20,7 +20,7 @@ const named = (block: string): string =>
 // The natives the prelude defines (MODELED) are tested by its definitions.
 const prelude = Deno.readTextFileSync(new URL("../lib/prelude.apn", import.meta.url));
 const modeled = definitionsOf(prelude).filter(d => [...MODELED].some(name => d.startsWith(name + " "))).join("\n");
-const definitions = [blocks("Lists")[0], blocks("Maps")[0], ...blocks("Truth, operators and indexing").slice(0, 2)].map(named).join("\n") + "\n" + modeled;
+const definitions = [blocks("Lists")[0], ...blocks("Truth, operators and indexing").slice(0, 2)].map(named).join("\n") + "\n" + modeled;
 const names = [...new Set([...definitions.matchAll(/^([a-z][A-Za-z]*) /gm)].map(m => m[1]))];
 const own = new RegExp(`(?<![\\w.])(${names.join("|")})\\b`, "g");
 const renamed = (source: string) => source.replace(own, (_, n: string) => `my${n[0].toUpperCase()}${n.slice(1)}`);
