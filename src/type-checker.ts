@@ -1252,7 +1252,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             raw = t.args.map(resolve);
             const operands = [...raw];
             // A Mutable cell is read for its contents, as at runtime.
-            if (["+", "-", "*", "/", "%", "^", "++", "compare", "negate", "length", "pairs", "keys", "values", "enumerate"].includes(t.op)) {
+            if (["+", "-", "*", "/", "%", "^", "++", "compare", "negate", "length", "pairs", "keys", "values"].includes(t.op)) {
                 for (let n = 0; n < operands.length; n++) {
                     while (operands[n].k === "mutable") operands[n] = resolve((operands[n] as Extract<Ty, { k: "mutable" }>).value);
                     // A value of the program's own type is the number its to instance makes.
@@ -1413,7 +1413,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (a.k === "union" && a.undecided || b?.k === "union" && b.undecided) return ambiguous((a.k === "union" && a.undecided ? a : b) as Extract<Ty, { k: "union" }>);
         if (a.k === "union") return union(a.choices.map(x => operation(t.op, t.args.length === 1 ? [x] : [x, b])));
         if (b?.k === "union") return union(b.choices.map(x => operation(t.op, [a, x])));
-        if (["pairs", "keys", "values", "enumerate", "length"].includes(t.op)) {
+        if (["pairs", "keys", "values", "length"].includes(t.op)) {
             // A value only its use made a function (xs n) may be a collection
             // get indexes: the run decides.
             if (a.k === "fn" && a.used) { runtimeChecks++; return t.op === "length" ? atom("Int") : explicitDynamic; }
@@ -1429,7 +1429,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const values = [...a.fields.values()], items = values.map(field => pair(atom("String"), field));
                 return { k: "list", element: pair(atom("String"), union(values)), items, length: constant(BigInt(items.length)) };
             }
-            else if (a.k === "list" && t.op === "enumerate") return { k: "list", element: pair(atom("Int"), a.element), ...sameLength(a) };
             // [] is the empty record too.
             else if (a.k === "list" && a.items?.length === 0 && t.op === "pairs") return list(variable(), constant(0n));
             // The pairs of a record not known (Record): its field names and any values.
@@ -8715,7 +8714,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     for (const name of ["floor", "ceiling", "truncate", "round", "numerator", "denominator"]) native(name, [num], num);
     for (const name of ["min", "max", "atan2", "makeRectangular", "makePolar", "expt", "rationalize"]) native(name, [num, num], num);
     for (const name of ["quotient", "remainder", "modulo", "gcd", "lcm"]) native(name, [int, int], int);
-    for (const name of ["pairs", "keys", "values", "enumerate"]) scope.set(name, { type: { k: "intrinsic", name } });
+    for (const name of ["pairs", "keys", "values"]) scope.set(name, { type: { k: "intrinsic", name } });
     for (const name of ["lookup", "has", "remove", "insert"]) {
         const key = variable(), value = variable(), map: Ty = { k: "map", key, value };
         native(name, [name === "insert" ? list(pair(key, value)) : key, map], name === "lookup" ? value : name === "has" ? bool : map);

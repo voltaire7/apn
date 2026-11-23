@@ -190,6 +190,7 @@ length [] = 0
 length (_ :: xs) : Int = 1 + length xs
 length (text : String) : Int = length (to (List Char) text)
 length (m : HashMap _ _) : Int = length (pairs m)
+enumerate xs = zipWith (i, x -> [i,x]) [0..] xs
 # Whether a value is a list, of any elements, demanding only its first cell.
 isList value = value ~ [[] -> True, _ :: _ -> True, _ -> False]
 [] >>= f = []
