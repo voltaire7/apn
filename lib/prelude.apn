@@ -39,7 +39,7 @@ else = True
 # (c ? a : b is truthy c a b).
 get True a = _ -> a
 get False _ = b -> b
-($) = intrinsics.apply
+f $ x = f x
 # x ~ [p -> a, q -> b] matches x: the most specific alternative that fits, as
 # among a function's clauses (f p = a; f q = b is f x = x ~ [p -> a, q -> b]).
 (~) = intrinsics.match
@@ -69,7 +69,7 @@ a & b = intrinsics.intersection [a,b]
 (/) = intrinsics.div
 (%) = intrinsics.mod
 (^) = intrinsics.pow
-(\) = intrinsics.compose
+f \ g = x -> f (g x)
 # Prefix - and ! are these functions: -x is negate x, !x is not x.
 negate = intrinsics.negate
 not x = truthy x False True

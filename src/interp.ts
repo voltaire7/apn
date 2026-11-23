@@ -434,13 +434,15 @@ export class Interpreter {
             const prelude = parseDocument(preludeSource);
             const modeled = (s: TopLevel): s is Extract<TopLevel, { t: "def" }> => s.t === "def" && MODELED.has(s.name);
             this.run(prelude.filter(s => !modeled(s)));
-            for (const name of MODELED) {
+            const intrinsics = this.env.get("intrinsics") as Extract<Value, { kind: "record" }>;
+            for (const [name, native] of MODELED) {
                 const clauses = prelude.filter(modeled).filter(s => s.name === name).flatMap(s => s.clauses);
                 if (!clauses.length) continue;
                 const scope = new Env(this.env);
                 const definition: Value = { kind: "clauseFn", name, clauses, arity: clauses[0].params.length, env: scope, applied: [] };
                 scope.setLocal(name, definition);
-                this.modeledDefinitions.set(name, definition);
+                this.modeledDefinitions.set(native, definition);
+                if (native !== name) this.env.setLocal(name, intrinsics.v.find(([key]) => `intrinsics.${key}` === native)![1]);
             }
             // Bind each operator to its value itself, so evaluation finds the intrinsic.
             // (fail, which marks code still to write, is the prelude's too.)

@@ -1,7 +1,7 @@
 import { fieldSource } from "./record-keys.ts";
 import { type Alternative, type Binding, clausePlaces, walkObjects, type Contains, listRole, readPatterns as readStatementPatterns, extendedDeclaration, headError, declaresNames, givesValue, isUse, OPEN, opening, listExpansion, listPatternExpansion, rangeExpansion, rangeName, type CoreMatch, matchedClauses, patternNames, type PatternLambda, boolSelection, ternaryExpansion, writtenMatch, enumerationPositions, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, isForTypes, METHOD_INTRINSICS, type Expr, flatTypedPattern, mentions, rewriteInfixConstructors, isUnionBody, constructorPattern, listAlternatives, listClauses, mergeClauses, type Pattern, sourceLocations, type TopLevel, typedForm, listUnion, unionClause, unionKind } from "./ast.ts";
 import { proveIndexClaims } from "./index-proofs.ts";
-import { EVALUATED_NATIVES, nativeArity, READS_CODE, RETIRED_NATIVES, SHOWS, STANDARD_NATIVES, STRICT_NATIVES } from "./natives.ts";
+import { EVALUATED_NATIVES, MODELED, nativeArity, READS_CODE, RETIRED_NATIVES, SHOWS, STANDARD_NATIVES, STRICT_NATIVES } from "./natives.ts";
 import { objectFields, type P5Field, sketchFields } from "./p5.ts";
 import { IMPORT_ONE, standardModule } from "./modules.ts";
 // The natives that show a value, which no action has.
@@ -14,7 +14,10 @@ import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
 import preludeSource from "../lib/prelude.apn" with { type: "text" };
 
-const PRELUDE_OPERATORS = new Set(PRIMITIVE_OPERATORS.values());
+// The operators that are intrinsics, and those the prelude binds to them (one
+// it defines, f $ x = f x, is a function like any other).
+const INTRINSIC_OPERATORS = new Set(PRIMITIVE_OPERATORS.values());
+const PRELUDE_OPERATORS = new Set([...INTRINSIC_OPERATORS].filter(op => !MODELED.has(op)));
 // What evaluateBuiltinApp gives an application of no builtin.
 const NOT_BUILTIN = Symbol("not a builtin");
 // An expression left to evaluate in tail position (a clause's body): the
@@ -3524,7 +3527,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const args = [...f.args ?? [], argument.type], entries = [...f.entries ?? [], argument];
             if (f.name === "get" && args.length === 1) builtinGetter(args[0], e);
             if (args.length < (f.arity ?? 1)) return { ...f, args, entries };
-            if (PRELUDE_OPERATORS.has(f.name)) return operatorApplication(f.name, entries[0], entries[1], e);
+            if (INTRINSIC_OPERATORS.has(f.name)) return operatorApplication(f.name, entries[0], entries[1], e);
             if (f.name === "not" || f.name === "negate") return prefixApplication(f.name, args[0], e);
             // set is an action whatever it writes: its target and value are
             // checked (a requirement) once their types are known.
@@ -4301,7 +4304,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     function builtinOperator(type: Ty | undefined): string | undefined {
         const t = type && resolve(type);
-        return t?.k === "intrinsic" && !t.args?.length && PRELUDE_OPERATORS.has(t.name) ? t.name : undefined;
+        return t?.k === "intrinsic" && !t.args?.length && INTRINSIC_OPERATORS.has(t.name) ? t.name : undefined;
     }
     // A user's operator application as the call it is: (op l) r.
     // Whether a binop is the builtin operator in this scope: the prelude's,

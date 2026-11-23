@@ -19,7 +19,7 @@ const named = (block: string): string =>
     definitionsOf(block).filter(d => /^[a-z][A-Za-z]* /.test(d) && !/^[a-z]+ (&&|\|\||\$|\+\+|>>=|<\*>) /.test(d)).join("\n");
 // The natives the prelude defines (MODELED) are tested by its definitions.
 const prelude = Deno.readTextFileSync(new URL("../lib/prelude.apn", import.meta.url));
-const modeled = definitionsOf(prelude).filter(d => [...MODELED].some(name => d.startsWith(name + " "))).join("\n");
+const modeled = definitionsOf(prelude).filter(d => [...MODELED.keys()].some(name => d.startsWith(name + " "))).join("\n");
 const definitions = [blocks("Lists")[0], ...blocks("Truth, operators and indexing").slice(0, 2)].map(named).join("\n") + "\n" + modeled;
 const names = [...new Set([...definitions.matchAll(/^([a-z][A-Za-z]*) /gm)].map(m => m[1]))];
 const own = new RegExp(`(?<![\\w.])(${names.join("|")})\\b`, "g");

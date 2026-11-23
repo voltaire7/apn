@@ -237,8 +237,6 @@ truthy (m : HashMap _ _) = not (null (pairs m))
 truthy _ = True
 a && b = truthy a ? truthy b : False
 a || b = truthy a ? True : truthy b
-f $ x = f x
-(f \ g) x = f (g x)
 [] ++ ys = ys
 (x :: xs) ++ ys = x :: (xs ++ ys)
 negate x = 0 - x
@@ -246,7 +244,10 @@ S (n : UInt) = n + 1
 ```
 
 A named subtype's value is as true as its base's (`Money 0` is `False`), and
-an action is no condition: `truthy` of one is an error. `++` joins strings as
+an action is no condition: `truthy` of one is an error. `negate` flips a
+float's sign, zero's too (`negate 0.0` is `-0.0`), and each part of a complex
+number's. `$` and `\` are the prelude's (`f $ x = f x`,
+`f \ g = x -> f (g x)`). `++` joins strings as
 their characters. Applying a list to an index is `get`, and an item update
 `with`; a negative index counts from the end:
 

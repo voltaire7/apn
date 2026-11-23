@@ -106,6 +106,10 @@ for (const [source, expected] of [
     ["print (not 0)", ["True"]],
     ["Cents = | Cents Int\nCents a + Cents b = Cents (a + b)\nprint ((+) (Cents 1) (Cents 2))\nprint (zipWith (+) [1] [2])", ["Cents 3", "[3]"]],
     ["print (+)\nprint ((+) 1)\ndebug [(+)]", ["(+)", "(1 +)", "[(+)]"]],
+    // $ and \ are the prelude's functions; their intrinsics keep their own typing.
+    ['std <- import "std"\n[..] = std.[function,sequence,text,map]\nprint (sortOn snd $ pairs $ frequencies $ words "b a b")\n'
+        + "print (intrinsics.apply negate 3)\nprint (typeOf ($))\nprint (intrinsics.compose negate (+ 1) 2)",
+        ['[["a", 1], ["b", 2]]', "-3", "(a -> b) -> a -> b", "-3"]],
 ] as const) Deno.test(`operators as functions: ${JSON.stringify(source)}`, () => {
     const actual = run(source);
     if (actual.join("\n") !== expected.join("\n")) throw new Error(`${actual} != ${expected}`);
