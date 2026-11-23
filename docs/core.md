@@ -145,5 +145,8 @@ so moving a native to the prelude is checked by a test that exists.
    soft-body example) its result is unknown, `zip`'s items unlinked from its
    lists. Typing such a parameter as a list of the elements asked needs a
    length variable for it, which the checker does not have (an open length is
-   any length); `truthy` and the
-   operators wait for their own trials.
+   any length). `truthy` stays native: its definition could give an action's
+   truth only as a failure (`truthy (_ : IO _) = fail "..."`), an error where a
+   call certainly runs, where the native's type gives an action none
+   (`y = not (print 1)` is rejected unrun). The operators wait for their own
+   trials.

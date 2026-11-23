@@ -7526,7 +7526,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const irrefutable = (q: Pattern) => q.p === "wildcard" || q.p === "var" && !refutable.has(q.name);
         if (irrefutable(p)) return true;
         if (p.p === "int" || p.p === "float") return equalsNumber(argument, p.v) === true;
-        if (p.p === "bool") return argument.boolean === p.v;
+        if (p.p === "bool") return boolOf(argument) === p.v;
         if (p.p === "string") return argument.string === p.v;
         if (p.p === "char") return argument.char === p.v;
         if (p.p === "range") return !!argument.index && !argument.index.terms.size && argument.index.constant >= p.lo && argument.index.constant <= p.hi;
@@ -7548,6 +7548,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (p.p === "cons") return irrefutable(p.head) && irrefutable(p.tail) && listLength(argument, 0) === false;
         return false;
     }
+    // The argument's known value when it is a Bool: a known truth (0's) is not one.
+    function boolOf(argument: Entry): boolean | undefined {
+        const t = resolve(argument.type);
+        return t.k === "atom" && t.name === "Bool" ? argument.boolean : undefined;
+    }
     // Is the argument a list of exactly this length? From its type, or its known value.
     function listLength(argument: Entry, count: number): boolean | undefined {
         // An endless list ([1..]) is no list of any length.
@@ -7564,7 +7569,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // typed patterns that the argument's type cannot satisfy.
     function definitelyFails(p: Pattern, argument: Entry, low: number, high: number): boolean {
         if (p.p === "int" || p.p === "float") return equalsNumber(argument, p.v) === false;
-        if (p.p === "bool") return argument.boolean !== undefined && argument.boolean !== p.v;
+        if (p.p === "bool") return boolOf(argument) !== undefined && boolOf(argument) !== p.v;
         if (p.p === "string") return argument.string !== undefined && argument.string !== p.v;
         if (p.p === "char") return argument.char !== undefined && argument.char !== p.v;
         if (p.p === "range") return !!argument.index && !argument.index.terms.size && (argument.index.constant < p.lo || argument.index.constant > p.hi);
@@ -8491,9 +8496,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 return x;
             };
+            // (A group it would narrow, (_ : IO _) = fail "..." beside f _ = 1,
+            // takes more than it does: it is a group of its own.)
             const joined = failMessage(c.body, scope) ? [...groups.entries()].find(([, group]) => succeeds(() => {
-                const vars = new Map<Ty, Ty>();
-                unify(anyLength(withoutResult(copy(group, vars), c.params.length)), anyLength(withoutResult(copy(t, vars), c.params.length)), c.body);
+                const vars = new Map<Ty, Ty>(), inputs = anyLength(withoutResult(copy(group, vars), c.params.length)), before = text(inputs);
+                unify(inputs, anyLength(withoutResult(copy(t, vars), c.params.length)), c.body);
+                if (text(inputs) !== before) throw new Error("narrows the group");
             })) : undefined;
             if (joined) {
                 const [joinedKey, group] = joined;

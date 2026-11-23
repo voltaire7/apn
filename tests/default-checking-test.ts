@@ -1710,3 +1710,14 @@ for (const [source, output] of [
     const shown = run(session(), source);
     if (shown !== output) throw new Error(`expected ${output}, got ${shown}`);
 });
+
+// A Bool pattern takes only a Bool (0's truth is no False), and a clause that
+// is fail message beside a wider one leaves that one's inputs as they are.
+for (const [source, output] of [
+    ["tr False = 1\ntr _ = 2\n[tr 0, tr False, tr (1 > 2), tr 5]", "[2,1,1,2]"],
+    ['k (_ : IO _) = fail "x"\nk _ = 1\n[k Int, k 5, k "a"]', "[1,1,1]"],
+    ['k (_ : IO _) = fail "x"\nk (n : Number) = n == 0\nk _ = True\n[k Int, k 0, k 1]', "[True,True,False]"],
+]) Deno.test(`clauses keep their inputs: ${JSON.stringify(source)}`, () => {
+    const shown = run(session(), source);
+    if (shown !== output) throw new Error(`expected ${output}, got ${shown}`);
+});
