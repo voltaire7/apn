@@ -43,8 +43,8 @@ f $ x = f x
 # x ~ [p -> a, q -> b] matches x: the most specific alternative that fits, as
 # among a function's clauses (f p = a; f q = b is f x = x ~ [p -> a, q -> b]).
 (~) = intrinsics.match
-(||) = intrinsics.or
-(&&) = intrinsics.and
+a || b = truthy a ? True : truthy b
+a && b = truthy a ? truthy b : False
 (==) = intrinsics.eq
 (!=) = intrinsics.ne
 (<) = intrinsics.lt

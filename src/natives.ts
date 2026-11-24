@@ -76,7 +76,7 @@ export const ACTIONS = new Map(Object.entries({
 // Each name is the native's own, or an intrinsic's: f $ x = f x is intrinsics.apply.
 export const MODELED = new Map<string, string>([
     ...["head", "tail", "null", "drop", "filter", "iterate", "take", "foldl", "foldr", "length", "enumerate", "keys", "values", "has", "lookup", "remove", "insert"].map(name => [name, name] as const),
-    ["$", "intrinsics.apply"], ["\\", "intrinsics.compose"],
+    ["$", "intrinsics.apply"], ["\\", "intrinsics.compose"], ["&&", "intrinsics.and"], ["||", "intrinsics.or"],
 ]);
 // Natives that show their argument as text, which an action has none of.
 export const SHOWS = new Set(["print", "emit", "toString"]);

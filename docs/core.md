@@ -109,7 +109,7 @@ they were written in, so quoting needs no form of its own. Evaluation is lazy;
 | Today | In the core |
 | --- | --- |
 | A checker rule written by hand for each native (`Takes`, `S`, ...) | the type of its definition |
-| Natives with an APN definition in [intrinsics](intrinsics.md) (list functions, maps, `truthy`, `++`, `get`, `with`, ranges, the list and action instances) | prelude definitions, with the interpreter's version kept as a faster way to compute the same thing |
+| Natives with an APN definition in [intrinsics](intrinsics.md) (list functions, maps, `$`, `\`, `&&`, `\|\|`) | prelude definitions, with the interpreter's version kept as a faster way to compute the same thing (done; step 2 says why the rest stay) |
 
 `tests/intrinsics-test.ts` already runs the definitions against the natives,
 so moving a native to the prelude is checked by a test that exists.
@@ -137,8 +137,10 @@ so moving a native to the prelude is checked by a test that exists.
    `std/function`'s `seq` is), `foldr`, `length` (its recursive clauses
    declaring their `Int` result), `enumerate`, the map functions (`keys`,
    `values`, `has`, `lookup`, `remove`, `insert`, each declaring its type),
-   and the operators `$` and `\` (`f \ g = x -> f (g x)`), which the checker
-   types as any function. The interpreter does not run their definitions, so
+   and the operators `$`, `\`, `&&` and `||` (`f \ g = x -> f (g x)`), which
+   the checker types as any function: a call evaluates the arguments its
+   definition certainly reaches, so `False && head []` leaves `head []` unrun
+   as `both False (head [])` does for `both a b = truthy a ? truthy b : False`. The interpreter does not run their definitions, so
    they cannot join the native. The others stay native, each for what its
    move would lose:
 
@@ -154,9 +156,6 @@ so moving a native to the prelude is checked by a test that exists.
      (`truthy (_ : IO _) = fail "..."`), an error where a call certainly
      runs, where the native's type gives an action none (`y = not (print 1)`
      is rejected unrun).
-   - `&&` and `||`: the checker leaves out a right side that the left side's
-     known value skips (`False && head []`); a defined function's arguments
-     are all typed.
    - `negate`: a real number is a `Complex`, so no short definition flips
      both a float's zero and each part of a complex number (`0 - x` makes
      `negate 0.0` `0.0`, not `-0.0`).

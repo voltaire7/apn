@@ -5131,17 +5131,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             case "binop": {
                 if (e.reassociate) return infer(regrouped(e, scope), scope, expected);
-                // A && or || its left side's known value decides gives that, the
-                // right side not run (False && head []), as a conditional takes
-                // its branch.
-                if ((e.op === "&&" || e.op === "||") && builtinAt(e, scope)) {
-                    const known = peek(() => resolveKnown(computed(e.l, scope)), {} as Known);
-                    if (known.boolean === (e.op === "||") && !typesInTrial(e.r, scope)) {
-                        callFrames.forEach(frame => frame.decided = true);
-                        infer(e.l, scope);
-                        return atom("Bool");
-                    }
-                }
                 // Against a type, a lambda written in place is read as one, as
                 // at runtime: (a -> b) == typeOf f.
                 if (e.op === "==" || e.op === "!=") {
@@ -7250,7 +7239,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const made = evaluateBuiltinApp(e, { ...head, name: standsFor }, args, { type: variable(), builtin: true }, env, scope, depth);
             if (made !== NOT_BUILTIN) return made;
         }
-        if (entry?.builtin || /^[A-Z]/.test(head.name)) {
+        // (truthy is the intrinsic in the prelude's own scope too: a && b there.)
+        if (entry?.builtin || /^[A-Z]/.test(head.name) || head.name === "truthy" && namesTruthy(scope)) {
             const made = evaluateBuiltinApp(e, head, args, entry, env, scope, depth);
             if (made !== NOT_BUILTIN) return made;
         }
@@ -7336,7 +7326,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         // view build match is what build is (its pattern runs match: see viewFields).
         if (head.name === "view" && builtin && args.length === 2) return value(args[0]);
-        if (head.name === "truthy" && builtin && args.length === 1) {
+        if (head.name === "truthy" && (builtin || namesTruthy(scope)) && args.length === 1) {
             const b = truth(value(args[0]));
             return b === undefined ? undefined : { boolean: b };
         }
