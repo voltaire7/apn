@@ -1736,3 +1736,22 @@ for (const [source, output] of [
     const shown = run(session(), source);
     if (shown !== output) throw new Error(`expected ${output}, got ${shown}`);
 });
+
+// A function that passes its parameters on to one asking for lists (zip xs ys
+// = zipWith pair xs ys) has their items in its type, and keeps each parameter
+// itself where it passes it on whole (forceList xs is xs).
+{
+    const zipping = 'std <- import "std"\n[..] = std.[function,sequence]\nzw f (x :: xs) (y :: ys) = f x y :: zw f xs ys\n'
+        + "zw _ _ _ = []\nzp xs ys = zw pair xs ys\n";
+    for (const source of ["h (xs : List Float) : List String = map ([n,t] -> n) (zp [0..4] xs)",
+        "h (xs : List Float) : List String = map ([n,t] -> n) (zip [0..4] xs)", "q = zp 1 2"]) {
+        Deno.test(`a function passing lists on rejects: ${source}`, () => rejected(session(), zipping + source));
+    }
+    for (const [source, value] of [
+        ["h (xs : List Float) : List Int = map ([n,t] -> n) (zip [0..4] xs)\nh [1.5,2.5]", "[0,1]"],
+        ["tick [a,b,c] = forceList [b, c + a, a]\nrepeatApply 3 tick [1,2,3]", "[3,6,4]"],
+    ]) Deno.test(`a function passing lists on: ${source}`, () => {
+        const shown = run(session(), zipping + source);
+        if (shown !== value) throw new Error(`expected ${value}, got ${shown}`);
+    });
+}

@@ -560,7 +560,10 @@ only in list lengths share their parameters but for those lengths. So a call
 that cannot be decided yet checks a function argument, and those after it,
 against the function's whole type, its lists' lengths left open: `ra f seed
 xs = foldl (v, _ -> f v) seed xs` rejects `ra g [1,2] [0,1,2]` where `g [a,b]
-= [b, a ++ "x"]`, as the run would. A call that certainly takes a clause the
+= [b, a ++ "x"]`, as the run would. A parameter passed on where a list is
+asked has that list's items in its function's type and stays itself (`zip
+xs ys = zipWith pair xs ys` gives pairs of `xs`'s and `ys`'s items, and
+`forceList xs` is `xs`, of its own length). A call that certainly takes a clause the
 types reject fails, as the run does, whatever catch-all clause follows
 (`zw _ _ _ = []` after `zw f (x :: xs) (y :: ys) = f x y :: ...`), and the
 results of clauses giving lists of other lengths keep their items' shapes (a

@@ -1255,7 +1255,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             raw = t.args.map(resolve);
             const operands = [...raw];
             // A Mutable cell is read for its contents, as at runtime.
-            if (["+", "-", "*", "/", "%", "^", "++", "compare", "negate", "length", "pairs"].includes(t.op)) {
+            if (["+", "-", "*", "/", "%", "^", "++", "compare", "negate", "length", "pairs", "element"].includes(t.op)) {
                 for (let n = 0; n < operands.length; n++) {
                     while (operands[n].k === "mutable") operands[n] = resolve((operands[n] as Extract<Ty, { k: "mutable" }>).value);
                     // A value of the program's own type is the number its to instance makes.
@@ -1314,6 +1314,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (a.k !== "mutable") return problem("set expects a Mutable reference", undefined, "a value never changes: make a cell (i = Mutable 0), or bind a new version (i = i + 1)");
             convert(a.value, b, { t: "placeholder" });
             return io(list(variable(), constant(0n)));
+        }
+        // element xs: what the list xs holds.
+        if (t.op === "element") {
+            if (a.k === "list") return a.items?.length ? union([a.element, ...a.items]) : a.element;
+            if (a.k === "atom" && a.name === "String") return atom("Char");
+            if (isExplicit(a)) return a;
+            return problem(`cannot use ${text(a)} where a list is required`);
         }
         if (t.op === "negate") {
             if (a.k === "list") return { k: "list", element: operation("negate", [a.element]), ...sameLength(a) };
@@ -3640,7 +3647,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // as unknown: a seed the step's result must be.)
             const asked = shared && resolve(shared), given = resolve(argument.type);
             let rest: Ty | undefined;
-            if (asked?.k === "fn" && (given.k === "var" || given.k === "operation") && resolve(asked.input).k !== "var") rest = asked.output;
+            if (asked?.k === "fn" && (given.k === "var" || given.k === "operation") && resolve(asked.input).k !== "var") {
+                // (What a list asked of a parameter holds is its items, whatever
+                // the parameter turns out to be: zip xs ys's items are xs's and
+                // ys's, and forceList xs is still xs itself.)
+                const wanted = resolve(asked.input);
+                if (given.k === "var" && wanted.k === "list" && !wanted.endless) {
+                    return application(f, { ...argument, type: { k: "list", element: operation("element", [argument.type]) } }, e, false, ascribed);
+                }
+                rest = asked.output;
+            }
             else if (asked?.k === "fn" && succeeds(() => unifyShapes(copy(asked.input), copy(argument.type), e))) {
                 unifyShapes(asked.input, argument.type, e);
                 rest = asked.output;
@@ -3717,8 +3733,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 accepted.splice(0, accepted.length, ...accepted.filter((_, n) => kept[n]));
                 // Still ambiguous, and the arguments depend on an enclosing function's
                 // parameters: decide at that function's calls, where they are known.
+                // (Its type meanwhile is the one the whole asks, if any.)
                 if (!deciding && outputs.length > 1 && !outputs.every(x => sameChoice(x, outputs[0])) && accepted.some(a => a.call!.some(symbolic))) {
-                    return evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument, ascribed);
+                    return evaluatingCall && resolve(evaluatingCall.args[0]) === f ? evaluatingCall : deferredCall(f, argument, ascribed, rest && resolve(rest).k !== "fn" ? rest : undefined);
                 }
             }
             if (!outputs.length && builtinError) throw builtinError;
@@ -8776,7 +8793,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     { const n = variable(); native("intrinsics.range", [n, variable(), variable()], list(n)); }
     native("exit", [int], io(empty));
     scope.set("intrinsics.truthy", { type: { k: "intrinsic", name: "truthy", arity: 1 } });
-    { const a = variable(), b = variable(), c = variable(); native("zipWith", [fn(a, fn(b, c)), list(a), list(b)], list(c)); }
     { const a = variable(), b = variable(); native("intrinsics.seq", [a, b], b); }
     { const seq = scope.get("intrinsics.seq"); if (seq) {
         setShape(seq.type, { arg: 1 });

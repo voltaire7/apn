@@ -196,18 +196,13 @@ checked: as they are used, at runtime, rather than before the program runs.
 
 A native is a function bound to JavaScript. Those with an APN definition are
 given one here, or are the prelude's (`head`, `tail`, `null`, `take`, `drop`,
-`filter`, `iterate`, `foldl`, `foldr`, `length`, `enumerate` and the map functions, which the checker types and evaluates from it, and
+`filter`, `iterate`, `foldl`, `foldr`, `zipWith`, `length`, `enumerate` and the map functions, which the checker types and evaluates from it, and
 `typeOf` describes; `MODELED` in `src/natives.ts` lists them);
 `tests/intrinsics-test.ts` runs the definitions against the natives on the same
 inputs, and they differ at most in an error's wording. Each clause takes only what
 it is written with, so a definition's patterns say what the native accepts.
 
 ## Lists
-
-```apn
-zipWith f (x :: xs) (y :: ys) = f x y :: zipWith f xs ys
-zipWith _ _ _ = []
-```
 
 Each is as lazy as its definition: `take 0` never looks at its list, `map`,
 `filter`, `zipWith`, `iterate` and `enumerate` make an endless list's cells as

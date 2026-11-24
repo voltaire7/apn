@@ -75,7 +75,7 @@ export const ACTIONS = new Map(Object.entries({
 // place, a faster way to compute the same thing (tests/intrinsics-test.ts).
 // Each name is the native's own, or an intrinsic's: f $ x = f x is intrinsics.apply.
 export const MODELED = new Map<string, string>([
-    ...["head", "tail", "null", "drop", "filter", "iterate", "take", "foldl", "foldr", "length", "enumerate", "keys", "values", "has", "lookup", "remove", "insert"].map(name => [name, name] as const),
+    ...["head", "tail", "null", "drop", "filter", "iterate", "take", "foldl", "foldr", "length", "enumerate", "keys", "values", "has", "lookup", "remove", "insert", "zipWith"].map(name => [name, name] as const),
     ["$", "intrinsics.apply"], ["\\", "intrinsics.compose"], ["&&", "intrinsics.and"], ["||", "intrinsics.or"],
 ]);
 // Natives that show their argument as text, which an action has none of.

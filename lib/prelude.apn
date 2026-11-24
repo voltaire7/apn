@@ -190,6 +190,8 @@ length [] = 0
 length (_ :: xs) : Int = 1 + length xs
 length (text : String) : Int = length (to (List Char) text)
 length (m : HashMap _ _) : Int = length (pairs m)
+zipWith f (x :: xs) (y :: ys) = f x y :: zipWith f xs ys
+zipWith _ _ _ = []
 enumerate xs = zipWith (i, x -> [i,x]) [0..] xs
 # A HashMap is an association list whose keys appear once, in the order they
 # were first inserted; pairs m is that list.

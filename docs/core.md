@@ -135,7 +135,7 @@ so moving a native to the prelude is checked by a test that exists.
    (`MODELED` in `src/natives.ts`): `head`, `tail`, `null`, `take`, `drop`,
    `filter`, `iterate`, `foldl` (strict through `intrinsics.seq`, which
    `std/function`'s `seq` is), `foldr`, `length` (its recursive clauses
-   declaring their `Int` result), `enumerate`, the map functions (`keys`,
+   declaring their `Int` result), `zipWith`, `enumerate`, the map functions (`keys`,
    `values`, `has`, `lookup`, `remove`, `insert`, each declaring its type),
    and the operators `$`, `\`, `&&` and `||` (`f \ g = x -> f (g x)`), which
    the checker types as any function: a call evaluates the arguments its
@@ -144,14 +144,6 @@ so moving a native to the prelude is checked by a test that exists.
    they cannot join the native. The others stay native, each for what its
    move would lose:
 
-   - `zipWith`: a function that only passes its parameters on to it
-     (`zip xs ys = zipWith pair xs ys`) has no type of its own
-     (`a -> b -> c`): the call waits for its arguments, so where the
-     function's own type is needed (`set body (move mouse body)` in the p5
-     soft-body example) its result is unknown, `zip`'s items unlinked from
-     its lists. Typing such a parameter as a list of the elements asked needs
-     a length variable for it, which the checker does not have (an open
-     length is any length).
    - `truthy`: its definition could give an action's truth only as a failure
      (`truthy (_ : IO _) = fail "..."`), an error where a call certainly
      runs, where the native's type gives an action none (`y = not (print 1)`
