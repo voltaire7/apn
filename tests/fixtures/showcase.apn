@@ -2165,10 +2165,11 @@ showField [x = True]                     # => True
 mixedFields (v : [x : _, y : Float]) = [v.x,v.y]
 print (mixedFields ["hello", 2])         # => ["hello", 2.0]
 
-# Dotted patterns retain the same argument while destructuring it.
+# Dotted patterns retain the same argument while destructuring it, and
+# (p & q) matches it as both.
 retainRecord whole.[x,y] = [whole,x,y]
 print (retainRecord [x = 1, y = 2, z = 3])   # => [[x = 1, y = 2, z = 3], 1, 2]
-sharedValue.aliasValue = 123
+(sharedValue & aliasValue) = 123
 print [sharedValue,aliasValue]          # => [123,123]
 wholePair.[firstItem,secondItem] = [1,2]
 print [wholePair,firstItem,secondItem]  # => [[1,2], 1, 2]

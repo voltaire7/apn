@@ -97,7 +97,7 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
 - Things that act the same share one implementation: never special-case one
   spelling of a definition (curried or with parameters) for no reason.
 - Things that differ act differently: never give clearly different spellings
-  the same behavior (`v.x` is the field, `v.[x]` a record holding it, so
+  the same behavior (`v.x` is the field, `v.[x]` a list holding it, so
   `v.x != v.[x]`). If two spellings would mean the same, drop one or give
   each its own meaning.
 - Redundancy is evil: say each thing once, in the language, the code and the
