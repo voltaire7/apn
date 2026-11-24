@@ -297,7 +297,6 @@ function helpText(): string {
         `  cond ? a : b   (ternary)`,
         `  x ~ [ pat -> expr, ... ]   (match: an operator; alternatives are pattern lambdas)`,
         `  literal patterns: 0  1.5  "s"  'c'  True  [1..9]   (tried before other clauses)`,
-        `  v.x  v.[x,y]  whole@(x :: xs)   (a pattern reads v's fields; @ matches the value as both)`,
         `  func ((Int -> Int) f) = Int { f 123 }   (checked function contract)`,
         `  ((a -> a) f), (a -> a).(+ 1), (a -> a) == typeOf f   a lambda read as a function type`,
         `  List Int is a list of any length; [Int] is exactly one Int; [Int..] endlessly many`,

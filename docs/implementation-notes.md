@@ -300,10 +300,9 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
 
 ## Patterns
 
-- The as-pattern node (`left@right`, and `v.x`/`v.[x,y]` whose right side
-  reads fields) matches one value twice, keeping lazy/reference identity.
-  Ordinary dotted assignment uses `patDef.update` only when its root is
-  already visible; otherwise it binds the as-pattern. In inference, keep
+- Dotted pattern `left.right` matches one value twice, keeping lazy/reference
+  identity. Ordinary dotted assignment uses `patDef.update` only when its root
+  is already visible; otherwise it binds the as-pattern. In inference, keep
   original inputs separate from converted subpattern payloads.
 - Overloads by result type: the checker records each clause's inferred result
   head in the session's `resultHeads`, keyed by the body's source position

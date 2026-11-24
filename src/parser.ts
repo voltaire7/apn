@@ -183,10 +183,6 @@ function reach(e: Expr): number {
 // a negative number, which bare reads as subtraction; around a binding's
 // as-pattern (a.b = v sets a field) or name ((x) = v is no binding).
 const negative = (p: Pattern) => (p.p === "int" || p.p === "float") && p.v < 0;
-// A dot in a pattern followed by no field: an expression, or a definition's error.
-class DottedPattern extends Error {
-    constructor(readonly pos: number) { super("Parser: a dotted pattern reads fields"); }
-}
 const bindingNeeds = (p: Pattern) => p.p === "as" || p.p === "var" || negative(p);
 
 class Parser {
@@ -478,7 +474,6 @@ class Parser {
         // A built-in type applied to a value ((Int x)) is the old typed
         // spelling, whose own error says how to write it.
         const typed = p.p === "constr" && !p.typed && p.args.length > 0 && TYPE_NAMES.includes(p.tag);
-        // (p & q is written in parentheses: & outside them is the operator.)
         if (open !== undefined) this.unnecessary.set(open, !typed && !needed(p));
     }
 
@@ -489,19 +484,9 @@ class Parser {
         return p;
     }
 
-    // v.x and v.[x,y] read v's fields, as the values v.x and v.[x,y] do: v is
-    // the whole value, x its field x. v@p matches the value as both v and p.
     parsePattern(): Pattern {
         const left = this.parsePatternAtom();
-        if ((left.p === "var" || left.p === "wildcard") && this.eatSym("@")) return { p: "as", left, right: this.parsePattern(), at: true };
-        if (!this.eatSym(".")) return left;
-        if (this.isSym("[")) return { p: "as", left, right: this.parsePatternAtom() };
-        const field = this.peek();
-        if (field.k === "ident" && /^[a-z]/.test(field.v) && !this.isSymAt(1, ".")) {
-            this.next();
-            return { p: "as", left, right: { p: "recPat", v: [[field.v, field.v]] } };
-        }
-        throw new DottedPattern(field.pos);
+        return this.eatSym(".") ? { p: "as", left, right: this.parsePattern() } : left;
     }
 
     parsePatternAtom(): Pattern {
@@ -1501,7 +1486,7 @@ class Parser {
             return n1.k === "ident" && (/^[A-Z]/.test(n1.v) || consAfter(2) || n2.k === "sym" && n2.v === ":");
         }
         const next = this.peek(1);
-        return t.k === "ident" && (/^[A-Z]/.test(t.v) || (next.k === "sym" && (next.v === "." || next.v === "@" || isConstructorOperator(next.v))));
+        return t.k === "ident" && (/^[A-Z]/.test(t.v) || (next.k === "sym" && (next.v === "." || isConstructorOperator(next.v))));
     }
 
     // The index of the bracket closing the one at token index open.
@@ -1924,12 +1909,7 @@ class Parser {
             // f x : T = e: the type of f x, then its definition.
             if (this.eatSym(":")) this.i = this.typeEnd("statement").end;
             return this.isSym("=") || this.isSym(":=") || this.guardsFollow();
-        } catch (error) {
-            // (A definition's parameter that is no pattern, v.(x :: xs), says
-            // so; on a line that defines nothing it is an expression.)
-            if (error instanceof DottedPattern && this.definesAhead(save)) {
-                throw new APNError("parse", "a dotted pattern reads fields: v.x or v.[x,y]", { pos: error.pos, hint: "to match a value as both v and a pattern p, write v@p" });
-            }
+        } catch {
             return false;
         } finally {
             this.i = save;
@@ -1939,18 +1919,6 @@ class Parser {
     // Expression-only indices (e.g. arr (i + 1) = value) cannot be function
     // patterns. Pattern-compatible forms use normal definitions and dispatch
     // against the existing binding at evaluation time.
-    // Whether an = follows outside brackets before the statement ends.
-    definesAhead(from: number): boolean {
-        for (let n = from, depth = 0; n < this.toks.length; n++) {
-            const t = this.toks[n];
-            if (t.k === "newline" || t.k === "eof" || t.k === "sym" && t.v === ";" && depth === 0) return false;
-            if (t.k === "sym" && "([{".includes(t.v)) depth++;
-            else if (t.k === "sym" && ")]}".includes(t.v)) depth--;
-            else if (t.k === "sym" && t.v === "=" && depth === 0) return true;
-        }
-        return false;
-    }
-
     tryItemAssign(): Expr | null {
         const first = this.peek();
         if (first.k !== "ident" || !/^[a-z]/.test(first.v)) return null;
@@ -3169,9 +3137,7 @@ export function patternSource(p: Pattern): string {
     // A typed pattern rewritten where it runs shows as written.
     if ((p.p === "as" || p.p === "schema") && p.written) return patternSource(p.written);
     switch (p.p) {
-        case "as": return p.at ? `${patternSource(p.left)}@${patternSource(p.right)}`
-            : p.right.p === "recPat" && p.right.v.length === 1 && p.right.v[0][0] === p.right.v[0][1] ? `${patternSource(p.left)}.${p.right.v[0][0]}`
-            : `${patternSource(p.left)}.${patternSource(p.right)}`;
+        case "as": return `${patternSource(p.left)}.${patternSource(p.right)}`;
         case "schema": {
             // A type spelled with an operator (Int | String, a -> a) is grouped
             // before its value's name, and stands alone for no name.

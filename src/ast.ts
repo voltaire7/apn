@@ -48,7 +48,7 @@ export type Expr =
     | { t: "patDef"; pattern: Pattern; value: Expr; eager?: boolean; update?: { name: string; value: Expr; error?: string } };
 
 export type Pattern =
-    | { p: "as"; left: Pattern; right: Pattern; written?: Pattern; at?: true }
+    | { p: "as"; left: Pattern; right: Pattern; written?: Pattern }
     | { p: "schema"; type: Expr; value: Pattern; written?: Pattern }
     | { p: "wildcard" }
     | { p: "var"; name: string }
