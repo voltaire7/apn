@@ -830,3 +830,20 @@ example("a record field holding a name's value shows the value",
     ["[d = ([[0,0]] : HashMap _ _), e = 4]"]);
 example("a record field holding a block function shows as one",
     'bye = { print "bye" }\nprint [d = bye]', ['[d = () -> { print "bye" }]']);
+
+// A record is the list of its [key, value] pairs, in order.
+for (const [source, expected] of [
+    ['[x = 1, y = 2] == [["x", 1], ["y", 2]]', "True"],
+    ["[x = 1, y = 2] == [y = 2, x = 1]", "False"],
+    ["length [x = 1, y = 2]", "2"],
+    ["map ([k,v] -> v) [x = 1, y = 2]", "[1,2]"],
+    ["filter ([k,v] -> v > 1) [x = 1, y = 2]", '[["y", 2]]'],
+    ["foldl (acc, [k,v] -> acc + v) 0 [x = 1, y = 2]", "3"],
+    ["f (xs : List [String,Int]) = length xs\nf [a = 1, b = 2]", "2"],
+    ["head [x = 1]", '["x", 1]'],
+] as const) Deno.test(`a record is its pairs: ${source}`, () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    const actual = i.renderString(i.run(parse(source)));
+    if (actual !== expected) throw new Error(actual);
+});

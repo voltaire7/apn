@@ -975,6 +975,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return xs.length ? { length: xs.length } : {};
     }
     function pair(key: Ty, value: Ty): Ty { return { k: "list", element: union([key, value]), items: [key, value], length: constant(2n) }; }
+    // A record's [key, value] pairs, in order (of a length the run finds when
+    // it has fields not known yet).
+    function recordPairs(r: Extract<Ty, { k: "record" }>): Ty {
+        const items = [...r.fields.values()].map(field => pair(atom("String"), field));
+        return r.open ? list(items.length ? union(items) : variable()) : { k: "list", element: items.length ? union(items) : variable(), items, length: constant(BigInt(items.length)) };
+    }
     // The type of a choice between values (a ternary's branches, a match's
     // arms, a function's clauses): one type when they unify, else either
     // one, as a list's items are ([1,"a"] is List (Int | String)).
@@ -1140,6 +1146,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A Mutable cell is read for its contents, as everywhere a value is used.
         if (a.k === "mutable") a = resolve(a.value);
         if (b?.k === "mutable") b = resolve(b.value);
+        // A record is the list of its pairs.
+        if (a.k === "record" && !(a.fields instanceof ModuleFields)) a = resolve(recordPairs(a));
+        if (b?.k === "record" && !(b.fields instanceof ModuleFields) && op !== "bind" && op !== "then") b = resolve(recordPairs(b));
         if (op === "bindFlip") return monadicType("bind", b, a);
         // m >>= k needs a function k; a value to run after m is m >> k.
         if (op === "bind" && ["list", "variant", "atom", "record", "map"].includes(resolve(b).k)) {
@@ -1637,6 +1646,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (other.k === "variant" && other.args.length >= n) return both([app.head, { k: "ctor", name: other.name, args: other.args.slice(n) }], other.args);
             return problem(cannotUse(actual, expected), e);
         }
+        // A record is the list of its [key, value] pairs, where a list is asked.
+        if (expected.k === "list" && actual.k === "record" && !(actual.fields instanceof ModuleFields)) return unify(expected, recordPairs(actual), e, seen);
         if (expected.k === "ctor" || actual.k === "ctor") {
             if (expected.k === "ctor" && actual.k === "ctor" && expected.name === actual.name && expected.args.length === actual.args.length) {
                 expected.args.forEach((x, n) => unify(x, actual.args[n], e, seen));
@@ -2934,6 +2945,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     ): Ty {
         spend(e);
         const t = resolve(target), a = resolve(actual);
+        // A record, where a list is asked, is the list of its pairs.
+        if (t.k === "list" && a.k === "record" && !(a.fields instanceof ModuleFields)) return convert(t, recordPairs(a), e, explicitFloat, seen, runtimeProjection, matching);
         // Anything converts to Dynamic, without deciding its own type.
         if (isExplicit(t)) return target;
         if (isExplicit(a) && (runtimeProjection || explicitFloat)) { runtimeChecks++; return target; }

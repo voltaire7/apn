@@ -60,11 +60,12 @@ Deno.test("fetch returns a response record", () => {
     if (run('from JSON response.body "a"', i) !== "[1,2]") throw new Error("json body");
     if (run('fetchJson "data:application/json,[true]" []', i) !== "[True]") throw new Error("fetchJson");
     if (run('fetchText "data:text/plain,hi" [method = "GET", timeout = 5000]', i) !== '"hi"') throw new Error("fetchText");
+    // Headers are an association list, a record's pairs too.
+    if (run('fetchText "data:text/plain,hi" [headers = [accept = "text/plain"]]', i) !== '"hi"') throw new Error("record headers");
 });
 for (const [source, message, kind] of [
     ['std <- import "std"\n[..] = std.http\nfetch "data:text/plain,x" [methd = "GET"]', "unknown option 'methd'; the options are method, headers, body, timeout", "runtime"],
     ['std <- import "std"\n[..] = std.http\nfetch "data:text/plain,x" [headers = [["a", 1]]]', "cannot use Int where String is required", "type"],
-    ['std <- import "std"\n[..] = std.http\nfetch "data:text/plain,x" [headers = [a = "1"]]', "where List (Vect 2 String) is required", "type"],
     ['std <- import "std"\n[..] = std.http\nfetch "data:text/plain,x" [timeout = -1]', "timeout must not be negative", "runtime"],
     ['std <- import "std"; [..] = std.http; fetch "data:text/plain,x" 5', "a record is made from a list or record of its fields", "runtime"],
     ['std <- import "std"\n[..] = std.http\nr <- fetch "data:text/plain,x" []; r.missing', "missing field", "type"],

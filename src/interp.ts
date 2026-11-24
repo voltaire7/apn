@@ -2270,7 +2270,8 @@ export class Interpreter {
         a = this.dataValue(a); b = this.dataValue(b);
         // Endless lists of types ([Int..]) compare as types, so they end.
         if ((this.repeatedType(a) || this.repeatedType(b)) && this.isTypeValue(a) && this.isTypeValue(b)) return this.sameType(a, b);
-        if (this.isList(a) && this.isList(b)) {
+        // (A record is its pairs, in order: [x = 1] == [["x", 1]].)
+        if ((this.isList(a) || a.kind === "record") && (this.isList(b) || b.kind === "record")) {
             for (;;) {
                 checkInterrupt();
                 const x = this.cell(a), y = this.cell(b);
@@ -2283,10 +2284,6 @@ export class Interpreter {
         if (isNumeric(a) && isNumeric(b)) return equalNumbers(a, b);
         if (a.kind === "hashmap" && b.kind === "hashmap") {
             return a.entries.size === b.entries.size && [...a.entries].every(([key, [, value]]) => b.entries.has(key) && this.equals(value, b.entries.get(key)![1]));
-        }
-        if (a.kind === "record" && b.kind === "record") {
-            const fields = new Map(b.v);
-            return a.v.length === b.v.length && a.v.every(([key, value]) => fields.has(key) && this.equals(value, fields.get(key)!));
         }
         // A named subtype equals a plain value of its base by payload
         // (Money 1.2 == 1.2); two different names are never equal.
@@ -2751,6 +2748,8 @@ export class Interpreter {
             if (v.hi !== null && (v.step >= 0 ? v.lo > v.hi : v.lo < v.hi)) return null;
             return { head: mkInt(v.lo), tail: { ...v, lo: v.lo + v.step } };
         }
+        // A record is the list of its [key, value] pairs.
+        if (v.kind === "record") return v.v.length ? { head: mkList([mkStr(v.v[0][0]), v.v[0][1]]), tail: { ...v, v: v.v.slice(1) } } : null;
         if (v.kind === "pending") this.ambiguous(v);
         throw new APNError("runtime", `expected a list, got ${v.kind}`);
     }
@@ -3151,7 +3150,9 @@ export class Interpreter {
     // (a pending monadic value becomes a list).
     private listType(type: Extract<Value, { kind: "type" }>, value: Value): Value {
         if (!type.arguments?.length && this.isTypeValue(value)) return { kind: "type", name: "List", arguments: [this.reference(value)] };
-        const list = this.realize(value, type);
+        const realized = this.realize(value, type), given = this.dataValue(realized);
+        // (A record is the list of its pairs.)
+        const list = given.kind === "record" ? mkList(given.v.map(([key, field]) => mkList([mkStr(key), field]))) : realized;
         if (!this.isList(list)) throw new APNError("runtime", `List constructor expects a List value`);
         const element = type.arguments?.[0];
         if (!element) return list;
@@ -3464,7 +3465,7 @@ export class Interpreter {
     // The monad a concrete monadic value belongs to, as a type: IO, List, or its variant type.
     monadTypeOf(v: Value): Extract<Value, { kind: "type" }> | undefined {
         if (v.kind === "io") return { kind: "type", name: "IO" };
-        if (this.isList(v)) return { kind: "type", name: "List" };
+        if (this.isList(v) || v.kind === "record") return { kind: "type", name: "List" };
         if (v.kind === "variant" && v.family) return { kind: "type", name: v.family.name, family: v.family };
         return undefined;
     }
@@ -3527,7 +3528,7 @@ export class Interpreter {
         const k: Value = given.kind === "native" && given.name === "<bind>" && this.bindTargets.get(given) === this.headOf(target) ? given
             : { kind: "native", name: "<bind>", arity: 1, applied: [], invoke: ([x]) => this.inMonad(this.continueWith(f, x), target) };
         this.bindTargets.set(k, this.headOf(target));
-        if (this.isList(m) && this.preludeListBind()) return this.concatMapList(m, k);
+        if ((this.isList(m) || m.kind === "record") && this.preludeListBind()) return this.concatMapList(m, k);
         const result = this.instance(">>=", [m, k]);
         if (result) return result;
         throw new APNError("runtime", `no >>= instance for ${valueToString(target)}`, { hint: "define one, such as `Some x >>= f = f x`" });
@@ -3567,7 +3568,7 @@ export class Interpreter {
     mapValue(f: Value, mIn: Value): Value {
         const m = this.dataValue(mIn);
         if (m.kind === "io") return { kind: "io", run: () => this.apply(f, this.runIO(m)) };
-        if (this.isList(m)) return this.mapList(f, m);
+        if (this.isList(m) || m.kind === "record") return this.mapList(f, m);
         if (m.kind !== "pending") {
             if (!this.monadTypeOf(m)) throw new APNError("runtime", `map needs an action, a list or a functor, not a ${m.kind}`);
             const result = this.instance("map", [f, m]);
@@ -4524,6 +4525,8 @@ export class Interpreter {
     // tested on (see unfolded).
     belongsToType(type: Value, value: Value, met = new Map<unknown, Set<unknown>>()): boolean {
         type = this.reference(type); value = this.reference(value);
+        // A record, where a list is asked, is the list of its pairs.
+        if (value.kind === "record" && this.listShaped(type)) value = mkList(value.v.map(([key, field]) => mkList([mkStr(key), field])));
         // A refinement's values are its base's for which its condition holds.
         if (type.kind === "type" && type.refine) {
             return this.belongsToType(type.choices![0], value, met) && this.truthy(this.demand(this.apply(type.refine, value)));
@@ -4949,7 +4952,7 @@ export class Interpreter {
         if (name === "Pointer") return value.kind === "pointer";
         if (name === "Mutable") return value.kind === "mutable";
         if (isNumeric(value)) return NUMERIC_TYPES.includes(name) && matchesType(name, value);
-        if (name === "List") return this.isList(value);
+        if (name === "List") return this.isList(value) || value.kind === "record";
         if (name === "Type" && value.kind === "functionType") return true;
         // A type still taking parameters is a function of types (Option).
         if (name === "Function") return value.kind === "contract" || value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native" || value.kind === "type" && this.typeArity(value) > 0;
@@ -6825,7 +6828,8 @@ export class Interpreter {
                 // (List Int xs): a list, its elements converted as they are used
                 // (as a variant's payload is), so an infinite one matches too.
                 if (this.isListType(type)) {
-                    if (!this.isList(this.demand(actual))) return false;
+                    const given = this.demand(actual);
+                    if (!this.isList(given) && given.kind !== "record") return false;
                     return this.matchPattern(p.value, this.conform(type, actual), binds);
                 }
                 // (IO T a): an action, what it yields made a T when it runs; a

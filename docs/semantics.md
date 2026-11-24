@@ -730,6 +730,11 @@ included: `[x = Float]` is a record holding `Float`, not a template. Each
 prints as it was written; what a template builds holds values (`[x : Float]
 [1]` is `[x = 1.0]`).
 
+A record is the list of its `[key, value]` pairs, in order: `[x = 1, y = 2] ==
+[["x", 1], ["y", 2]]`, and what takes a list takes it (`length`, `map`,
+`filter`, `foldl`, `r * f`, a `List [String,Int]` parameter), as it takes an
+association list. It prints as a record.
+
 A field's name is its key: a name, or any text in backticks, which printing
 writes when the key is not a name. A string names a field too:
 
