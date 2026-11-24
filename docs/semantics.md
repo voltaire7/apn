@@ -1732,7 +1732,7 @@ are in scope for all of it, a function's clauses join, a type's constructors
 are fields, and `r ++ [...]` gives `r`'s names with its own. So what both the
 record and a helper above it need is a record of its own, opened where it is
 defined and joined to the record the module gives:
-`shared.[..] = [Glsl = | Glsl String]` before the helpers, and
+`shared.[..] = [Shader = | Glsl String]` before the helpers, and
 `shared ++ [...]` last.
 A file ending in a binding gives `[]`. One ending in a function gives the
 function, a module that takes parameters: after `make <- import "counter"`,

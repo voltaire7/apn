@@ -115,8 +115,8 @@ different names do not mix (`(1 : Int8) + (2 : Int16)` is an error).
 ## Inexact numbers
 
 ```apn
-Float = | Float [sign : Bool, exponent : Int, significand : UInt]
-Complex = | Complex [re : Float, im : Float]
+Float = | Binary64 [sign : Bool, exponent : Int, significand : UInt]
+Complex = | Rectangular [re : Float, im : Float]
 ```
 
 A `Float` is an IEEE 754 binary64 number: its arithmetic rounds each result to
@@ -144,8 +144,8 @@ surrogate:
 
 ```apn
 Scalar = (n : UInt) | n <= 1114111 && (n < 55296 || n > 57343)
-Char = | Char Scalar
-String = | String (List Char)  # text: to (List Char) and from (List Char) convert
+Char = | CodePoint Scalar
+String = | Text (List Char)  # text: to (List Char) and from (List Char) convert
 ```
 
 ## Records, functions and types
@@ -164,7 +164,7 @@ String = | String (List Char)  # text: to (List Char) and from (List Char) conve
 ```apn
 IO a = | IO (World -> [a,World])
 Mutable a = | Mutable Ref
-Pointer = | Pointer UInt
+Pointer = | Address UInt
 HashMap k v = | Entries (List [k,v])
 ```
 

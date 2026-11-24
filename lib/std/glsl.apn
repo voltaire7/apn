@@ -6,7 +6,8 @@ std <- import "std"
 # What the module's names share with the operators' helper: opened here, and joined to
 # the record it gives (shared ++ [...]).
 shared.[..] = [
-    Glsl = | Glsl String
+    # GLSL code (Glsl "time"), its own type: a String is no Shader.
+    Shader = | Glsl String
     # A value's GLSL code.
     glsl (Glsl code) = code
     glsl (items : List _) = "vec" ++ to String (length items) ++ "(" ++ joinWith ", " (map glsl items)

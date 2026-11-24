@@ -511,7 +511,8 @@ inside an HTML view, the `Sketch` type of a callback's `p`, the objects
 APN (`buildFilterShader`, `buildColorShader`, `buildMaterialShader`), and
 p5's calculations (`remap`, `lerp`, `constrain`, `dist`, and vectors: `mag`,
 `normalize`, `setMag`, `limit`, `heading`, `fromAngle`). `glsl` makes GLSL
-expressions APN values: arithmetic and the math functions on a `Glsl` write
+expressions APN values: arithmetic and the math functions on a `Shader` (GLSL
+code, `Glsl "time"`) write
 GLSL, with `vec`, `swizzle`, `fract`, `distance`, `mix`, `getTexture` and
 `call name args` for any other function. See the [p5 reference](p5.md).
 
