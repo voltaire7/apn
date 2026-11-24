@@ -1301,10 +1301,12 @@ Deno.test("a call certainly evaluated that certainly fails is a static error", (
         ["k a b = a\nk 1 (head [])", "1"],
         ["both a b = truthy a ? truthy b : False\nboth False (head [])", "False"],
         ["x = [False, head []]\nx 0", "False"],
+        // A function whose body always fails fails only where it is called.
+        ["f x = head []\ng = [f 1]\n2", "2"],
     ]) if (run(session(), source) !== value) throw new Error(source);
     // One it certainly uses, by its patterns, its body or a known truth, runs.
     for (const source of ["g x = x + 1\ng (head [])", "both a b = truthy a ? truthy b : False\nboth True (head [])",
-        "f p = True && head (head p)\nf [[], \"a\"]"]) {
+        "f p = True && head (head p)\nf [[], \"a\"]", "f x = head []\nprint (f 1)", "f x = head []\nh y = f y + 1\nh 2"]) {
         try { run(session(), source); } catch (error) {
             if ((error as Error).message === "this call fails whenever it runs: head of empty list") continue;
             throw error;

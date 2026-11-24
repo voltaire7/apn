@@ -233,7 +233,8 @@ counts: a statement's value, what a strict operator or native such as `print`
 demands of it, a condition, a block's statements, and what a call so evaluated
 evaluates: an argument whose parameter each clause takes apart or demands
 (`g (head [])` for `g x = x + 1`), the branch a known condition takes
-(`True && head []`), and its clause's body. One in a list item, a branch, an
+(`True && head []`), and its clause's body (`f 1` fails for `f x = head []`,
+and an `f` never called does not). One in a list item, a branch, an
 unused binding or an argument the function may not use waits until it is used,
 and may never be (`[pred 0, 2] 1` is 2; `k 1 (head [])` is 1 for `k a b = a`). A clause that is `fail message` gives no
 value, so it gives its function no result type of its own: `first [] = fail

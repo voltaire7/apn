@@ -3440,7 +3440,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     const failing = failMessage(clause.body, summary.scope);
                     // (Only where the call runs: an argument or item nothing
                     // demands never fails, f False (head []) for f a b = a ? b : a.)
-                    if (failing && certain && runs) problem(failText(failing, scope), e);
+                    if (failing && certain) failsHere(e, failText(failing, scope), runs);
                     if (!failing) results.push(result);
                 } catch (error) {
                     if (certain || costly(error)) throw error;
@@ -5638,7 +5638,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return ["app", "pipe", "binop", "ternary"].includes(e.t) && !(e.t === "app" && e.f.t === "var" && e.f.name === "truthy") ? undefined : boolean(e, scope);
     }
     function noClauseMatches(e: Expr, scope: Scope): void {
-        if (!isDemanded(e)) return;
+        // (One a body certainly runs fails that body: see failsHere.)
+        const runs = isDemanded(e);
+        if (!runs && !bodies.at(-1)?.runs.has(e)) return;
         const args: Expr[] = [];
         let head: Expr = e;
         while (head.t === "app") { args.unshift(head.a); head = head.f; }
@@ -5652,9 +5654,28 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (!summary) return;
         const entries = args.map(a => ({ type: inferred.get(a) ?? dynamic, ...needed(valueEntry(a, scope)) }));
         const fails = (c: ClauseOrder) => peek(() => c.params.some((p, n) => decidedByShape(p, scope) && definitelyFails(p, entries[n], 0, 0)), false);
-        if (!entry.builtin && summary.clauses.length && summary.clauses.every(fails)) problem(`no clause of '${head.name}' matches these arguments`, e, "the definition's patterns don't cover this input");
+        if (!entry.builtin && summary.clauses.length && summary.clauses.every(fails)) failsHere(e, `no clause of '${head.name}' matches these arguments`, runs, "the definition's patterns don't cover this input");
         const failing = certainFail(summary, entries);
-        if (failing) problem(failing, e);
+        if (failing) failsHere(e, failing, runs);
+    }
+    // A clause body that certainly fails whenever it runs (f x = head []):
+    // its message, for a call that runs it.
+    const bodyFailures = new WeakMap<Expr, string>();
+    const bodies: { runs: Set<Expr>; failure?: string }[] = [];
+    function failsHere(e: Expr, message: string, runs: boolean, hint?: string): void {
+        if (runs) { problem(message, e, hint); return; }
+        const body = bodies.at(-1);
+        if (body?.runs.has(callAt.get(e) ?? e)) body.failure ??= message;
+    }
+    function typedBody<T>(clause: { body: Expr; guard?: Expr }, scope: Scope, typing: () => T): T {
+        const runs = new Set<Expr>();
+        for (const part of [...clause.guard ? [clause.guard] : [], clause.body]) walkDemanded(part, scope, x => runs.add(x));
+        const body = { runs } as { runs: Set<Expr>; failure?: string };
+        bodies.push(body);
+        try { return typing(); } finally {
+            bodies.pop();
+            if (body.failure) bodyFailures.set(clause.body, body.failure);
+        }
     }
     // A body that is fail message (the builtin fail): its message; it gives no value.
     function failMessage(body: Expr, scope: Scope): Expr | undefined {
@@ -5670,7 +5691,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const clause = candidates[0].clause;
         if (clause.guard) return undefined;
         const failing = failMessage(clause.body, summary.scope);
-        if (!failing) return undefined;
+        if (!failing) return bodyFailures.get(clause.body);
         const env = new Map<string, Known>();
         clause.params.forEach((p, n) => bindKnown(p, entries[n], env, clause.refutable));
         return failText(failing, summary.scope, env);
@@ -8558,7 +8579,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // (Clauses that are fail message last: their result is the others'.)
         const failing = (c: { body: Expr }) => !!failMessage(c.body, scope);
         for (const [index, c] of [...clauses.entries()].sort(([, a], [, b]) => Number(failing(a)) - Number(failing(b)))) {
-            const t = inferDefinition(definition, false, () => functionType(c.params, c.body, scope, name));
+            const t = typedBody(c as { body: Expr; guard?: Expr }, scope, () => inferDefinition(definition, false, () => functionType(c.params, c.body, scope, name)));
             const head = resultHead(t, c.params.length);
             if (head) recordHead(c.body, head);
             // A clause that is fail message gives no value: it joins a group of
