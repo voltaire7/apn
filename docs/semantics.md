@@ -230,9 +230,12 @@ constructor, a list's length: `pred 0` for `pred (S k) = k`), or certainly
 takes a clause that is `fail message` (`first []` for `first [] = fail
 "empty"`, reported with the message). Only a call that is certainly evaluated
 counts: a statement's value, what a strict operator or native such as `print`
-demands of it, a condition, a block's statements. One in a list item, another
-function's argument, a branch or an unused binding waits until it is used, and
-may never be (`[pred 0, 2] 1` is 2). A clause that is `fail message` gives no
+demands of it, a condition, a block's statements, and what a call so evaluated
+evaluates: an argument whose parameter each clause takes apart or demands
+(`g (head [])` for `g x = x + 1`), the branch a known condition takes
+(`True && head []`), and its clause's body. One in a list item, a branch, an
+unused binding or an argument the function may not use waits until it is used,
+and may never be (`[pred 0, 2] 1` is 2; `k 1 (head [])` is 1 for `k a b = a`). A clause that is `fail message` gives no
 value, so it gives its function no result type of its own: `first [] = fail
 "empty"` leaves `first (x :: _) = x` a function of a list of any length,
 giving its first item's type. A clause may have a guard (`f n | n > 0 =

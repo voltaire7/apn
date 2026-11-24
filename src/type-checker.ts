@@ -3356,7 +3356,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try {
             args.forEach((argument, n) => bindArgument(clause.params[n], argument, scope, e));
             const rest = clause.params.slice(args.length);
-            if (!rest.length) return infer(clause.body, scope);
+            if (!rest.length) return demandedWhere(e, [clause.body], scope, () => infer(clause.body, scope));
             // The function of the rest, which holds these arguments already.
             const made = resolve(infer({ t: "patternLambda", params: rest, body: clause.body }, scope));
             return made.k === "fn" ? { ...made, applied: [] } : made;
@@ -3435,9 +3435,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     if (clause.guard) infer(clause.guard, scope);
                     // A clause that is fail message gives the call no value: one
                     // it certainly takes fails it, as its body would.
-                    const result = infer(clause.body, scope);
+                    const runs = isDemanded(e);
+                    const result = demandedWhere(e, [...clause.guard ? [clause.guard] : [], clause.body], scope, () => infer(clause.body, scope));
                     const failing = failMessage(clause.body, summary.scope);
-                    if (failing && certain) problem(failText(failing, scope), e);
+                    // (Only where the call runs: an argument or item nothing
+                    // demands never fails, f False (head []) for f a b = a ? b : a.)
+                    if (failing && certain && runs) problem(failText(failing, scope), e);
                     if (!failing) results.push(result);
                 } catch (error) {
                     if (certain || costly(error)) throw error;
@@ -4834,6 +4837,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const condition = resolved.k === "intrinsic" && resolved.name === "refine" && resolved.args?.length === 1 && a.t === "lambda"
                     ? { fn: { e: a, env: [], scope } } : {};
                 const entry: Entry = { type: argumentType, ...valueEntry(a, scope), ...condition };
+                callAt.set(a, e);
                 let result = application(callee, entry, a, false, e.t === "app" && !!e.ascribed);
                 // A partial application of a function of one clause carries its
                 // arguments to the last (see typedCall).
@@ -5532,22 +5536,58 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // so a call there that would fail is no error (an expression nothing
     // demands never fails).
     const demanded = new WeakSet<Expr>();
+    // What the bodies of the calls being typed demand, innermost last.
+    const demanding: Set<Expr>[] = [];
     function markDemanded(e: Expr, scope: Scope): void {
-        demanded.add(e);
+        walkDemanded(e, scope, x => demanded.add(x));
+    }
+    // (A call is typed at its last argument: the call it ends is the one run.)
+    const callAt = new WeakMap<Expr, Expr>();
+    function isDemanded(e: Expr): boolean {
+        const call = callAt.get(e) ?? e;
+        return demanded.has(call) || demanding.some(set => set.has(call));
+    }
+    // A call that runs runs what its clause demands: typed with it demanded.
+    function demandedWhere<T>(call: Expr, es: Expr[], scope: Scope, typing: () => T): T {
+        if (!isDemanded(call)) return typing();
+        const set = new Set<Expr>();
+        for (const e of es) walkDemanded(e, scope, x => set.add(x));
+        demanding.push(set);
+        try { return typing(); } finally { demanding.pop(); }
+    }
+    // Each expression evaluating e certainly evaluates, e included.
+    function walkDemanded(e: Expr, scope: Scope, visit: (e: Expr) => void): void {
+        visit(e);
         switch (e.t) {
             case "block":
                 for (const s of e.stmts) {
-                    if (s.t === "patDef" && s.eager) markDemanded(s.value, scope);
-                    else if (s.t !== "stmDef" && s.t !== "patDef" && s.t !== "typeDef" && s.t !== "setItem" && s.t !== "setFields") markDemanded(s, scope);
+                    if (s.t === "patDef" && s.eager) walkDemanded(s.value, scope, visit);
+                    else if (s.t !== "stmDef" && s.t !== "patDef" && s.t !== "typeDef" && s.t !== "setItem" && s.t !== "setFields") walkDemanded(s, scope, visit);
                 }
                 return;
-            case "ternary": markDemanded(e.cond, scope); return;
-            case "unop": markDemanded(e.e, scope); return;
-            case "binop":
-                if (!STRICT_OPERATORS.has(e.op)) return;
-                markDemanded(e.l, scope);
-                if (e.op !== "&&" && e.op !== "||") markDemanded(e.r, scope);
+            case "ternary": {
+                walkDemanded(e.cond, scope, visit);
+                // (A known condition runs its branch.)
+                const known = knownTruth(e.cond, scope);
+                if (known !== undefined) walkDemanded(known ? e.then : e.els, scope, visit);
                 return;
+            }
+            case "unop": walkDemanded(e.e, scope, visit); return;
+            case "binop": {
+                // An operator the prelude defines is a call of its definition.
+                if (builtinOperator(scope.get(e.op)?.type) !== e.op) {
+                    const strict = strictParameters(e.op, scope, [e.l, e.r]);
+                    if (strict[0]) walkDemanded(e.l, scope, visit);
+                    if (strict[1]) walkDemanded(e.r, scope, visit);
+                    return;
+                }
+                if (!STRICT_OPERATORS.has(e.op)) return;
+                walkDemanded(e.l, scope, visit);
+                // (&& and || run their right side where the left does not decide.)
+                const left = e.op === "&&" || e.op === "||" ? knownTruth(e.l, scope) : undefined;
+                if (e.op !== "&&" && e.op !== "||" || left === (e.op === "&&")) walkDemanded(e.r, scope, visit);
+                return;
+            }
             case "pipe": case "app": {
                 const args: Expr[] = [];
                 let head: Expr = e;
@@ -5556,13 +5596,60 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     else if (head.t === "pipe") { args.unshift(head.x); head = head.f; }
                     else break;
                 }
-                if (head.t === "var" && STRICT_NATIVES.has(head.name) && !READS_CODE.has(head.name) && scope.get(head.name)?.builtin) args.forEach(a => markDemanded(a, scope));
+                if (head.t !== "var") return;
+                // (Calling a value evaluates it: g in f g = g 1.)
+                visit(head);
+                const strict = strictParameters(head.name, scope, args);
+                args.forEach((a, n) => { if (strict[n]) walkDemanded(a, scope, visit); });
                 return;
             }
         }
     }
+    // Which arguments a call of this name certainly evaluates: a strict
+    // native's, truthy's, and a definition's parameters that each of its
+    // clauses takes apart or demands in its guard or body.
+    // A definition of one clause given a known truth (True && x) demands what
+    // its body then reaches, its parameters holding those truths.
+    const strictness = new WeakMap<object, boolean[]>(), expanding = new WeakSet<object>();
+    function strictParameters(name: string, scope: Scope, args: Expr[] = []): boolean[] {
+        const entry = scope.get(name);
+        if (!entry) return [];
+        if (entry.builtin && STRICT_NATIVES.has(name) && !READS_CODE.has(name)) return [true, true, true];
+        if (name === "truthy" && namesTruthy(scope)) return [true];
+        const clauses = entry.clauses as { params: Pattern[]; body: Expr; guard?: Expr }[] | undefined;
+        if (!clauses?.length) return [];
+        // (A recursive call does not count: f x = f x demands nothing.)
+        if (expanding.has(clauses)) return [];
+        const truths = clauses.length === 1 ? args.map(a => knownTruth(a, scope)) : [];
+        const given = truths.some(t => t !== undefined);
+        const known = given ? undefined : strictness.get(clauses);
+        if (known) return known;
+        expanding.add(clauses);
+        try {
+            const result = clauses[0].params.map((_, n) => clauses.every(c => {
+                const p = c.params[n];
+                if (!p || p.p === "wildcard") return false;
+                if (p.p !== "var") return true;
+                const inner: Scope = new Map(scope);
+                c.params.forEach((q, m) => {
+                    if (q.p === "var") inner.set(q.name, { type: variable(), ...truths[m] !== undefined ? { boolean: truths[m] } : {} });
+                });
+                let found = false;
+                const visit = (x: Expr) => { if (x.t === "var" && x.name === p.name) found = true; };
+                if (c.guard) walkDemanded(c.guard, inner, visit);
+                walkDemanded(c.body, inner, visit);
+                return found;
+            }));
+            if (!given) strictness.set(clauses, result);
+            return result;
+        } finally { expanding.delete(clauses); }
+    }
+    // A truth known without evaluating anything: a literal's, a name's.
+    function knownTruth(e: Expr, scope: Scope): boolean | undefined {
+        return ["app", "pipe", "binop", "ternary"].includes(e.t) && !(e.t === "app" && e.f.t === "var" && e.f.name === "truthy") ? undefined : boolean(e, scope);
+    }
     function noClauseMatches(e: Expr, scope: Scope): void {
-        if (!demanded.has(e)) return;
+        if (!isDemanded(e)) return;
         const args: Expr[] = [];
         let head: Expr = e;
         while (head.t === "app") { args.unshift(head.a); head = head.f; }

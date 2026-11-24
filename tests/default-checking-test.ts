@@ -1297,7 +1297,20 @@ Deno.test("a call certainly evaluated that certainly fails is a static error", (
         ['first [] = fail "empty"\nfirst (x :: _) = x\nlater = [first [], 2]\nlater 1', "2"],
         ["pred (S k) = k\nunused = pred 0\n[pred 0, 2] 1", "2"],
         ['todo x = fail "todo"\n[first = 1, second = todo 1].first', "1"],
+        // An argument the function may not use waits too.
+        ["k a b = a\nk 1 (head [])", "1"],
+        ["both a b = truthy a ? truthy b : False\nboth False (head [])", "False"],
+        ["x = [False, head []]\nx 0", "False"],
     ]) if (run(session(), source) !== value) throw new Error(source);
+    // One it certainly uses, by its patterns, its body or a known truth, runs.
+    for (const source of ["g x = x + 1\ng (head [])", "both a b = truthy a ? truthy b : False\nboth True (head [])",
+        "f p = True && head (head p)\nf [[], \"a\"]"]) {
+        try { run(session(), source); } catch (error) {
+            if ((error as Error).message === "this call fails whenever it runs: head of empty list") continue;
+            throw error;
+        }
+        throw new Error(`accepted: ${source}`);
+    }
 });
 // A list compared with one value is no comparison of sets: the hint compares
 // its items, each or every one, with the section as written.
