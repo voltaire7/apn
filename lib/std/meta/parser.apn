@@ -1,7 +1,5 @@
-[..] <- import "std/text"
-[..] <- import "std/sequence"
-[..] <- import "std/function"
-[..] <- import "std/option"
+std <- import "std"
+[..] = std.[text,sequence,function,option]
 [
     # A source reader written in APN. Tokens are [kind,value]; no native parser.
     # It reads into toAST's lists (lib/syntax.apn): a string literal is its quoted

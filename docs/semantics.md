@@ -1701,7 +1701,11 @@ module, and `r.[..] = e` binds `r` and opens it, as any dotted pattern binds
 both its parts. Its names must be known where it stands (a record the check
 reads; `Dynamic` for one only the run knows). A list of records opens each in
 turn (`[..] = std.[option,text]`, as `std.[option,text]` is the list of those
-modules), and `[]` opens nothing.
+modules), and `[]` opens nothing. A folder's record holds its modules, each
+imported in turn; a module may import its own folder (`std <- import "std"`
+in `std/glsl`, which then opens `std.[text,sequence]`), whose modules are
+then each imported when first read, and one needing itself while it is
+imported (opening its own entry) is a cyclic import.
 
 ```
 # shapes.apn

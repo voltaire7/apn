@@ -2,10 +2,8 @@
 # leaves and nodes, so it runs Dynamic, as the meta reader does. A piece of
 # syntax is written for the place it stands in, in parentheses only where it
 # would read differently bare there, as the parser requires.
-[..] <- import "std/sequence"
-[..] <- import "std/text"
-[..] <- import "std/function"
-[..] <- import "std/option"
+std <- import "std"
+[..] = std.[sequence,text,function,option]
 fromAST syntax = shown end syntax
 
 # A place: [kind, minimum, follows]. An "operand" takes an expression whose

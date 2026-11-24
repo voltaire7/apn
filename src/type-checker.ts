@@ -3607,6 +3607,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             // A tag whose owner or constructor is computed is decided when it runs.
             if (f.name === "tag") { runtimeChecks++; return explicitDynamic; }
+            // So is a module whose path is computed (mapM import paths): an
+            // import of a written path is read where it is written.
+            if (f.name === "import") { runtimeChecks++; return io(explicitDynamic); }
             // with v k x, called itself: its copy's type is decided when it runs
             // (xs 2 = x, which it gives, is checked as an assignment).
             if (f.name === "with") { runtimeChecks++; return explicitDynamic; }

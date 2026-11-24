@@ -1,7 +1,5 @@
-[..] <- import "std/sequence"
-[..] <- import "std/text"
-[..] <- import "std/function"
-[..] <- import "std/option"
+std <- import "std"
+[..] = std.[sequence,text,function,option]
 [..] <- (load "syntax/source" : Dynamic)
 [..] <- (load "syntax/lambda" : Dynamic)
 [

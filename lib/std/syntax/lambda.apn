@@ -7,10 +7,8 @@
 # e >>= (x -> rest), and an action statement s; rest is s >> rest. A list's
 # bindings scope over its later items as a block's do. Other syntax (?:,
 # lists, records, ranges, patterns) stays, its parts desugared.
-[..] <- import "std/sequence"
-[..] <- import "std/text"
-[..] <- import "std/function"
-[..] <- import "std/option"
+std <- import "std"
+[..] = std.[sequence,text,function,option]
 lambda bound (leaf : String) = leaf
 lambda bound (b : Bool) = b
 lambda bound (n : Number) = n

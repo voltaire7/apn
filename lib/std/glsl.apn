@@ -1,10 +1,8 @@
 # GLSL expressions as values, for writing a shader's code in APN (as
 # p5.strands writes it in JavaScript): arithmetic and the math functions on
 # them write GLSL. A number joins in as a float, and a list as a vector.
-[..] <- import "std/text"
-[..] <- import "std/sequence"
-[..] <- import "std/function"
-[..] <- import "std/option"
+std <- import "std"
+[..] = std.[text,sequence,function,option]
 # What the module's names share with the operators' helper: opened here, and joined to
 # the record it gives (shared ++ [...]).
 shared.[..] = [

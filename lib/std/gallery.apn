@@ -1,10 +1,7 @@
 # A page of examples, in sections, each opening in an editor: a folder's
 # index.apn, which apn --site FOLDER OUTPUT builds with that editor.
-[..] <- import "std/html"
-[..] <- import "std/text"
-[..] <- import "std/sequence"
-[..] <- import "std/function"
-[..] <- import "std/option"
+std <- import "std"
+[..] = std.[html,text,sequence,function,option]
 [
     # The editor's colors: Catppuccin Latte, or Frappé in a dark system theme.
     stylesheet = unlines [

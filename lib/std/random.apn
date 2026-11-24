@@ -1,8 +1,8 @@
 # Random values, as in Elm's Random: a generator turns a seed into a value
 # and the next seed, in APN. int, float and list are also the decode module's
 # names: a program using both imports one qualified (random <- import "std/random").
-[..] <- import "std/task"
-[..] <- import "std/option"
+std <- import "std"
+[..] = std.[task,option]
 [
     entropy = entropy
 

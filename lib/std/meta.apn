@@ -1,7 +1,5 @@
-[..] <- import "std/text"
-[..] <- import "std/sequence"
-[..] <- import "std/function"
-[..] <- import "std/option"
+std <- import "std"
+[..] = std.[text,sequence,function,option]
 [..] <- (load "meta/parser" : Dynamic)
 [..] <- (load "meta/primitives" : Dynamic)
 # The evaluator's source is read as code (the evaluator reads it too: see

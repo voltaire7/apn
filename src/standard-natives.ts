@@ -43,11 +43,16 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
     }
     if (name === "fail") throw new APNError("runtime", str(args[0]));
     if (name === "chars") return mkList(textNatives.chars(str(args[0])).map((v): Value => ({ kind: "char", v })));
-    if (name === "fromChars") return mkStr(textNatives.fromChars(i.items(args[0]).map((v) => {
-        v = i.dataValue(v);
-        if (v.kind !== "char") throw new APNError("runtime", "from (List Char) expects a list of Char values");
-        return v.v;
-    })));
+    // (Each item is read as the list is walked: [0..] fails at its first.)
+    if (name === "fromChars") {
+        const out: string[] = [];
+        for (const item of i.elements(args[0])) {
+            const v = i.dataValue(item);
+            if (v.kind !== "char") throw new APNError("runtime", "from (List Char) expects a list of Char values");
+            out.push(v.v);
+        }
+        return mkStr(textNatives.fromChars(out));
+    }
     return mkStr(textNatives[name as "upper" | "lower"](str(args[0])));
 }
 

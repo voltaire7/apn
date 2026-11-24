@@ -4,10 +4,8 @@
 # by lowercase name: response.headers "content-type"). Its options are a
 # FetchOptions, each field optional ([] for none), the zero value of one (no
 # body, a timeout of 0) none: [method = "POST", headers = [["Accept","*/*"]]].
-[..] <- import "std/option"
-[..] <- import "std/text"
-[..] <- import "std/sequence"
-[..] <- import "std/function"
+std <- import "std"
+[..] = std.[option,text,sequence,function]
 decode <- import "std/decode"
 [
     FetchOptions = [

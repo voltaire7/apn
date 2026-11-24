@@ -6,9 +6,8 @@
 # The input is a list (a string is its characters), so a list of anything
 # parses, code included. Its names repeat others' (string, as decode's): a
 # program using both imports one qualified (parser <- import "std/parser").
-[..] <- import "std/option"
-[..] <- import "std/sequence"
-[..] <- import "std/function"
+std <- import "std"
+[..] = std.[option,sequence,function]
 
 # What the module's names share with its helpers: opened here, and joined to
 # the record it gives (shared ++ [...]).

@@ -1,5 +1,7 @@
-# Importing the folder that holds this file is a cycle.
+# A module may import the folder that holds it; opening itself from it while
+# it is imported is a cycle.
 outer <- import "loop"
+[..] = outer.inner
 [
     value = 1
 ]

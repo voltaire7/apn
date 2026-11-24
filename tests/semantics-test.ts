@@ -847,3 +847,21 @@ for (const [source, expected] of [
     const actual = i.renderString(i.run(parse(source)));
     if (actual !== expected) throw new Error(actual);
 });
+
+// A record names a type it gives, as a block does: G = String is a named
+// subtype there too, its clauses for + travelling with its values.
+for (const [source, expected] of [
+    ['r = [G = String, f (x : G) = "g", f (s : String) = "s"]\n[r.f ("x" : r.G), r.f "y"]', '["g","s"]'],
+    // A module may import its own folder (std/glsl's std <- import "std").
+    ['[..] <- import "std/glsl"\nglsl (min (Glsl "x") 2)', '"min(x, 2.0)"'],
+    // A pattern of a named subtype takes a plain value it converts, failing
+    // at an endless list's first item that is no Char.
+    ['G = String\nf (s : G) = "s"\nf _ = "o"\nf [0..]', '"o"'],
+    // A computed import is an action the run decides.
+    ['ms <- mapM import ["std/text","std/option"]\nlength ms', "2"],
+] as const) Deno.test(`modules and named types: ${source}`, () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    const actual = i.renderString(i.run(parse(source)));
+    if (actual !== expected) throw new Error(actual);
+});

@@ -39,10 +39,10 @@ for (const checked of [false, true]) {
         } finally { console.log = log; }
         if (output.join("|") !== "loud ran|imported") throw new Error(output.join("|"));
         try { result(interpreter(checked), 'm <- import "loop"'); } catch (error) {
-            if (String(error).includes("cyclic import 'loop'")) return;
+            if (String(error).includes("cyclic import")) return;
             throw error;
         }
-        throw new Error("a module importing its own folder imported");
+        throw new Error("a module reading itself back through its folder imported");
     });
     Deno.test(`a file wins over a folder of the same name (checked=${checked})`, () => {
         const i = interpreter(checked);

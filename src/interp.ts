@@ -346,8 +346,23 @@ export class Interpreter {
             try {
                 // A file's value, or the record of a folder's entries, each a
                 // module imported now (once per interpreter, however many import it).
-                value = resolved.files.length ? this.runModuleFile(resolved.files[0])
-                    : { kind: "record", v: resolved.entries.map(entry => [entry.name, this.importModule(entry.spec, entry.directory)]) };
+                // (The folder's record is there while its entries run, each
+                // imported when first read: an entry importing the folder reads
+                // the others it uses, std/glsl its std.text.)
+                if (resolved.files.length) value = this.runModuleFile(resolved.files[0]);
+                else {
+                    const entries = resolved.entries.map(entry => [entry.name, this.defer(() => this.importModule(entry.spec, entry.directory))] as [string, Value]);
+                    const folder: Value = { kind: "record", v: entries };
+                    this.modules.set(resolved.key, folder);
+                    // (Imported by one of its own entries, it imports each when
+                    // first read: another may need the one being imported.)
+                    const running = [...this.importing].some(key => key !== resolved.key && key.startsWith(resolved.key));
+                    // (Each imported as itself, so one read back while it is
+                    // imported is a cyclic import, not a value awaiting itself.)
+                    try { if (!running) for (const entry of resolved.entries) this.importModule(entry.spec, entry.directory); }
+                    catch (error) { this.modules.delete(resolved.key); throw error; }
+                    value = folder;
+                }
                 this.modules.set(resolved.key, value);
                 this.moduleValues.set(value, { origin: resolved.key });
             } finally { this.importing.delete(resolved.key); }
@@ -2849,8 +2864,15 @@ export class Interpreter {
                 // A value is computed when used, as a list's item is; a literal
                 // costs nothing, and a declared field is checked now (a slot's
                 // type is known: see holdsType).
+                // (A capitalized one written as a type names it, as a block's
+                // definition does: G = String; [x = Float] holds Float, and
+                // Y = yCombinator is a function.)
                 const now = e.declared?.includes(key) || ["int", "float", "numeric", "string", "char", "bool"].includes(expression.t);
-                this.bindNames([[key, now ? this.eval(expression) : this.delay(expression)]]);
+                let head = expression;
+                while (head.t === "app") head = head.f;
+                const typed = head.t === "var" && /^[A-Z]/.test(head.name) || ["list", "record"].includes(expression.t) || expression.t === "binop" && expression.op === "|";
+                const later: Value = /^[A-Z]/.test(key) && typed ? { kind: "thunk", body: expression, env: this.env, value: undefined, names: key } : this.delay(expression);
+                this.bindNames([[key, now ? this.eval(expression) : later]]);
                 field(key, !slots.has(key));
             }
             const live = this.env;
@@ -6371,8 +6393,14 @@ export class Interpreter {
         const method = root.kind === "native" ? METHOD_INTRINSICS.get(root.name) : undefined;
         const arity = clauses[0].params.length;
         // (A list's [] and :: name List, which the prelude declares.)
+        // (A type's binding, a capitalized name's, is read: a named subtype,
+        // G = String, is a field not yet evaluated.)
         const forType = isForTypes(clauses, type => {
-            const v = this.scopeBinding(type);
+            const bound = this.scopeBinding(type);
+            let v = bound;
+            if (v && (v.kind === "thunk" || v.kind === "deferred")) {
+                try { v = this.reference(v); } catch (error) { if (error instanceof APNError) return false; throw error; }
+            }
             return !!v && (type === "List" || (v.kind === "native" || v.kind === "variant" || v.kind === "type") && !!v.family);
         }, !!method);
         if (!forType || !method && this.arity(root) !== arity) return undefined;

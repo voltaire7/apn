@@ -1,6 +1,5 @@
-[..] <- import "std/sequence"
-[..] <- import "std/function"
-[..] <- import "std/option"
+std <- import "std"
+[..] = std.[sequence,function,option]
 
 # Unicode WhiteSpace plus line terminators (the same set as ECMAScript \s).
 isSpace c = contains c (to (List Char) " \t\n\r\v\f                 　﻿")

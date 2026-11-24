@@ -1,5 +1,5 @@
-[..] <- import "std/function"
-[..] <- import "std/option"
+std <- import "std"
+[..] = std.[function,option]
 
 # Predicate consumers keep their skipping loop in the primitive lazy filter.
 holds value = truthy value
