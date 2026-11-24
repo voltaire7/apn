@@ -45,7 +45,7 @@ for (const checked of [false, true]) {
             ["f ([x] : [Int]) = x; f [x = 1]", "1"],
             ["f ([x] : [Float]) = x; f [x = 1]", "1.0"],
             [
-                "f (whole & ([x] : [t])) = [whole,t,x]; f [x = 1, y = 2]",
+                "f whole.([x] : [t]) = [whole,t,x]; f [x = 1, y = 2]",
                 "[[x = 1, y = 2], Int, 1]",
             ],
             ["([x] : [t]) <- return [x = 1]; [t,x]", "[Int,1]"],

@@ -4,10 +4,10 @@ import { parseDocument } from "../src/parser.ts";
 for (const checked of [false, true]) {
     for (
         const [source, expected] of [
-            ["v.x = [x = 1]; [v,x]", "[[x = 1], 1]"],
-            ["(v & x) = 1; [v,x]", "[1,1]"],
+            ["v.x = 1; [v,x]", "[1,1]"],
+            ["v.(x) = 1; [v,x]", "[1,1]"],
             [
-                "Option a = Some a | None; (whole & Some x) = Some 1; [whole,x]",
+                "Option a = Some a | None; whole.(Some x) = Some 1; [whole,x]",
                 "[Some 1, 1]",
             ],
             [
@@ -16,7 +16,7 @@ for (const checked of [false, true]) {
             ],
             ["v.[x,y] = [1,2]; [v,x,y]", "[[1,2], 1, 2]"],
             ["v.[x, y] = [x = 1, y = 2, z = 3]; [v,x,y]", "[[x = 1, y = 2, z = 3], 1, 2]"],
-            ["f v.x = [v,x]; f [x = 1]", "[[x = 1], 1]"],
+            ["f v.x = [v,x]; f 1", "[1,1]"],
             ["f v.[x] = x; f v.[x,y] = y; f [1,2]", "2"],
             ["f v.[x,y] = [v,x,y]; f [1,2]", "[[1,2], 1, 2]"],
             [
@@ -24,37 +24,37 @@ for (const checked of [false, true]) {
                 "[[x = 1, y = 2, z = 3], 1, 2]",
             ],
             ["f _.[x,y] = [x,y]; f [1,2]", "[1,2]"],
-            ["f (whole & (x :: xs)) = [whole,x]; f [1,2]", "[[1,2], 1]"],
+            ["f whole.(x::xs) = [whole,x]; f [1,2]", "[[1,2], 1]"],
             [
-                "Option a = Some a | None; f (whole & Some x) = [whole,x]; f (Some 1)",
+                "Option a = Some a | None; f whole.(Some x) = [whole,x]; f (Some 1)",
                 "[Some 1, 1]",
             ],
-            ["f (original & (x : Float)) = [original,x]; f 1", "[1,1.0]"],
+            ["f original.(x : Float) = [original,x]; f 1", "[1,1.0]"],
             [
-                "f (original & alias & (x : Float)) = [original,alias,x]; f 1",
+                "f original.alias.(x : Float) = [original,alias,x]; f 1",
                 "[1,1,1.0]",
             ],
             [
-                "f (original & (converted : [x : Float])) = [original,converted]; f [1]",
+                "f original.(converted : [x : Float]) = [original,converted]; f [1]",
                 "[[1], [x = 1.0]]",
             ],
             [
                 "f whole.[a = x, b = y] = [whole,a,b]; f [x = 1, y = 2]",
                 "[[x = 1, y = 2], 1, 2]",
             ],
-            ["f (x & x) = x; f 1", "1"],
+            ["f x.x = x; f 1", "1"],
             ["f v.[x,x] = x; f [1,1]", "1"],
-            ["(v & x & y) = 1; [v,x,y]", "[1,1,1]"],
-            ["(v.x -> [v,x]) [x = 1]", "[[x = 1], 1]"],
+            ["v.x.y = 1; [v,x,y]", "[1,1,1]"],
+            ["(v.x -> [v,x]) 1", "[1,1]"],
             ["[1,2] ~ [v.[x] -> 0, v.[x,y] -> y]", "2"],
             ["v = [x = 0]; v.x = 1; v", "[x = 1]"],
             ["v = [x = 1, y = 2]; v.[x,y] = v.[y,x]; v", "[x = 2, y = 1]"],
             ["v = [child = [x = 0]]; v.child.x = 1; v.child.x", "1"],
             ["v = [x = 1]; [{ v.x = 2; v.x }, v.x]", "[2,1]"],
-            ["f (v & x) = 42; f (missing : Dynamic)", "42"],
-            ["(v & x) = missing : Dynamic; 42", "42"],
-            ["f (v & (x :: xs)) = x; f [1..]", "1"],
-            ["(v & x) <- return (Mutable 1); set x 2; v", "2"],
+            ["f v.x = 42; f (missing : Dynamic)", "42"],
+            ["v.x = missing : Dynamic; 42", "42"],
+            ["f v.(x::xs) = x; f [1..]", "1"],
+            ["v.x <- return (Mutable 1); set x 2; v", "2"],
         ]
     ) {
         Deno.test(`dotted pattern checked=${checked}: ${source}`, () => {
@@ -72,11 +72,6 @@ for (const checked of [false, true]) {
             "f v.[x,y] = x; f [1]",
             "v = 1; v.x = 2",
             "v = [x = 1]; v.[x] = 10",
-            // A dot reads fields: (v & p) matches the whole value as both.
-            "f v.x = x; f 1",
-            "f v.(x :: xs) = x",
-            "v.(x) = 1",
-            "v.x.y = [x = [y = 1]]",
         ]
     ) {
         Deno.test(`dotted pattern rejects checked=${checked}: ${source}`, () => {
@@ -95,7 +90,7 @@ Deno.test("dotted parameter shadows outer variable instead of updating it", () =
     const i = new Interpreter();
     i.enableChecking();
     const actual = i.renderString(
-        i.run(parseDocument("v = [x = 0]; f v.x = x; [f [x = 1], v.x]")),
+        i.run(parseDocument("v = [x = 0]; f v.x = x; [f 1, v.x]")),
     );
     if (actual !== "[1,0]") throw new Error(actual);
 });
@@ -112,7 +107,7 @@ Deno.test("failed dotted destructuring installs neither binding", () => {
 Deno.test("nested dotted converting patterns retain static checks", () => {
     const i = new Interpreter();
     i.enableChecking();
-    i.run(parseDocument("f (original & alias & (x : Int)) = x"));
+    i.run(parseDocument("f original.alias.(x : Int) = x"));
     try {
         i.run(parseDocument('f "bad"'));
     } catch (error) {

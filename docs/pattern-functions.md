@@ -341,42 +341,34 @@ This meaning applies in schema patterns. Ordinary expressions such as
 `value = _` makes data and `[x : _]` gives a field any type; `_` remains a
 wildcard in ordinary matching patterns.
 
-## Dotted patterns and `&`: keep the whole value
+## Dotted patterns: keep the whole value
 
-A dot reads inside a value, in a pattern as in an expression: `v.x` binds `v`
-to the value and `x` to its field `x`, as the value `v.x` is that field, and
-`v.[x,y]` binds `v` and the pattern `[x,y]` taken from it, as the value
-`v.[x,y]` is the list of those fields. `[x,y]` keeps its meaning: named fields
-on records, positions on lists. `_.[x,y]` discards the whole value.
-
-`(p & q)` matches a value both patterns match, binding the names of each: a
-value in `p & q` is in both, as `&` is the intersection of two sets. It is
-written in parentheses, since `&` outside them defines the operator.
+`left.right` matches the same argument against both patterns. No values-list
+conversion happens: the left and right patterns see the original value.
 
 ```apn
 func v.x = print [v,x]
-func [x = 1]                     # [[x = 1], 1]
+func 1                            # [1,1]
 
 show whole.[x,y] = print [whole,x,y]
 show [x = 1, y = 2, z = 3]        # [[x = 1, y = 2, z = 3], 1, 2]
 show [1,2]                       # [[1,2], 1, 2]
 
-first (whole & (x :: xs)) = x
-unwrap (whole & Some x) = x
+first whole.(x::xs) = x
+unwrap whole.(Some x) = x
 ```
 
-Repeated names impose equality; both patterns must match before the function
-body runs. Both views share the same lazy argument and references. A
-converting subpattern only converts its own view: `(original & (x : Float))`
-keeps the original input as `original`. `v.(p)` is no pattern: the value
-`v.(e)` evaluates `e` with `v`'s fields in scope, which a pattern cannot.
+`[x,y]` keeps its existing meaning: named fields on records, positions on lists.
+`_.[x,y]` discards the whole-value binding. Repeated names impose equality;
+both patterns must match before the function body runs. Both views share the
+same lazy argument and references. A converting subpattern only converts its
+own view: `original.(x : Float)` keeps the original input as `original`.
 
 The same patterns work in bindings:
 
 ```apn
-v.x = [x = 1]                     # v = [x = 1], x = 1 (v previously unbound)
+v.x = 1                           # v = 1, x = 1 (v previously unbound)
 whole.[a,b] = [1,2]              # whole = [1,2], a = 1, b = 2
-(w & (x :: _)) = [1,2]           # w = [1,2], x = 1
 ```
 
 For an ordinary dotted `=` assignment, an already-bound root keeps the existing
