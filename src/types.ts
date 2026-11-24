@@ -133,7 +133,7 @@ export function valueToString(v: Value): string {
             // Any (_ given to a type) is written _.
             return (v.description ?? (v.name === "$any" && !v.family ? "_" : v.name)) + (v.arguments?.length ? " " + v.arguments.map(typeArgumentText).join(" ") : "");
         }
-        case "hashmap": return `([${itemsText([...v.entries.values()].map(([k, x]) => `[${itemsText([valueToString(k), valueToString(x)])}]`))}] : HashMap _ _)`;
+        case "hashmap": return `[${itemsText([...v.entries.values()].map(([k, x]) => `[${itemsText([valueToString(k), valueToString(x)])}]`))}]`;
         case "rationalRange": return rangeText(v.lo, arithmetic("+", v.lo, v.step), v.hi);
         case "bool": return v.v ? "True" : "False";
         case "string": return stringLiteral(v.v);

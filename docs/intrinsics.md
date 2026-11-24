@@ -165,7 +165,7 @@ String = | Text (List Char)  # text: to (List Char) and from (List Char) convert
 IO a = | IO (World -> [a,World])
 Mutable a = | Mutable Ref
 Pointer = | Address UInt
-HashMap k v = | Entries (List [k,v])
+HashMap k v = (entries : List [k,v]) | unique (map head entries) == map head entries
 ```
 
 An action is a function from the state of the world to a result and the next
@@ -173,12 +173,11 @@ state, and `>>=` threads that state through, which is why no action runs when
 it is applied, only when something runs it. `World` (the state
 of everything outside the program) and `Ref` (a place in the store) are the
 interpreter's: no program has a constructor for them, since their values exist
-only while a program runs. So is `Entries`: a map is made by converting an
-association list to its type, `([["a",1]] : HashMap String Int)`, which keeps each
-key once. A program's own types have no such thing: APN has
-no abstract types, every constructor is public. A `Mutable` cell is a reference into the world's store, and `set` an
-action that changes the store; a `HashMap` is an association list whose keys
-appear once.
+only while a program runs. A map is an association list whose keys appear
+once, made by converting one to its type, `([["a",1]] : HashMap String Int)`,
+which keeps each key once; the run stores it to find a key at once. APN has
+no abstract types: every constructor is public. A `Mutable` cell is a reference into the world's store, and `set` an
+action that changes the store.
 
 `import` is `intrinsics.import` and `load` the prelude's `load file =
 intrinsics.runFile (file ++ ".apn")`, actions as `readFileFrom` is: each runs a

@@ -1364,6 +1364,8 @@ export class Interpreter {
             }
         } else if (seq.kind === "record") {
             for (const [k, x] of seq.v) out.push(this.apply(f, mkList([mkStr(k), x])));
+        } else if (seq.kind === "hashmap") {
+            for (const [k, x] of seq.entries.values()) out.push(this.apply(f, mkList([k, x])));
 
         } else if (seq.kind === "int") {
             const n = seq.v < 0n ? -seq.v : seq.v;
@@ -1373,7 +1375,7 @@ export class Interpreter {
             }
         } else {
             throw new APNError("runtime", `cannot iterate a ${seq.kind}`, {
-                hint: "expected a list, a string, a record, or an int count",
+                hint: "expected a list, a string, a record, a HashMap, or an int count",
             });
         }
         // Iterating an action (xs * print) is one action running each in turn.
@@ -2286,7 +2288,8 @@ export class Interpreter {
         // Endless lists of types ([Int..]) compare as types, so they end.
         if ((this.repeatedType(a) || this.repeatedType(b)) && this.isTypeValue(a) && this.isTypeValue(b)) return this.sameType(a, b);
         // (A record is its pairs, in order: [x = 1] == [["x", 1]].)
-        if ((this.isList(a) || a.kind === "record") && (this.isList(b) || b.kind === "record")) {
+        const pairs = (v: Value) => this.isList(v) || v.kind === "record" || v.kind === "hashmap";
+        if (pairs(a) && pairs(b)) {
             for (;;) {
                 checkInterrupt();
                 const x = this.cell(a), y = this.cell(b);
@@ -2297,9 +2300,6 @@ export class Interpreter {
             }
         }
         if (isNumeric(a) && isNumeric(b)) return equalNumbers(a, b);
-        if (a.kind === "hashmap" && b.kind === "hashmap") {
-            return a.entries.size === b.entries.size && [...a.entries].every(([key, [, value]]) => b.entries.has(key) && this.equals(value, b.entries.get(key)![1]));
-        }
         // A named subtype equals a plain value of its base by payload
         // (Money 1.2 == 1.2); two different names are never equal.
         const named = (v: Value) => v.kind === "variant" && !!v.family?.base;
@@ -2763,8 +2763,9 @@ export class Interpreter {
             if (v.hi !== null && (v.step >= 0 ? v.lo > v.hi : v.lo < v.hi)) return null;
             return { head: mkInt(v.lo), tail: { ...v, lo: v.lo + v.step } };
         }
-        // A record is the list of its [key, value] pairs.
+        // A record is the list of its [key, value] pairs, as a HashMap is.
         if (v.kind === "record") return v.v.length ? { head: mkList([mkStr(v.v[0][0]), v.v[0][1]]), tail: { ...v, v: v.v.slice(1) } } : null;
+        if (v.kind === "hashmap") return this.cell(mkList([...v.entries.values()].map(([key, value]) => mkList([key, value]))));
         if (v.kind === "pending") this.ambiguous(v);
         throw new APNError("runtime", `expected a list, got ${v.kind}`);
     }
@@ -3174,7 +3175,8 @@ export class Interpreter {
         if (!type.arguments?.length && this.isTypeValue(value)) return { kind: "type", name: "List", arguments: [this.reference(value)] };
         const realized = this.realize(value, type), given = this.dataValue(realized);
         // (A record is the list of its pairs.)
-        const list = given.kind === "record" ? mkList(given.v.map(([key, field]) => mkList([mkStr(key), field]))) : realized;
+        const list = given.kind === "record" ? mkList(given.v.map(([key, field]) => mkList([mkStr(key), field])))
+            : given.kind === "hashmap" ? mkList([...given.entries.values()].map(([key, value]) => mkList([key, value]))) : realized;
         if (!this.isList(list)) throw new APNError("runtime", `List constructor expects a List value`);
         const element = type.arguments?.[0];
         if (!element) return list;
@@ -3487,7 +3489,7 @@ export class Interpreter {
     // The monad a concrete monadic value belongs to, as a type: IO, List, or its variant type.
     monadTypeOf(v: Value): Extract<Value, { kind: "type" }> | undefined {
         if (v.kind === "io") return { kind: "type", name: "IO" };
-        if (this.isList(v) || v.kind === "record") return { kind: "type", name: "List" };
+        if (this.isList(v) || v.kind === "record" || v.kind === "hashmap") return { kind: "type", name: "List" };
         if (v.kind === "variant" && v.family) return { kind: "type", name: v.family.name, family: v.family };
         return undefined;
     }
@@ -3550,7 +3552,7 @@ export class Interpreter {
         const k: Value = given.kind === "native" && given.name === "<bind>" && this.bindTargets.get(given) === this.headOf(target) ? given
             : { kind: "native", name: "<bind>", arity: 1, applied: [], invoke: ([x]) => this.inMonad(this.continueWith(f, x), target) };
         this.bindTargets.set(k, this.headOf(target));
-        if ((this.isList(m) || m.kind === "record") && this.preludeListBind()) return this.concatMapList(m, k);
+        if ((this.isList(m) || m.kind === "record" || m.kind === "hashmap") && this.preludeListBind()) return this.concatMapList(m, k);
         const result = this.instance(">>=", [m, k]);
         if (result) return result;
         throw new APNError("runtime", `no >>= instance for ${valueToString(target)}`, { hint: "define one, such as `Some x >>= f = f x`" });
@@ -3590,7 +3592,7 @@ export class Interpreter {
     mapValue(f: Value, mIn: Value): Value {
         const m = this.dataValue(mIn);
         if (m.kind === "io") return { kind: "io", run: () => this.apply(f, this.runIO(m)) };
-        if (this.isList(m) || m.kind === "record") return this.mapList(f, m);
+        if (this.isList(m) || m.kind === "record" || m.kind === "hashmap") return this.mapList(f, m);
         if (m.kind !== "pending") {
             if (!this.monadTypeOf(m)) throw new APNError("runtime", `map needs an action, a list or a functor, not a ${m.kind}`);
             const result = this.instance("map", [f, m]);
@@ -3741,9 +3743,8 @@ export class Interpreter {
                     if (wrap) emit(")");
                 }
             } else if (v.kind === "hashmap") {
-                emit("(");
+                // (Its association list, as a record shows its fields.)
                 this.render(mkList([...v.entries.values()].map(([key, value]) => mkList([key, value]))), emit, false, ancestors);
-                emit(" : "); emit("HashMap _ _", "type"); emit(")");
             } else if (this.repeatedType(v)) {
                 emit("[");
                 this.render(this.repeatedType(v)!, emit, false, ancestors);
@@ -4549,6 +4550,7 @@ export class Interpreter {
         type = this.reference(type); value = this.reference(value);
         // A record, where a list is asked, is the list of its pairs.
         if (value.kind === "record" && this.listShaped(type)) value = mkList(value.v.map(([key, field]) => mkList([mkStr(key), field])));
+        if (value.kind === "hashmap" && this.listShaped(type)) value = mkList([...value.entries.values()].map(([key, field]) => mkList([key, field])));
         // A refinement's values are its base's for which its condition holds.
         if (type.kind === "type" && type.refine) {
             return this.belongsToType(type.choices![0], value, met) && this.truthy(this.demand(this.apply(type.refine, value)));
@@ -4974,7 +4976,7 @@ export class Interpreter {
         if (name === "Pointer") return value.kind === "pointer";
         if (name === "Mutable") return value.kind === "mutable";
         if (isNumeric(value)) return NUMERIC_TYPES.includes(name) && matchesType(name, value);
-        if (name === "List") return this.isList(value) || value.kind === "record";
+        if (name === "List") return this.isList(value) || value.kind === "record" || value.kind === "hashmap";
         if (name === "Type" && value.kind === "functionType") return true;
         // A type still taking parameters is a function of types (Option).
         if (name === "Function") return value.kind === "contract" || value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native" || value.kind === "type" && this.typeArity(value) > 0;
@@ -5035,15 +5037,22 @@ export class Interpreter {
         return value;
     }
 
+    // A key's text, equal for keys that are == (the map stores its pairs by it):
+    // any value with equality, a list, record or constructor's by its parts.
     hashKey(value: Value): string {
         value = this.dataValue(value);
         if (isNumeric(value)) return "number:" + numericHash(value);
         if (value.kind === "string" || value.kind === "char" || value.kind === "bool") return value.kind + ":" + String(value.v);
-        throw new APNError("runtime", "HashMap keys must be finite numbers, strings, chars, or booleans");
+        if (this.isList(value) || value.kind === "record" || value.kind === "hashmap") return `list:[${[...this.elements(value)].map(item => this.hashKey(item)).join(",")}]`;
+        if (value.kind === "variant") return `variant:${value.tag}(${value.v.map(item => this.hashKey(item)).join(",")})`;
+        if (value.kind === "type") return "type:" + this.renderString(value);
+        throw new APNError("runtime", `a HashMap's keys are compared: ${this.typeText(value)} has no equality`, { hint: "use numbers, text, lists, records or constructors as keys" });
     }
 
     associations(value: Value): Array<[Value, Value]> {
         if (value.kind === "hashmap") return [...value.entries.values()];
+        // (A record is the association list of its fields.)
+        if (value.kind === "record") return value.v.map(([key, field]) => [mkStr(key), field]);
         if (!this.isList(value)) throw new APNError("runtime", "a HashMap is made from an association list", { hint: "write its entries as [key,value] pairs: ([[\"a\", 1]] : HashMap _ _)" });
         const items = this.items(value);
         return items.map((item) => {
@@ -6861,7 +6870,7 @@ export class Interpreter {
                 // (as a variant's payload is), so an infinite one matches too.
                 if (this.isListType(type)) {
                     const given = this.demand(actual);
-                    if (!this.isList(given) && given.kind !== "record") return false;
+                    if (!this.isList(given) && given.kind !== "record" && given.kind !== "hashmap") return false;
                     return this.matchPattern(p.value, this.conform(type, actual), binds);
                 }
                 // (IO T a): an action, what it yields made a T when it runs; a

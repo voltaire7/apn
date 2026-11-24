@@ -1148,7 +1148,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (b?.k === "mutable") b = resolve(b.value);
         // A record is the list of its pairs.
         if (a.k === "record" && !(a.fields instanceof ModuleFields)) a = resolve(recordPairs(a));
+        if (a.k === "map") a = list(pair(a.key, a.value));
         if (b?.k === "record" && !(b.fields instanceof ModuleFields) && op !== "bind" && op !== "then") b = resolve(recordPairs(b));
+        if (b?.k === "map" && op !== "bind" && op !== "then") b = list(pair(b.key, b.value));
         if (op === "bindFlip") return monadicType("bind", b, a);
         // m >>= k needs a function k; a value to run after m is m >> k.
         if (op === "bind" && ["list", "variant", "atom", "record", "map"].includes(resolve(b).k)) {
@@ -1515,8 +1517,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 const each = application(f, { type: input.element }, { t: "placeholder" });
                 return results(each, { k: "list", element: action(each) ? runType(each) : each, ...sameLength(input) });
             } else if (input.k === "record") element = { k: "list", element: union([atom("String"), ...input.fields.values()]), items: [atom("String"), union([...input.fields.values()])], length: constant(2n) };
+            else if (input.k === "map") element = pair(input.key, input.value);
             else if (input.k === "atom" && input.name === "Int") element = input;
-            else return problem(`iteration needs a list, string, record, or Int; got ${text(input)}`);
+            else return problem(`iteration needs a list, string, record, HashMap or Int; got ${text(input)}`);
             const each = application(f, { type: element }, { t: "placeholder" });
             return results(each, list(action(each) ? runType(each) : each));
         }
@@ -1646,8 +1649,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (other.k === "variant" && other.args.length >= n) return both([app.head, { k: "ctor", name: other.name, args: other.args.slice(n) }], other.args);
             return problem(cannotUse(actual, expected), e);
         }
-        // A record is the list of its [key, value] pairs, where a list is asked.
+        // A record is the list of its [key, value] pairs, where a list is asked, as a HashMap is.
         if (expected.k === "list" && actual.k === "record" && !(actual.fields instanceof ModuleFields)) return unify(expected, recordPairs(actual), e, seen);
+        if (expected.k === "list" && actual.k === "map") return unify(expected, list(pair(actual.key, actual.value)), e, seen);
         if (expected.k === "ctor" || actual.k === "ctor") {
             if (expected.k === "ctor" && actual.k === "ctor" && expected.name === actual.name && expected.args.length === actual.args.length) {
                 expected.args.forEach((x, n) => unify(x, actual.args[n], e, seen));
@@ -2947,6 +2951,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const t = resolve(target), a = resolve(actual);
         // A record, where a list is asked, is the list of its pairs.
         if (t.k === "list" && a.k === "record" && !(a.fields instanceof ModuleFields)) return convert(t, recordPairs(a), e, explicitFloat, seen, runtimeProjection, matching);
+        if (t.k === "list" && a.k === "map") return convert(t, list(pair(a.key, a.value)), e, explicitFloat, seen, runtimeProjection, matching);
         // Anything converts to Dynamic, without deciding its own type.
         if (isExplicit(t)) return target;
         if (isExplicit(a) && (runtimeProjection || explicitFloat)) { runtimeChecks++; return target; }

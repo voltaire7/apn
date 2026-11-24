@@ -1263,7 +1263,7 @@ Deno.test("a breadth-first search over a fold written in APN checks", () => {
         "bfsDistances (n -> n < 3 ? [n + 1] : []) [0]",
     ].join("\n");
     const value = run(session(), source);
-    if (value !== "([[0,0],[1,1],[2,2],[3,3]] : HashMap _ _)") throw new Error(value);
+    if (value !== "[[0,0],[1,1],[2,2],[3,3]]") throw new Error(value);
 });
 // A clause that is fail message gives no value, so it gives its function no
 // type: a list of unknown length given to one that takes it apart keeps its

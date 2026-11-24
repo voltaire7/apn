@@ -54,7 +54,7 @@ for (const [type, expected] of [
     ['Fraction', '0'], ['Complex', '0'], ['ComplexExact', '0'],
     ['Number', '0'], ['Real', '0'], ['Integer', '0'], ['Exact', '0'], ['Inexact', '0.0'],
     ['Bool', 'False'], ['String', '""'], ['Char', "'\\0'"], ['[]', '[]'],
-    ['List', '[]'], ['Record', '[]'], ['HashMap', '([] : HashMap _ _)'], ['Pointer', 'Pointer 0x0'],
+    ['List', '[]'], ['Record', '[]'], ['HashMap', '[]'], ['Pointer', 'Pointer 0x0'],
 ]) Deno.test(`omitted ${type} slot initializes`, () => {
     const actual = result(`([] : [value = ${type}])`);
     if (actual !== `[value = ${expected}]`) throw new Error(actual);

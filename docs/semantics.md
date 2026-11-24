@@ -1653,14 +1653,17 @@ and `(3 : Int) * (2 : Int)` returns `6`, both still typed Int.
 ## HashMap
 
 `HashMap k v` is the type of maps from keys of `k` to values of `v` (`HashMap
-String Int`; `_` for one to infer). A map is an association list converted to
-it, as any value of a type is made: `([["x",123]] : HashMap String Int)`, or
-`([] : HashMap _ _)` for none; a record is not one (its pairs are, `pairs r`).
-Keys may be finite numbers, strings, chars, or booleans. Numerically equal keys
-share an entry regardless of exactness or numeric type; distinct strings/chars
-stay distinct. Duplicate keys keep the last value. Insertion order is preserved
-for traversal, and replacing an existing key keeps its position. A map prints
-as the conversion that makes it.
+String Int`; `_` for one to infer): an association list whose keys appear once,
+in the order first inserted, which the run stores to find a key at once. A map
+is an association list (a record too: its fields are its pairs) converted to
+it, as any value of a type is made: `([["x",123]] : HashMap String Int)`,
+`table : HashMap String Int = [["x",123]]`, or `([] : HashMap _ _)` for none.
+It is that list: it prints as it, equals it (`== [["x",123]]`), and what takes
+a list takes it (`length`, `map`, `*`, a `List [String,Int]` parameter); its
+`typeOf` is `HashMap String Int`. A key is any value with equality: a number,
+text, a list, a record, a constructor's value. Numerically equal keys share an
+entry regardless of exactness or numeric type; distinct strings/chars stay
+distinct. Duplicate keys keep the last value, at the position first inserted.
 
 `insert [["x",123]] m` returns `m` with those entries, and `remove key m` one
 without the key; the old map stays as it was. `lookup key m` or `m key`

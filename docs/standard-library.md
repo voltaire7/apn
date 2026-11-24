@@ -5,7 +5,7 @@ std <- import "std"
 [..] = std.[sequence,number,text,map]
 take 10 primes
 mean [1,2]                         # Some 3/2
-frequencies $ words $ "one two one" # ([["one", 2], ["two", 1]] : HashMap _ _)
+frequencies $ words $ "one two one" # [["one", 2], ["two", 1]], a HashMap
 ```
 
 The prelude, `lib/prelude.apn`, needs no import: it defines every binary
