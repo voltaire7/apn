@@ -138,7 +138,8 @@ For updates and swaps, see [computed keys and multiple indices](#computed-keys-a
 
 ### Association-list lookup
 
-Applying a list to a string looks up the first matching `[string,value]` pair:
+Applying a list to a string looks up the last matching `[string,value]` pair,
+as code's last binding of a name is the one read (a record is such a list):
 
 ```apn
 entries = [["x", 1], ["y", 2]]
@@ -147,17 +148,17 @@ key = "y"
 entries key                 # 2
 entries 0                   # ["x", 1] (positional indexing)
 entries [1,0]             # [["y", 2], ["x", 1]] (index selection)
-[["x", 1], ["x", 2]] "x"  # 1 (first match wins)
+[["x", 1], ["x", 2]] "x"  # 2 (the last match)
 ```
 
-Lookup scans incrementally. It does not evaluate skipped values or entries after
-its first match, so it can find a key in an infinite list. A missing key errors
-once the list ends; searching an infinite list for an absent key may not finish.
-Every visited entry must be a two-element list with a string key. Malformed
-entries error when reached. Keys compare by their exact string contents.
+Lookup reads the whole list, without evaluating the values it passes; a key
+in an endless list is never found. Every visited entry must be a two-element
+list with a string key. Malformed entries error when reached. Keys compare by
+their exact string contents.
 
-String-key assignment updates the first matching pair, preserving its key and
-the remaining list. It errors for missing keys, rather than appending. The old
+String-key assignment updates the last matching pair, preserving its key and
+the rest of the list; a key the list lacks gets a pair at the end, as a record
+gains a field (`entries "z" = 3` is `[["x", 1], ["y", 2], ["z", 3]]`). The old
 payload's usual slot-conversion rules apply; unrelated payloads are not forced.
 
 ```apn

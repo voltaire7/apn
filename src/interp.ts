@@ -1038,23 +1038,23 @@ export class Interpreter {
     private assignItem(collection: Value, key: Value, given: Expr | Value): Value {
         const evaluate = () => "kind" in given ? given : this.eval(given);
         if (this.isList(collection)) {
+            // An association list's key: its last pair with the key replaced,
+            // as code's last binding of a name is the one read; a new key's
+            // pair joins the end, as a record gains a field.
             if (key.kind === "string") {
-                let rest = collection, position = 0n;
-                for (;;) {
-                    const entry = this.cell(rest);
-                    if (!entry) throw new APNError("runtime", `association key '${key.v}' not found`);
+                let rest = collection, position = 0n, last: { position: bigint; key: Value; value: Value } | undefined;
+                for (let entry = this.cell(rest); entry; rest = entry.tail, entry = this.cell(rest), position++) {
+                    checkInterrupt();
                     const pair = this.dataValue(entry.head);
                     if (!this.isList(pair)) throw new APNError("runtime", "association assignment expects [string,value] pairs");
                     const first = this.cell(pair), second = first && this.cell(first.tail);
                     if (!first || !second || this.cell(second.tail)) throw new APNError("runtime", "association lookup expects [string,value] pairs");
                     const name = this.dataValue(first.head);
                     if (name.kind !== "string") throw new APNError("runtime", "association lookup expects string keys");
-                    if (name.v === key.v) {
-                        const replacement = this.assignSlot(second.head, this.demand(evaluate()));
-                        return this.setIndex(collection, position, mkList([first.head, replacement]));
-                    }
-                    position++; rest = entry.tail;
+                    if (name.v === key.v) last = { position, key: first.head, value: second.head };
                 }
+                if (!last) return this.append(collection, mkList([mkList([key, this.demand(evaluate())])]));
+                return this.setIndex(collection, last.position, mkList([last.key, this.assignSlot(last.value, this.demand(evaluate()))]));
             }
             if (key.kind === "record") {
                 const indices = key.v.map(([name, value]): [string, bigint] => {
@@ -5671,12 +5671,16 @@ export class Interpreter {
         }));
     }
 
+    // (Its last pair with the key, as code's last binding of a name is read.)
     private associationValue(entries: Value, key: string): Value {
-        let rest = entries;
+        let rest = entries, found: Value | undefined;
         for (;;) {
             checkInterrupt();
             const entry = this.cell(rest);
-            if (entry === null) throw new APNError("runtime", `association list has no key ${JSON.stringify(key)}`);
+            if (entry === null) {
+                if (found !== undefined) return found;
+                throw new APNError("runtime", `association list has no key ${JSON.stringify(key)}`);
+            }
             const pair = this.dataValue(entry.head);
             if (!this.isList(pair)) throw new APNError("runtime", "association lookup expects [string,value] pairs");
             const first = this.cell(pair);
@@ -5686,7 +5690,7 @@ export class Interpreter {
             }
             const candidate = this.dataValue(first.head);
             if (candidate.kind !== "string") throw new APNError("runtime", "association lookup expects string keys");
-            if (candidate.v === key) return second.head;
+            if (candidate.v === key) found = second.head;
             rest = entry.tail;
         }
     }

@@ -5,14 +5,17 @@ import { checkSource } from "../src/type-checker.ts";
 for (const [source, expected] of [
     ['[["x", 1]] "x"', '1'],
     ['entries = [["x", 1], ["y", 2]]; key = "y"; entries key', '2'],
-    ['[["x", 1], ["x", 2]] "x"', '1'],
+    // The last pair with the key, as code's last binding of a name.
+    ['[["x", 1], ["x", 2]] "x"', '2'],
     ['[["other",missing], ["x", 42]] "x"', '42'],
-    ['([["x", 42]] ++ missing) "x"', '42'],
-    ['[["x", 42], missing] "x"', '42'],
     ['[["x", [1,2]]] "x"', '[1,2]'],
     ['[["x", (* 2)]] "x" 3', '6'],
     ['entries = [["0", 42]]; [entries "0", entries 0, entries [0]]', '[42, ["0", 42], [["0", 42]]]'],
-    ['entries = map (n -> [to String n, n]) [0..]; entries "3"', '3'],
+    ['entries = map (n -> [to String n, n]) [0..9]; entries "3"', '3'],
+    // Assignment updates the last pair with the key, or adds one at the end.
+    ['a = [["x", 1], ["x", 2]]; a "x" = 7; a', '[["x", 1], ["x", 7]]'],
+    ['a = [["x", 1]]; a "z" = 5; a', '[["x", 1], ["z", 5]]'],
+    ['with [["x", 1]] "z" 9', '[["x", 1], ["z", 9]]'],
     ['[["", 7]] ""', '7'],
 ] as const) Deno.test(`association lookup: ${source}`, () => {
     const i = new Interpreter();

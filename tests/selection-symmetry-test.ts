@@ -25,7 +25,9 @@ for (const checked of [false, true]) {
             ["v = [x = 0]; v.[_] = [5]; v", "[x = 0]"],
             ['a = [["x", 1], ["y", 2]]; a "x" = 10; a', '[["x", 10], ["y", 2]]'],
             ['a = [["x", 1], ["y","hi"]]; a "x" = 10; a', '[["x", 10], ["y","hi"]]'],
-            ['a = [["x", 1], ["x", 2]]; a "x" = 10; a', '[["x", 10], ["x", 2]]'],
+            ['a = [["x", 1], ["x", 2]]; a "x" = 10; a', '[["x", 1], ["x", 10]]'],
+            // A key the list lacks gets a pair at the end, as a record gains a field.
+            ['a = [["x", 1]]; a "missing" = 2; a', '[["x", 1], ["missing", 2]]'],
             ['a = [["x", (1 : Float)]]; k = "x"; a k = 2; a', '[["x", 2.0]]'],
             [
                 "[first = x, rest = _] = [x = 1, y = 2, z = 3]; [first,rest]",
@@ -69,7 +71,6 @@ for (const checked of [false, true]) {
             "v = [x = 1]; v.[x = a] = [b = 2]",
             "v = [x = 1]; v.[y = a] = [a = 2]",
             "v = [x = 1]; v.[x = a] = [a = .2]",
-            'a = [["x", 1]]; a "missing" = 2',
             'a = [["x", 1]]; a "x" = .2',
             "[first = x, rest = _] = [y = 1]",
             "f [first = x, rest = _] = rest.x; f [x = 1]",
