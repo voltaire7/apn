@@ -7,24 +7,19 @@ a value like any other, not a slot: `[x = Float]` holds the type `Float`, and
 is no template and no type. A record with a slot, given values, builds one;
 any other record given fields is updated, exactly as by field assignment (see
 [slot assignment](#slot-assignment)). Either way a given value converts to its
-field's type. Dotted list application applies its slots, which are functions:
-it rejects scalar slots and type slots, as a type takes no value (a list of types
-converts by ascription instead, `([1] : [Float])`). Concrete scalars (numbers,
-strings, characters, and booleans) are not callable.
+field's type. A list of types converts by ascription, `([1] : [Float])`.
+Concrete scalars (numbers, strings, characters, and booleans) are not callable.
 
 ## Concrete defaults
 
 ```apn
 0 123                       # error: cannot apply a number
-[0].[123]                   # error: cannot apply a number
 [x = (0 : Int)] [x = floor .2]  # [x = 0]
 [x = (0 : Int)] [x = (.2 : Float)] # error: lossy conversion
 [x = 0] [x = 123]           # [x = 123]
 [x = 1.1] [x = 10]              # [x = 10.0]: x is a Float
 [x = 1] [x = 2.5]               # error: lossy conversion
 [x = False] [x = 1]             # error: cannot use Int where Bool is required
-["old"].["new"]             # error: cannot apply a string
-[Bool].[True]               # error: Bool is a type, not a function
 ([True] : [Bool])           # [True]
 (['b'] : [Char])            # ['b']
 ```
@@ -36,7 +31,6 @@ rejecting overflow and nonzero imaginary-part loss; a string, character or
 Bool only from its own kind; a function or action only from its own kind. A
 function field is replaced, never applied: `[x = 0, y = (*2)] [x = 1, y = 2]` is an error.
 Standalone `"old" "new"`, `'a' 'b'`, and `False True` are application errors.
-List templates apply their function slots, including effects (see [Lists](#lists)).
 
 Numeric parameter patterns always require lossless conversion, including for
 bare literals. `f (x : Int) = x` accepts `2.0` but does not match `.2`; another
@@ -45,15 +39,11 @@ construction `(.2 : Int)` also errors; use `(floor .2 : Int)` to round down expl
 
 ## Lists
 
-| Template | Application |
-| --- | --- |
-| `[f].[x]` | One slot: `[f x]` |
-| `[f,g].[x,y]` | Two slots: `[f x, g y]` |
-| `[].[]` | Empty list |
-| `[f].[]` or `[f].[x,y]` | Length mismatch |
+A dot reads fields, and a list has none: its items are its positions. Each of
+a list's functions applies to a value by `zipWith ($)`:
 
 ```apn
-[(* 2), (* 3)].[1,2]       # [2,6]
+zipWith ($) [(* 2), (* 3)] [1,2]   # [2,6]
 ([1, "hi"] : [Int,String])  # [1, "hi"], a list of types converting
 to Int * [1,2,3]           # mapping, separate from template application
 map (to Int) [0..]         # lazy mapping over an infinite list
@@ -74,7 +64,6 @@ the record has fields. Converted fields remain lazy:
 ```apn
 ([x = 1] : [Float])                     # [x = 1.0]
 ([name = "a", age = 2] : [String,Int])  # [name = "a", age = 2]
-[(+ 1), (* 2)].[b = 3, a = 4]           # [b = 4, a = 8]
 ```
 
 Strings supply Unicode code-point characters using the same positional rules:
@@ -82,15 +71,11 @@ Strings supply Unicode code-point characters using the same positional rules:
 ```apn
 ("hi" : [Char,Char])    # ['h','i']
 ("h" : [Char])          # ['h']
-[c -> c, c -> c]."hi"   # ['h','i'], each slot given a character
-[].""                   # []
 to (List Char) "hello"  # arbitrary-length character conversion
 ```
 
-A template is an ordinary list value. Use `template.values` for a variable input,
-or `template.(expression)` for a computed input. On records, `record.values`
-still looks up the literal field `values`, while `record.(expression)` evaluates
-with the record fields in scope.
+On records, `record.values` looks up the field `values`, while
+`record.(expression)` evaluates with the record's fields in scope.
 `String` converts a finite character list back to text, as `from (List Char)` does:
 
 ```apn
@@ -130,9 +115,6 @@ last selection entry's replacement, after all conversions succeed.
 
 Selection is lazy and preserves index order and duplicates. Integer and enumeration
 indices use the same rules as single indexing; negative indices require a finite input.
-Dotted application explicitly selects template behavior: `[(+ 1)].[0]` returns `[1]`; `[10].[0]` errors.
-For variable inputs use `template.values`; for other expressions use `template.(expression)`. This overload is only for
-lists; `record.(expression)` instead performs scoped evaluation.
 
 For updates and swaps, see [computed keys and multiple indices](#computed-keys-and-multiple-indices).
 
@@ -149,6 +131,9 @@ entries key                 # 2
 entries 0                   # ["x", 1] (positional indexing)
 entries [1,0]             # [["y", 2], ["x", 1]] (index selection)
 [["x", 1], ["x", 2]] "x"  # 2 (the last match)
+entries.y                   # 2 (on a list, v.x is get v "x")
+entries.[y,x]               # [2,1]
+to Record entries           # [x = 1, y = 2]
 ```
 
 Lookup reads the whole list, without evaluating the values it passes; a key

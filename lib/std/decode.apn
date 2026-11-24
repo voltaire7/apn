@@ -39,13 +39,13 @@ shared.[..] = [
     ])
     return x = Decoder (_ -> Ok x)
     # A value as a decoder or a type describes it, as Dynamic so one function
-    # decodes them all: a record schema field by field (its values take the
-    # schema's keys, as a dotted template keeps its input's keys), String, Int,
-    # Float and Bool as string, int, float and bool, and any other type the
-    # values isType accepts.
+    # decodes them all: a record schema field by field (to Record of its keys
+    # paired with their values), String, Int, Float and Bool as string, int,
+    # float and bool, and any other type the values isType accepts.
     decodeValue (Decoder decoder) value = decoder value
     # (A schema's fields decode as Dynamic: they may differ in type.)
-    decodeValue (schema : Record) value = map (values -> (map (v -> _ -> v) values).schema)
+    decodeValue (schema : Record) value = map
+        (values -> to Record (zipWith (key, v -> [key,v]) (map head (pairs schema)) values))
         (allOk (map ([name,t] -> fieldValue name value
             >>= found -> map (v -> (v : Dynamic)) (decodeValue t found)) (pairs schema)))
     decodeValue (t : Type) value = decodeValue (t == String ? string : (t == Int ? int

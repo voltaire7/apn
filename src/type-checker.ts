@@ -8,7 +8,7 @@ import { IMPORT_ONE, standardModule } from "./modules.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { builtinContains, castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_CLASSES, NUMERIC_TYPES, OWN_SCALAR_TYPES, numericWithin, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
 import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
-import { ACTION_SHOWN, APNError, didYouMean, formatFileReadError, missingTypeParameters, placeholderError, typeApplied, withArticle } from "./errors.ts";
+import { ACTION_SHOWN, APNError, LIST_FIELDS, didYouMean, formatFileReadError, missingTypeParameters, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import { bindingItem, DEFAULT_FIXITY, exprToSource, itemComparisonHint, getPreludeUsed, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
 import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
 import { itemsText } from "./separators.ts";
@@ -975,6 +975,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return xs.length ? { length: xs.length } : {};
     }
     function pair(key: Ty, value: Ty): Ty { return { k: "list", element: union([key, value]), items: [key, value], length: constant(2n) }; }
+    // The value type of an association list's pairs (List [String,v]), if it is one.
+    function pairValue(t: Extract<Ty, { k: "list" }>): Ty | undefined {
+        const element = resolve(t.element), items = t.items?.map(resolve);
+        const pairOf = (p: Ty) => p.k === "list" && p.items?.length === 2 && resolve(p.items[0]).k === "atom" && (resolve(p.items[0]) as { name: string }).name === "String" ? p.items[1] : undefined;
+        if (items?.length) { const values = items.map(pairOf); return values.every(v => v) ? union(values as Ty[]) : undefined; }
+        return pairOf(element);
+    }
     // A record's [key, value] pairs, in order (of a length the run finds when
     // it has fields not known yet).
     function recordPairs(r: Extract<Ty, { k: "record" }>): Ty {
@@ -1390,6 +1397,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (t.op === "to") {
                 if (string || named("JSON")) return atom("String");
                 if (chars) { unify(atom("String"), b); return list(atom("Char")); }
+                // An association list's pairs as a record's (its fields known at runtime).
+                if (target.k === "atom" && target.name === "Record") { if (resolve(b).k !== "dynamic") unify(list(pair(atom("String"), variable())), b); else runtimeChecks++; return explicitDynamic; }
                 // Any other type converts as ascription does (to Int 1.0 is 1.0 : Int).
                 return application(a, { type: b }, { t: "placeholder" }, false, true);
             }
@@ -5100,7 +5109,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         ? { k: "list", element: union(selected), length: constant(BigInt(selected.length)), items: selected }
                         : { k: "record", fields: new Map(e.entries.map((x, n) => [(x as [string, string])[1], selected[n]])) };
                 }
-                if (rec.k === "list" && e.values) return template(rec, infer(e.values, scope), e.values);
+                if (rec.k === "list" && pairValue(rec) && e.quoted !== false && e.entries.every(x => typeof x === "string")) {
+                    return { k: "list", element: pairValue(rec)!, length: constant(BigInt(e.entries.length)) };
+                }
+                if (rec.k === "list") return problem("a list has no fields", e, LIST_FIELDS);
                 if (e.values) infer(e.values, scope);
                 return unknown();
             }
@@ -5119,7 +5131,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 // code.x: the value code's binding of x gives.
                 const bound = rec.k === "list" && !e.scoped ? codeBinding(rec, e.field) : undefined;
                 if (bound) return bound.entry.type;
-                if (rec.k === "list") return template(rec, infer(e.argument ?? { t: "var", name: e.field }, scope), e.argument ?? e);
+                if (rec.k === "list" && e.scoped) return problem("scoped evaluation requires a record", e, "its names are known only at runtime: open a record (to Record xs).(e)");
+                // On a list, v.x is get v "x": its key's value, as a record's.
+                if (rec.k === "list" && pairValue(rec)) return pairValue(rec)!;
+                if (rec.k === "list") return problem(`a list has no field '${e.field}'`, e, LIST_FIELDS);
                 if (e.scoped && e.argument) {
                     if (rec.k === "dynamic" || rec.k === "var") return unknown();
                     // A function held in a name, read as a type at runtime.

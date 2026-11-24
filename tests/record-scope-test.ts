@@ -51,7 +51,6 @@ for (const [source, expected] of [
     ['vec = [x = 1]; [vec.{ x = 10; x }, vec.x]', '[10,1]'],
     ['vec = [x = 1]; vec.{}', '[]'],
     ['vec = [x = 1]; f = vec.{ y -> x + y }; f 2', '3'],
-    ['[(* 2), (+ 1)].{ [1,2] }', '[2,3]'],
     ['vec = [x = 1]; vec.{ [y = x + 1] }.y', '2'],
 ] as const) Deno.test(`braced scope: ${source}`, () => {
     const i = new Interpreter();

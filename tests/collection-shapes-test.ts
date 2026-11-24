@@ -31,11 +31,8 @@ for (const checked of [false, true]) {
                 "source = [x = 1]; r = (source : [Float]); [source,r]",
                 "[[x = 1], [x = 1.0]]",
             ],
-            ['[(+ 1)].[x = 1]', '[x = 2]'],
             ['([name = "a", age = 2] : [String,Int])', '[name = "a", age = 2]'],
-            ["[(+ 1), (* 2)].[b = 3, a = 4]", "[b = 4, a = 8]"],
             ["([nested = [x = 1]] : [[Float]])", "[nested = [x = 1.0]]"],
-            ["[].([] [])", "[]"],
             ["f ([x] : [t]) = [t,x]; f [x = 1]", "[Int,1]"],
             ["f ([x] : [t]) = [t,x]; f [extra = 2, x = (1 : Int32)]", "[Int32,1]"],
             [

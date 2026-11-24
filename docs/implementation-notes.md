@@ -277,16 +277,13 @@ builtin on a known list or record. Tests: `tests/operators-test.ts`,
   `tests/index-assignment-test.ts`, `tests/computed-assignment-test.ts`,
   `tests/selection-symmetry-test.ts`, `tests/nested-field-assignment-test.ts`.
 
-## Templates, dotted application, and zero values
+## Templates and zero values
 
 Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
 
 - Record construction uses `applyTemplateSlot`; record defaults (including
-  nested list defaults) use `replaceDefaults`. Dotted list templates reject
-  scalar slots rather than replacing them.
-- Dotted bracket nodes carry both expression inputs (for lists) and quoted
-  selection entries (for records). Evaluate only the branch the left operand
-  selects; record plucks must never evaluate field identifiers.
+  nested list defaults) use `replaceDefaults`.
+- Record plucks must never evaluate field identifiers.
 - Parenthesized record access evaluates in a child `Env` populated with the
   identifier fields, falling back to the outer scope.
 - Keep source printing, gradual checking, and the metacircular template AST
@@ -296,7 +293,7 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   zero. Detect recursive defaults.
 - Variant family identity stays separate from constructor names.
 - Tests: `tests/template-application-test.ts`, `tests/zero-initialization-test.ts`,
-  `tests/collection-shapes-test.ts`, `tests/strict-dotted-application-test.ts`.
+  `tests/collection-shapes-test.ts`, `tests/named-dotted-application-test.ts`.
 
 ## Patterns
 

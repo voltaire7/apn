@@ -17,7 +17,6 @@ for (const [source, expected] of [
     ['Direction = North | East; [10,20] [East,North]', '[20,10]'],
     ['Direction = North | East; arr = [10,20]; arr [East,North] = [3,4]; arr', '[4,3]'],
     ['(["x", 1] : [String,Int])', '["x", 1]'],
-    ['[(+ 1), (* 2)].[10,20]', '[11,40]'],
     ['x = 10; ([x,x+1] : [Int,Int])', '[10,11]'],
     ['templates = [Int,Float]; values = [1,2]; (values : templates)', '[1,2.0]'],
     ['("hi" : [Char,Char])', "['h','i']"],

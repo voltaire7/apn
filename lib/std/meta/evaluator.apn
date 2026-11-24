@@ -33,7 +33,7 @@ meNode scope tag arguments = typeOf tag == typeOf "text"
         ? lookup tag meForms scope arguments
         : meApplyAll (meEval scope tag) (meList scope arguments))
     : meApplyAll (meEval scope tag) (meList scope arguments)
-meForms = insert [[".",meTemplateOf],["$",mePipe],["{}",meBlock],[":",meAscription]]
+meForms = insert [["$",mePipe],["{}",meBlock],[":",meAscription]]
     ([["->",meLambda],["?:",meIf],["[]",meList]] : HashMap _ _)
 meAscription scope arguments = (meEval scope (head arguments) : meEval scope (arguments 1))
 meLambda scope arguments = meClosure (head arguments) (arguments 1) scope
@@ -44,8 +44,6 @@ meList scope expressions = null expressions
     ? []
     : meCons (meEval scope (head expressions)) (meList scope (tail expressions))
 mePipe scope arguments = meApply (meEval scope (head arguments)) (meEval scope (arguments 1))
-meTemplateOf scope arguments = meTemplate (meEval scope (head arguments))
-    (meTemplateInput (meEval scope (arguments 1)))
 meApplyAll function arguments = null arguments
     ? function
     : meApplyAll (meApply function (head arguments)) (tail arguments)
@@ -73,17 +71,6 @@ meScope statements parent = {
 }
 meClosure parameters body scope = ([["__closure", True], ["parameters",parameters]]
     ++ [["body",body],["scope",scope]] : HashMap _ _)
-meZipTemplate functions values = null functions
-    ? (null values ? [] : fail "list template and input must have the same length")
-    : (null values
-    ? fail "list template and input must have the same length"
-    : meCons (meTemplateSlot (head functions) (head values))
-        (meZipTemplate (tail functions) (tail values)))
-meTemplateInput value = typeOf value == typeOf "text" ? to (List Char) value : value
-meTemplate functions values = meZipTemplate functions values
-meTemplateSlot function argument = isList function
-    ? meTemplate function (meTemplateInput argument)
-    : meApply function argument
 # A closure takes its parameters one at a time.
 meApply function argument = isType (HashMap _ _) function
     ? (has "__closure" function

@@ -7,6 +7,8 @@ import type { Token } from "./lexer.ts";
 // optional hint ("did you mean ...?").
 // An action where a value is shown (print, echo, emit, toString, the REPL's
 // echo): it has no value until it runs, as in Haskell.
+// What a dot on a list finds instead of a field.
+export const LIST_FIELDS = "a list's items are its positions (xs 0); apply each function to its value with zipWith ($) fs xs";
 export const ACTION_SHOWN = {
     message: "an action has no value to show until it runs",
     hint: "run it, then show what it gives: x <- readFile \"f\", then print x",

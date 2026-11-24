@@ -16,7 +16,7 @@ import { parseLiteral, textNatives } from "./text-natives.ts";
 import { bundledText, IMPORT_ONE, loadPath, type ModuleFile, readLoad, resolveModule, sourcePath, unknownModule } from "./modules.ts";
 import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_CLASSES, NUMERIC_TYPES, OWN_SCALAR_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
 import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
-import { ACTION_SHOWN, APNError, didYouMean, missingTypeParameters, placeholderError, typeApplied, withArticle } from "./errors.ts";
+import { ACTION_SHOWN, APNError, LIST_FIELDS, didYouMean, missingTypeParameters, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { type Alternative, type Binding, clausePlaces, listRole, readPatterns, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, declaresNames, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, unionClause, unionKind } from "./ast.ts";
 import type { DefClause, Type, VariantFamily } from "./types.ts";
@@ -1755,10 +1755,9 @@ export class Interpreter {
                         // record's field is (a list binding nothing applies).
                         const binding = this.isList(rec) && !e.scoped ? this.codeBinding(rec, e.field) : undefined;
                         if (binding) { r = binding.value; break; }
-                        if (this.isList(rec) && e.argument) {
-                            r = this.templateList(rec, this.eval(e.argument), false, true);
-                            break;
-                        }
+                        if (this.isList(rec) && e.scoped) throw new APNError("runtime", "scoped evaluation requires a record", { hint: "its names are known only at runtime: open a record (to Record xs).(e)" });
+                        // On a list, v.x is get v "x": its key's value, as a record's.
+                        if (this.isList(rec)) { r = this.associationValue(rec, e.field); break; }
                         if (rec.kind === "io") throw new APNError("runtime", "an action has no fields", { hint: "bind its result first: `x <- action; x.field`" });
                         // Another value's field is get v "x", when clauses for get give it fields.
                         if (rec.kind !== "record" && !e.scoped && this.extended("get", rec)) { r = this.apply(rec, mkStr(e.field)); break; }
@@ -1776,10 +1775,11 @@ export class Interpreter {
                     }
                     case "pluck": {
                         let rec = this.dataValue(this.eval(e.rec));
-                        if (this.isList(rec) && e.values) {
-                            r = this.templateList(rec, this.eval(e.values), false, true);
+                        if (this.isList(rec) && e.quoted !== false && e.entries.every(x => typeof x === "string")) {
+                            r = mkList((e.entries as string[]).map(key => this.associationValue(rec, key)));
                             break;
                         }
+                        if (this.isList(rec)) throw new APNError("runtime", "a list has no fields", { hint: LIST_FIELDS });
                         if (rec.kind !== "record") throw new Error("dotted application expects a list or record");
                         if (e.quoted === false) throw new Error("record selection expects literal field names");
                         const byKey = new Map(rec.v);
@@ -3261,7 +3261,7 @@ export class Interpreter {
         const type = this.reference(target);
         const is = (name: string) => {
             const builtin = this.preludeBindings.get(name);
-            return name === "String" ? type.kind === "type" && type.name === "String" && !type.family && !type.alias
+            return name === "String" || name === "Record" ? type.kind === "type" && type.name === name && !type.family && !type.alias
                 : !!builtin && this.isTypeValue(type) && this.sameType(this.reference(builtin), type);
         };
         const element = this.isListType(type) && type.kind === "type" && type.arguments?.length === 1 ? this.reference(type.arguments[0]) : undefined;
@@ -3270,6 +3270,18 @@ export class Interpreter {
             if (is("String")) return this.callNative("toString", [value]);
             if (is("JSON")) return standardNative(this, "toJson", [value]);
             if (chars) return standardNative(this, "chars", [value]);
+            // An association list with String keys is a record's pairs, a
+            // repeated key keeping its first place and last value, as in code.
+            if (is("Record")) {
+                const fields = new Map<string, Value>();
+                for (const item of this.elements(this.demand(value))) {
+                    const [key, field] = [...this.elements(this.demand(item))];
+                    const name = key && this.dataValue(key);
+                    if (name?.kind !== "string" || field === undefined) throw new APNError("runtime", "to Record expects [String,value] pairs", { hint: 'write each field as a pair: to Record [["x", 1]]' });
+                    fields.set(name.v, field);
+                }
+                return { kind: "record", v: [...fields] };
+            }
             // A list template ([Char], [Int,String]) converts position by position.
             if (this.isList(type) && this.isTypeValue(type)) return this.templateList(type, value);
             if (type.kind === "record" && this.isTypeValue(type)) return this.buildRecord(type, value);
@@ -5780,13 +5792,11 @@ export class Interpreter {
         return this.isList(target) ? this.templateList(target, value, true) : this.filled(target, value);
     }
 
-    // applying: templates.values, whose slots are functions (a type takes no
-    // value: [Float].[1] is ([1] : [Float])); otherwise a conversion.
-    templateList(templates: Value, values: Value, replaceDefaults = false, applying = false): Value {
+    templateList(templates: Value, values: Value, replaceDefaults = false): Value {
         const input = this.dataValue(values);
         const list = input.kind === "string" ? this.callNative("chars", [input]) : input.kind === "record" ? mkList(input.v.map(([, value]) => value)) : input;
         if (!this.isList(list)) throw new APNError("runtime", "list template expects a list, record, or string");
-        let converted = this.applyListTemplate(templates, list, replaceDefaults, applying);
+        let converted = this.applyListTemplate(templates, list, replaceDefaults);
         if (input.kind !== "record") return converted;
         // Reuse positional conversion, but retain record keys and lazy fields.
         const fields: [string, Value][] = [];
@@ -5802,7 +5812,7 @@ export class Interpreter {
 
     // Multi-slot templates zip positionally. Shape errors appear when that
     // spine is demanded, without traversing infinite inputs or forcing heads.
-    applyListTemplate(templates: Value, values: Value, replaceDefaults = false, applying = false): Value {
+    applyListTemplate(templates: Value, values: Value, replaceDefaults = false): Value {
         return this.defer(() => {
             const template = this.cell(templates), value = this.cell(values);
             if (template === null && value === null) return mkList([]);
@@ -5812,15 +5822,11 @@ export class Interpreter {
                 head: this.defer(() => {
                     if (replaceDefaults) return this.applyTemplateSlot(template.head, value.head);
                     const target = this.force(template.head);
-                    if (applying && (target.kind === "type" || target.kind === "functionType" || target.kind === "record" && this.isTypeValue(target))) {
-                        const { message, hint } = typeApplied(this.renderString(target));
-                        throw new APNError("runtime", message, { hint: `${hint}; a list of types converts by ascription, ([1] : [Float])` });
-                    }
                     // A type variable no call decided takes any value, as conform's does.
                     if (target.kind === "type" && target.variable) return this.reference(value.head);
-                    return this.isList(target) ? this.templateList(target, value.head, false, applying) : this.filled(target, value.head);
+                    return this.isList(target) ? this.templateList(target, value.head) : this.filled(target, value.head);
                 }),
-                tail: this.applyListTemplate(template.tail, value.tail, replaceDefaults, applying),
+                tail: this.applyListTemplate(template.tail, value.tail, replaceDefaults),
             };
         });
     }

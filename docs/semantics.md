@@ -488,8 +488,8 @@ code 1 = x * 3              # x is the list's: [30,5]
 
 Code's bindings are its fields, as a record's are: `code.x` is the value
 the last item binding `x` gives, and `code.x = v` replaces that item with
-`x = v`, an update as above (`code.[x] = [v]` too). A list binding no `x`
-keeps dotted application (`[(+ 1)].x` applies `[(+ 1)]` to `x`). An `x <- m`
+`x = v`, an update as above (`code.[x] = [v]` too). On a list binding no `x`,
+`.x` is association lookup, as below (`[["x", 1]].x` is `1`). An `x <- m`
 item binds `x` only when `do` runs the code, so `code.x` is an error there,
 as is replacing a binding made by a pattern (`[a,b] = ...`), which replaces
 as an item (`code 0 = ...`):
@@ -733,7 +733,9 @@ prints as it was written; what a template builds holds values (`[x : Float]
 A record is the list of its `[key, value]` pairs, in order: `[x = 1, y = 2] ==
 [["x", 1], ["y", 2]]`, and what takes a list takes it (`length`, `map`,
 `filter`, `foldl`, `r * f`, a `List [String,Int]` parameter), as it takes an
-association list. It prints as a record.
+association list. It prints as a record. `to Record` makes one from an
+association list with String keys, a repeated key keeping its first place
+and last value as in code: `to Record [["x", 1], ["y", 2]]` is `[x = 1, y = 2]`.
 
 A field's name is its key: a name, or any text in backticks, which printing
 writes when the key is not a name. A string names a field too:
@@ -1028,8 +1030,8 @@ return = Some                      # return in Option
 ```
 
 `to` and `from` are methods the same way: `to T x` writes `x` as a `T`
-(`to String`, `to JSON`, `to (List Char)`; another type, a record type too,
-converts as applying it: `to Quote x` is `Quote x`),
+(`to String`, `to JSON`, `to (List Char)`, `to Record`; another type, a
+record type too, converts as applying it: `to Quote x` is `Quote x`),
 `from T x` reads one back. A type name in a pattern, bare or applied to types
 alone, matches each type within the one it names, as `<=` compares types
 (`describe Int = "integer"` takes `Int` and `typeOf 5`; `describe Number` takes
@@ -1203,7 +1205,7 @@ through FFI calls, the deliberate escape hatch.
 - Positive indexing traverses only through the requested element. Negative
   indexing needs the end of the list. `xs indices` selects a list of indices lazily.
   `xs indices = values` checks the finite update before rebinding; both sides see
-  the old list. Dotted `templates.[values]` applies list templates instead.
+  the old list.
 - `null` inspects emptiness; `length` traverses cells without demanding heads.
   Equality compares elements incrementally and stops at the first mismatch.
 - Finite and infinite ranges use the same incremental consumer interface.
@@ -1921,8 +1923,8 @@ record-construction evaluation rules still apply.
 
 `record.(expression) = value` is not an assignment target; `record key = value`
 updates a computed key.
-List operands retain dotted template application: `[(+ 1), (* 2)].([1] ++ [2])`
-returns `[2,4]`, evaluating the input expression in the surrounding scope.
+A list's names are its keys' strings, known only at runtime, so `xs.(e)` is
+an error: open a record of its pairs, `(to Record xs).(e)`.
 
 ## Type descriptions
 

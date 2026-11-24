@@ -422,8 +422,7 @@ pairTypes ([x,y] : [a,b]) = [a,b,x,y]
 pairTypes [y = "hi", x = 1]       # [Int, String, 1, "hi"]
 ```
 
-Unlike dotted template application, this selects by the value pattern's names,
-not record order. Use `whole.([t] [x])` to retain the complete original record.
+This selects by the value pattern's names, not record order. Use `whole.([t] [x])` to retain the complete original record.
 
 ## Record remainder patterns
 

@@ -213,7 +213,7 @@ print nums                       # => [10,30,20]
 nums -1 = 40                     # the last item, as nums -1 reads it
 print nums                       # => [10,30,40]
 print (["x", 1] : [String,Int])    # => ["x", 1]
-print [(+ 1), (* 2)].[10,20]    # => [11,40]
+print (zipWith ($) [(+ 1), (* 2)] [10,20]) # => [11,40]
 listTemplate = [Int,Float]
 listInput = [1,2]
 print (listInput : listTemplate)  # => [1,2.0]
@@ -1250,16 +1250,14 @@ print (numericPayload (123 : Int32)) # => 123
 retypedAdd (x : Int) (y : Int) = x + y : Int
 print (retypedAdd (2 : Int) (3 : Int)) # => 5
 
-# Container templates apply their existing slots to incoming values.
-namedTemplates = [(* 2), (+ 1)]
+# A dot reads a field; on an association list, its key's value.
 namedValues = [1,2]
-print namedTemplates.namedValues    # => [2,3]
 print [namedValues = 42].namedValues # => 42 (literal record field)
+print [["n", 1], ["n", 2]].n        # => 2 (the last pair with the key)
 print ([x = 0] [x = 123])                # => [x = 123] (record default override)
 # Numbers, strings and characters are not callable: 0 123 and "old" "new" error.
 # A Bool applied to two values is one of them: True "yes" "no" is "yes".
 print (["new", True, 'b'] : [String,Bool,Char]) # => ["new", True, 'b']
-# ["old"].["new"] and [0].[1] error: scalar slots cannot be applied.
 print ([name = "old", enabled = False] [name = "new", enabled = True])
 print ([floor .2] : [Int])               # => [0]
 print ((* 2) * [1,2,3,4])     # => [2,4,6,8]
@@ -1285,7 +1283,6 @@ recordSlots "y" = floor .2
 print recordSlots.y                 # => 0
 # recordSlots.y = Float .2           # error: lossy typed conversion
 # slots 1 = 1                       # error: slot 1 does not exist
-print [].[]                      # => [] (no hidden element schema)
 print ([0] : [Int])                     # => [0] (constructor application)
 print ([10] 0)                      # => 10 (integer indexing)
 Count = Int
