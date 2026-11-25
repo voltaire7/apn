@@ -1899,7 +1899,9 @@ infinite lists, and enumerating an element does not force its value.
 
 `record.(expression)` and `record.{ statements }` evaluate in a local scope populated by the
 record's fields. Fields shadow outer names; other names resolve in the surrounding
-lexical scope, including functions such as `sqrt`.
+lexical scope, including functions such as `sqrt`. It is `{ [..] = record;
+expression }`, except that the record's names may be known only when it runs
+(`r.(x + 1)` with `r : Dynamic`), where `[..]` needs them before.
 
 ```apn
 point = [x = 3, y = 4]

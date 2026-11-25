@@ -52,6 +52,9 @@ for (const [source, expected] of [
     ['vec = [x = 1]; vec.{}', '[]'],
     ['vec = [x = 1]; f = vec.{ y -> x + y }; f 2', '3'],
     ['vec = [x = 1]; vec.{ [y = x + 1] }.y', '2'],
+    // record.(e) is { [..] = record; e }.
+    ['p = [x = 3, y = 4]; x = 100; [p.(x = 10; x + y), { [..] = p; x = 10; x + y }, x]', '[14,14,100]'],
+    ['p = [a = 1, b = fail "unread"]; [p.(a), { [..] = p; a }]', '[1,1]'],
 ] as const) Deno.test(`braced scope: ${source}`, () => {
     const i = new Interpreter();
     if (i.renderString(i.run(parseDocument(source))) !== expected) throw new Error(source);

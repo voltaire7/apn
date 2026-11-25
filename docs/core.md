@@ -114,11 +114,19 @@ they were written in, so quoting needs no form of its own. Evaluation is lazy;
 `tests/intrinsics-test.ts` already runs the definitions against the natives,
 so moving a native to the prelude is checked by a test that exists.
 
-## Open questions
+## Records
 
-- **Whether records need a form of their own.** A record is already code, a list
-  of bindings; its literal, access (`v.x`) and update forms are sugar for `get`
-  and `with`, but the parser keeps them as nodes of their own.
+A record is the list of its pairs, in the run and in the checker: what takes a
+list takes it, `to Record` makes one from an association list, and a HashMap is
+an association list whose keys appear once. On any other value `v.x` is
+`get v "x"` and `v.x = y` is `with v "x" y`, along a nested path too
+(`json.user.name = "b"`), so the dot is the same on records, association lists
+and HashMaps ([records](semantics.md#records)).
+
+The parser still keeps record access and update as nodes of their own rather
+than expanding `v.(e)` to `{ [..] = v; e }`, which it behaves as: `[..]` needs
+the names it binds before the run, and a `Dynamic` record's are known only
+during it ([record-scoped expressions](semantics.md#record-scoped-expressions)).
 
 ## Order of work
 
@@ -151,8 +159,10 @@ so moving a native to the prelude is checked by a test that exists.
    - `negate`: a real number is a `Complex`, so no short definition flips
      both a float's zero and each part of a complex number (`0 - x` makes
      `negate 0.0` `0.0`, not `-0.0`).
-   - `++`, `get` and `with`: their definitions cover lists; strings, records,
-     maps and code are the native's.
+   - `++`, `get` and `with`: their definitions cover lists by position. Records
+     and HashMaps no longer keep them native, as both are lists of pairs; strings
+     (`++` joins their characters), association keys and index lists are the
+     native's still, and whether a definition can take them is untried.
    - Ranges: the checker reads a range's items and length from its bounds
      (`[1..n]` has `n` items), which its definition's cells do not give.
    - `map`, `>>=` and `<*>`: an action's instance acts on the world, which
