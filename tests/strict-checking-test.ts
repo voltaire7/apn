@@ -66,7 +66,7 @@ for (const [source, error] of [
     ['r = [a = "x", b = 1]\n1 + head (tail (head (tail (pairs r))))', ""],
     ['first (x :: _) = x\nr = [a = "x", b = 1]\n"k" ++ first (first (pairs r))', ""],
     ['xs = [1, "a"]\nx :: rest = xs\n[x + 1, "k" ++ head rest]', ""],
-    ['1 + head ["a", 1]', "cannot combine Int and String"],
+    ['1 + head [True, 1]', "cannot combine Int and Bool"],
     ['g ((x : Float) :: rest) = x + head rest\ng [1,2] + 0.5', ""],
     ['g ((x : Float) :: _) = x\n"k" ++ g [1,2]', "cannot append String and Float"],
     ['g ((s : String) :: (n : Int) :: _) = s ++ to String n\ng ["a", 2]', ""],
@@ -102,9 +102,9 @@ for (const [source, error] of [
     // over (its guard, or a value the run decides) is left out.
     ['f p | length p > 5 = "long"\nf p = head p ++ "!"\nf [1, "a"]', "cannot append Int and String"],
     ['f p | length p > 5 = "long"\nf p = head p ++ "!"\nf ["a", 1]', ""],
-    ['f p | isType Int (head p) = head p + 1\nf p = 0\nf ["a", 1]', ""],
-    ['g 0 p = head p + 1\ng n p = ""\nh n = g n ["a", 1]\nh 1', ""],
-    ['g 0 p = head p + 1\ng n p = head p + 2\nh n = g n ["a", 1]\nh 1', "cannot combine"],
+    ['f p | isType Int (head p) = head p + 1\nf p = 0\nf [True, 1]', ""],
+    ['g 0 p = head p + 1\ng n p = ""\nh n = g n [True, 1]\nh 1', ""],
+    ['g 0 p = head p + 1\ng n p = head p + 2\nh n = g n [True, 1]\nh 1', "cannot combine"],
 ] as const) Deno.test(`taking apart known items keeps their types: ${source}`, () => {
     const issues = checkSource(source, "<test>", { strict: true }).issues.map(i => i.message).join("; ");
     if (error ? !issues.includes(error) : issues) throw new Error(issues || "accepted");
@@ -180,8 +180,8 @@ for (const [source, error] of [
     ['g [] = ""\ng (x :: rest) = x ++ g rest\nf p = g p\nf ["a","b"]', ""],
     ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n == 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 4', ""],
     ['step [x,y] = [y,x]\nf (p : Vect 2 _) n = n == 0 ? "k" ++ head p : f (step p) (n - 1)\nf ["a", 1] 3', "cannot append String and Int"],
-    ['g 0 p = head p + 1\ng n p = ""\ng 0 ["a", 1]', "cannot combine"],
-    ['g 0 p = head p + 1\ng n p = ""\ng 1 ["a", 1]', ""],
+    ['g 0 p = head p + 1\ng n p = ""\ng 0 [True, 1]', "cannot combine"],
+    ['g 0 p = head p + 1\ng n p = ""\ng 1 [True, 1]', ""],
     // A known list's items and a known record's fields decide them too.
     ['f p = length p == 3 ? "k" ++ head p : "none"\nf [1, "a"]', ""],
     ['f p = length p == 2 ? "k" ++ head p : "none"\nf [1, "a"]', "cannot append String and Int"],

@@ -250,7 +250,7 @@ for (const source of [
     'Handler a = | Handler (a -> String)\nh = Handler (s -> s ++ "!")\nr = [f = h ~ [Handler g -> g]]\nr.f 5',
     // A function matching its parameters is its alternatives as clauses.
     'd = x -> x ~ [0 -> 1]\nd 5',
-    'add x y = [x,y] ~ [[0,b] -> b, [a,b] -> a + b]\nadd 0 "a" + 1',
+    'add x y = [x,y] ~ [[0,b] -> b, [a,b] -> a + b]\nadd 0 True + 1',
     // A statement of a do-block is an action whichever branch is taken.
     'f x = x ? print "yes" : False\nk y = {\n    f y\n    print 2\n}',
     // Alternatives' lists of one type keep it, lengths included, as branches' do.
@@ -261,7 +261,7 @@ for (const source of [
 ]) Deno.test(`a choice is used as every type it may be: ${source}`, () => rejected(session(), choices + source));
 
 // A value defined further on is checked where it is used.
-Deno.test("a forward value keeps its type", () => rejected(session(), 'a = b + 1\nb = "x"\na'));
+Deno.test("a forward value keeps its type", () => rejected(session(), 'a = b + 1\nb = True\na'));
 
 // A ternary's branch is checked as the expression alone is: a lossy mix the
 // checker types as Number fails when it runs, in a branch as outside one.
@@ -279,7 +279,7 @@ for (const source of [
 Deno.test("a static error prevents earlier effects and bindings", () => {
     const i = session(), lines: unknown[] = [], oldLog = console.log;
     console.log = (...values: unknown[]) => { lines.push(values); };
-    try { rejected(i, 'print "must not print"; newName = 1; 1 + "bad"'); }
+    try { rejected(i, 'print "must not print"; newName = 1; 1 + True'); }
     finally { console.log = oldLog; }
     if (lines.length || i.env.get("newName")) throw new Error("rejected source had effects");
 });

@@ -1,2 +1,2 @@
 print "must not execute"
-broken = 1 + "bad"
+broken = 1 + True

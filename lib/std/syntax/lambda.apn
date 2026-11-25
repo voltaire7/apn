@@ -66,6 +66,8 @@ clausesOf left right rest = isDefinition left
     : [[["=",left,right]],rest]
 sameDefinition name ["=", other :: _, _] = other == name
 sameDefinition _ _ = False
+# (A name is text, and text is a list: it is no definition's left side.)
+isDefinition (_ : String) = False
 isDefinition (name :: _) = isName name
 isDefinition _ = False
 

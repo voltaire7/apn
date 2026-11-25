@@ -58,3 +58,31 @@ for (const source of ["head []", "tail []", 'lookup "z" ([["a", 1]] : HashMap _ 
         if (!native.startsWith("error:") || !defined.startsWith("error:")) throw new Error(`native ${native}, defined ${defined}`);
     });
 }
+
+// String = List Char: a String is its characters, run and checked alike.
+import { APNError } from "../src/errors.ts";
+for (const checked of [false, true]) {
+    for (const [source, expected] of [
+        ['head "hi"', "'h'"], ['tail "abc"', '"bc"'], ['"hi" 1', "'i'"], ['"hi" -1', "'i'"],
+        ['"hi" == [\'h\',\'i\']', "True"], ['"" == []', "True"], ["typeOf \"hi\"", "String"],
+        ['f (c :: cs) = cs; f "abc"', '"bc"'], ['f [a,b] = b; f "ab"', "'b'"], ['f [] = 0; f _ = 1; [f "", f "a"]', "[0,1]"],
+        ['map (c -> c + 1) "abc"', "['b','c','d']"], ['length "abc"', "3"], ['"ab" ++ "cd"', '"abcd"'],
+        ['"ab" ++ [\'c\']', "['a','b','c']"], ['"ab" + 1', "['b','c']"],
+        ['x = "abc"; x 0 = \'z\'; x', '"zbc"'], ['f (xs : List Char) = typeOf xs; f "ab"', "String"],
+        ['f (s : String) = s ++ "!"; f [\'a\',\'b\']', '"ab!"'], ['([\'h\',\'i\'] : String)', '"hi"'],
+        ['f (xs : List a) = a; f "abc"', "Char"], ['isType (List Char) "ab"', "True"],
+    ]) Deno.test(`String (checked=${checked}): ${source}`, () => {
+        const i = new Interpreter();
+        if (checked) i.enableChecking();
+        const shown = i.renderString(i.run(parseDocument(source)));
+        if (shown !== expected) throw new Error(`expected ${expected}, got ${shown}`);
+    });
+    for (const source of ['f [a,b] = b; f "abc"', '"old" "new"', 'x = "abc"; x 0 = True']) {
+        Deno.test(`String rejects (checked=${checked}): ${source}`, () => {
+            const i = new Interpreter();
+            if (checked) i.enableChecking();
+            try { i.run(parseDocument(source)); } catch (error) { if (error instanceof APNError) return; throw error; }
+            throw new Error("accepted");
+        });
+    }
+}

@@ -774,7 +774,7 @@ export class Interpreter {
             !(previous.kind === "thunk" && previous.body.t === "placeholder")) {
             let collection = this.dataValue(previous);
             // Another value is assigned to when clauses for with give it slots.
-            if (collection.kind === "record" || collection.kind === "hashmap" || this.isList(collection) || !CALLABLE_KINDS.has(collection.kind) && this.extended("with")) {
+            if (this.listy(collection) || !CALLABLE_KINDS.has(collection.kind) && this.extended("with")) {
                 for (const clause of clauses) {
                     if (clause.params.length !== 1) throw new APNError("runtime", "collection assignment needs one index or field name");
                     const key = this.dataValue(this.eval(this.assignmentKey(clause.params[0])));
@@ -880,13 +880,21 @@ export class Interpreter {
             const source = this.renderString(this.callNative("typeOf", [value]));
             throw new APNError("runtime", `cannot use ${source} where ${this.renderString(this.callNative("typeOf", [slot]))} is required`);
         };
-        if (["string", "char", "bool"].includes(slot.kind) && this.dataValue(value).kind !== slot.kind) mismatch();
+        if (slot.kind === "bool" && this.dataValue(value).kind !== "bool") mismatch();
+        // A String slot takes a String or a list of Chars (String = List Char).
+        if (slot.kind === "string") {
+            const data = this.dataValue(value);
+            if (data.kind === "string") return data;
+            if (!this.isList(data)) mismatch();
+            return this.constructType("String", data);
+        }
         const callable = (v: Value) => v.kind === "closure" ? v.params.length > 0 : ["clauseFn", "native", "contract"].includes(v.kind);
         if (callable(slot) && !callable(this.force(value)) || slot.kind === "io" && this.force(value).kind !== "io") mismatch();
-        if (isNumeric(slot)) {
-            const data = this.dataValue(value);
+        // (A Char slot is a number's: it keeps its type, Char.)
+        if (isNumeric(slot) || slot.kind === "char") {
+            const data = this.numberOf(this.dataValue(value));
             if (!isNumeric(data)) mismatch();
-            return this.constructType(numericType(slot), data);
+            return this.constructType(slot.kind === "char" ? "Char" : numericType(slot), data);
         }
         if (slot.kind === "variant" && slot.family) {
             return this.conform({ kind: "type", name: slot.family.name, family: slot.family, arguments: slot.arguments }, value);
@@ -1005,6 +1013,8 @@ export class Interpreter {
     // number its to instance makes (an Int or a Float).
     private arithmeticValue(value: Value): Value {
         const v = this.dataValue(value);
+        // (A String is its characters, numbers each: "ab" + 1 is ['b','c'].)
+        if (v.kind === "string") return mkList(this.items(v));
         return this.numberOf(this.builtinValue("Int", v) ?? this.builtinValue("Float", v) ?? v);
     }
     // A Char is its code point, a number of type Char (Char is a UInt that is a
@@ -1012,6 +1022,12 @@ export class Interpreter {
     // type is the Char again. (The run stores a Char as its text.)
     numberOf(v: Value): Value {
         return v.kind === "char" ? { kind: "int", v: BigInt(v.v.codePointAt(0)!), typeName: "Char" } : v;
+    }
+    // A list of Chars as the String it is (String = List Char); undefined for
+    // any other list.
+    asString(v: Value): Value | undefined {
+        try { return this.constructType("String", v); }
+        catch (error) { if (error instanceof APNError) return undefined; throw error; }
     }
     charOf(v: Value): Value {
         return v.kind === "int" && v.typeName === "Char" ? { kind: "char", v: String.fromCodePoint(Number(v.v)) } : v;
@@ -1045,6 +1061,13 @@ export class Interpreter {
     // The builtin with: a copy of a list or record with key set to the value
     // (written code, as a list's items are, or one already made).
     private assignItem(collection: Value, key: Value, given: Expr | Value): Value {
+        // A String's item update is its characters', and it stays a String
+        // while they all are Chars (each slot keeps its type, as a list's does).
+        const text = collection.kind === "string" ? collection.v : undefined;
+        if (text !== undefined) {
+            const updated = this.items(this.assignItem(mkList(this.items(mkStr(text))), key, given)).map(c => this.dataValue(c));
+            return updated.every(c => c.kind === "char") ? mkStr(updated.map(c => (c as Extract<Value, { kind: "char" }>).v).join("")) : mkList(updated);
+        }
         const evaluate = () => "kind" in given ? given : this.eval(given);
         // A HashMap's key takes the value: a copy with it set or added at the end.
         const map = collection.kind === "hashmap" ? collection.entries : undefined;
@@ -2050,7 +2073,9 @@ export class Interpreter {
             const r = rThunk;
             if (this.isList(l)) return this.appendCode(l, r);
             const right = this.dataValue(r);
+            // (Two Strings join as their text; a String and another list as lists.)
             if (l.kind === "string" && right.kind === "string") return mkStr(l.v + right.v);
+            if (l.kind === "string" && this.listy(right)) return this.appendCode(l, r);
             throw new APNError("runtime", `cannot apply '++' to ${l.kind} and ${right.kind}`);
         }
         if (op === "&&" || op === "||") {
@@ -2121,10 +2146,7 @@ export class Interpreter {
             return this.charOf(typedPower(l, r));
         }
         switch (op) {
-            case "+":
-                if (l.kind === "string" && r.kind === "string") return mkStr(l.v + r.v);
-                return bad();
-            case "*": case "-": case "/": case "%": return bad();
+            case "+": case "*": case "-": case "/": case "%": return bad();
             case "<": case ">": case "<=": case ">=": {
                 // Values compare as sets (see setOf): a <= b when a's set is
                 // within b's, a < b when b's also has more.
@@ -2280,9 +2302,10 @@ export class Interpreter {
         a = this.dataValue(a); b = this.dataValue(b);
         // Endless lists of types ([Int..]) compare as types, so they end.
         if ((this.repeatedType(a) || this.repeatedType(b)) && this.isTypeValue(a) && this.isTypeValue(b)) return this.sameType(a, b);
-        // (A record is its pairs, in order: [x = 1] == [["x", 1]].)
-        const pairs = (v: Value) => this.isList(v) || v.kind === "record" || v.kind === "hashmap";
-        if (pairs(a) && pairs(b)) {
+        // (A record is its pairs, in order: [x = 1] == [["x", 1]]; a String
+        // its characters, two compared as their text.)
+        if (a.kind === "string" && b.kind === "string") return a.v === b.v;
+        if (this.listy(a) && this.listy(b)) {
             for (;;) {
                 checkInterrupt();
                 const x = this.cell(a), y = this.cell(b);
@@ -2586,12 +2609,14 @@ export class Interpreter {
         if (isNumeric(f)) throw new APNError("runtime", "cannot apply a number", {
             hint: "use a type constructor such as `Int`, or replace a default inside a template",
         });
-        if (["string", "char", "bool"].includes(f.kind)) throw new APNError("runtime", `cannot apply a ${f.kind}`, {
+        if (["char", "bool"].includes(f.kind)) throw new APNError("runtime", `cannot apply a ${f.kind}`, {
             hint: "use a type constructor or replace a default inside a template",
         });
         if (CALLABLE_KINDS.has(f.kind)) throw new APNError("runtime", "get takes a value, not a function");
         switch (f.kind) {
             case "hashmap": return this.mapLookup(f, this.demand(arg));
+            // (A String is its characters: "hi" 1 is 'i'.)
+            case "string":
             case "list":
             case "lazyList":
             case "cons":
@@ -2726,6 +2751,11 @@ export class Interpreter {
     isList(v: Value): boolean {
         return v.kind === "list" || v.kind === "lazyList" || v.kind === "cons" || v.kind === "range" || v.kind === "floatRange" || v.kind === "rationalRange";
     }
+    // A value that is a list as stored or as its definition says: a record
+    // (its pairs), a HashMap (its entries) and a String (its characters).
+    listy(v: Value): boolean {
+        return this.isList(v) || v.kind === "record" || v.kind === "hashmap" || v.kind === "string";
+    }
 
     fromArray(values: Value[], i = 0): Value {
         return this.defer(() => i === values.length ? mkList([]) : {
@@ -2762,6 +2792,13 @@ export class Interpreter {
         // A record is the list of its [key, value] pairs, as a HashMap is.
         if (v.kind === "record") return v.v.length ? { head: mkList([mkStr(v.v[0][0]), v.v[0][1]]), tail: { ...v, v: v.v.slice(1) } } : null;
         if (v.kind === "hashmap") return this.cell(mkList([...v.entries.values()].map(([key, value]) => mkList([key, value]))));
+        // A String is its characters (String = List Char), stored as its text.
+        if (v.kind === "string") {
+            const first = v.v.codePointAt(0);
+            if (first === undefined) return null;
+            const c = String.fromCodePoint(first);
+            return { head: { kind: "char", v: c }, tail: mkStr(v.v.slice(c.length)) };
+        }
         if (v.kind === "pending") this.ambiguous(v);
         throw new APNError("runtime", `expected a list, got ${v.kind}`);
     }
@@ -3055,6 +3092,7 @@ export class Interpreter {
             const cell = this.cell(xs);
             if (cell === null) {
                 const right = this.code(this.dataValue(ys));
+                if (right.kind === "string") return right;
                 if (!this.isList(right)) throw new APNError("runtime", "list append expects a list");
                 return this.rerun(right, { before, changed: new Set(before.keys()) });
             }
@@ -3173,8 +3211,10 @@ export class Interpreter {
         // (A record is the list of its pairs.)
         const list = given.kind === "record" ? mkList(given.v.map(([key, field]) => mkList([mkStr(key), field])))
             : given.kind === "hashmap" ? mkList([...given.entries.values()].map(([key, value]) => mkList([key, value]))) : realized;
-        if (!this.isList(list)) throw new APNError("runtime", `List constructor expects a List value`);
-        const element = type.arguments?.[0];
+        if (!this.isList(list) && given.kind !== "string") throw new APNError("runtime", `List constructor expects a List value`);
+        const element = type.arguments?.[0], read = element && this.reference(element);
+        // (A String is a List Char as it is: it keeps its name.)
+        if (given.kind === "string" && (!read || read.kind === "type" && (read.name === "Char" || read.variable) && !read.family)) return given;
         if (!element) return list;
         const mapped = this.mapList({ kind: "native", name: "<List>", arity: 1, applied: [], invoke: ([x]) => this.conform(element, x) }, list);
         // Marked once forced too (its outer cell is what a Mutable is given).
@@ -3497,7 +3537,7 @@ export class Interpreter {
     // The monad a concrete monadic value belongs to, as a type: IO, List, or its variant type.
     monadTypeOf(v: Value): Extract<Value, { kind: "type" }> | undefined {
         if (v.kind === "io") return { kind: "type", name: "IO" };
-        if (this.isList(v) || v.kind === "record" || v.kind === "hashmap") return { kind: "type", name: "List" };
+        if (this.listy(v)) return { kind: "type", name: "List" };
         if (v.kind === "variant" && v.family) return { kind: "type", name: v.family.name, family: v.family };
         return undefined;
     }
@@ -3560,7 +3600,7 @@ export class Interpreter {
         const k: Value = given.kind === "native" && given.name === "<bind>" && this.bindTargets.get(given) === this.headOf(target) ? given
             : { kind: "native", name: "<bind>", arity: 1, applied: [], invoke: ([x]) => this.inMonad(this.continueWith(f, x), target) };
         this.bindTargets.set(k, this.headOf(target));
-        if ((this.isList(m) || m.kind === "record" || m.kind === "hashmap") && this.preludeListBind()) return this.concatMapList(m, k);
+        if (this.listy(m) && this.preludeListBind()) return this.concatMapList(m, k);
         const result = this.instance(">>=", [m, k]);
         if (result) return result;
         throw new APNError("runtime", `no >>= instance for ${valueToString(target)}`, { hint: "define one, such as `Some x >>= f = f x`" });
@@ -3600,7 +3640,7 @@ export class Interpreter {
     mapValue(f: Value, mIn: Value): Value {
         const m = this.dataValue(mIn);
         if (m.kind === "io") return { kind: "io", run: () => this.apply(f, this.runIO(m)) };
-        if (this.isList(m) || m.kind === "record" || m.kind === "hashmap") return this.mapList(f, m);
+        if (this.listy(m)) return this.mapList(f, m);
         if (m.kind !== "pending") {
             if (!this.monadTypeOf(m)) throw new APNError("runtime", `map needs an action, a list or a functor, not a ${m.kind}`);
             const result = this.instance("map", [f, m]);
@@ -3713,6 +3753,7 @@ export class Interpreter {
             const cell = this.cell(xs);
             if (cell === null) {
                 const right = this.code(this.dataValue(ys));
+                if (right.kind === "string") return right;
                 if (!this.isList(right)) throw new APNError("runtime", "list append expects a list");
                 return right;
             }
@@ -3916,6 +3957,7 @@ export class Interpreter {
         if (undecided.kind === "pending" && undecided.step.op === "call") return 1;
         const value = pattern.tag === "Mutable" ? this.reference(arg) : pattern.tag === "Type" ? this.demand(arg) : this.dataValue(arg);
         if (SCALAR_TYPES.has(pattern.tag) && this.builtinValue(pattern.tag, value)) return -1;
+        if (pattern.tag === "String" && this.isList(value)) return this.asString(value) ? 0 : -1000;
         if (!NUMERIC_TYPES.includes(pattern.tag)) return this.matchesValueType(pattern.tag, value) ? 1 : -1000;
         const number = this.numberOf(value);
         if (!isNumeric(number)) return -1000;
@@ -4560,6 +4602,8 @@ export class Interpreter {
         // A record, where a list is asked, is the list of its pairs.
         if (value.kind === "record" && this.listShaped(type)) value = mkList(value.v.map(([key, field]) => mkList([mkStr(key), field])));
         if (value.kind === "hashmap" && this.listShaped(type)) value = mkList([...value.entries.values()].map(([key, field]) => mkList([key, field])));
+        // (So is a String, of its characters.)
+        if (value.kind === "string" && this.listShaped(type)) value = mkList(this.items(value));
         // A refinement's values are its base's for which its condition holds.
         if (type.kind === "type" && type.refine) {
             return this.belongsToType(type.choices![0], value, met) && this.truthy(this.demand(this.apply(type.refine, value)));
@@ -4985,7 +5029,7 @@ export class Interpreter {
         if (name === "Pointer") return value.kind === "pointer";
         if (name === "Mutable") return value.kind === "mutable";
         if (isNumeric(value) || value.kind === "char") return NUMERIC_TYPES.includes(name) && matchesType(name, this.numberOf(value) as Numeric);
-        if (name === "List") return this.isList(value) || value.kind === "record" || value.kind === "hashmap";
+        if (name === "List") return this.listy(value);
         if (name === "Type" && value.kind === "functionType") return true;
         // A type still taking parameters is a function of types (Option).
         if (name === "Function") return value.kind === "contract" || value.kind === "closure" || value.kind === "clauseFn" || value.kind === "native" || value.kind === "type" && this.typeArity(value) > 0;
@@ -5053,7 +5097,7 @@ export class Interpreter {
         value = this.dataValue(value);
         if (isNumeric(value) || value.kind === "char") return "number:" + numericHash(this.numberOf(value) as Numeric);
         if (value.kind === "string" || value.kind === "bool") return value.kind + ":" + String(value.v);
-        if (this.isList(value) || value.kind === "record" || value.kind === "hashmap") return `list:[${[...this.elements(value)].map(item => this.hashKey(item)).join(",")}]`;
+        if (this.listy(value)) return `list:[${[...this.elements(value)].map(item => this.hashKey(item)).join(",")}]`;
         if (value.kind === "variant") return `variant:${value.tag}(${value.v.map(item => this.hashKey(item)).join(",")})`;
         if (value.kind === "type") return "type:" + this.renderString(value);
         throw new APNError("runtime", `a HashMap's keys are compared: ${this.typeText(value)} has no equality`, { hint: "use numbers, text, lists, records or constructors as keys" });
@@ -6710,7 +6754,7 @@ export class Interpreter {
         }
         if (base.name === "List" && args.length === 1 && (args[0].t === "var" || args[0].t === "placeholder")) {
             const list = this.dataValue(v);
-            if (!this.isList(list)) return false;
+            if (!this.listy(list)) return false;
             if (args[0].t === "var") {
                 const name = args[0].name;
                 binds.set(name, this.defer(() => this.readElementType(this.elementType(list))));
@@ -6753,6 +6797,7 @@ export class Interpreter {
     // The type typeOf describes for a list's elements: Int for [1,2].
     private elementType(list: Value): Value {
         const value = this.demand(list);
+        if (value.kind === "string") return { kind: "type", name: "Char" };
         const text = value.kind === "list" && value.schema ? this.typeText(value).replace(/^List /, "").replace(/^\((.*)\)$/, "$1") : describeElementType(value);
         const name = /^[A-Z][A-Za-z0-9_]*/.exec(text)?.[0];
         return name && name === text && TYPE_NAMES.includes(name) ? { kind: "type", name } : { kind: "type", inspect: true, name: name ?? "$any", description: text };
@@ -6893,7 +6938,7 @@ export class Interpreter {
                 // (as a variant's payload is), so an infinite one matches too.
                 if (this.isListType(type)) {
                     const given = this.demand(actual);
-                    if (!this.isList(given) && given.kind !== "record" && given.kind !== "hashmap") return false;
+                    if (!this.listy(given)) return false;
                     return this.matchPattern(p.value, this.conform(type, actual), binds);
                 }
                 // (IO T a): an action, what it yields made a T when it runs; a
@@ -7071,7 +7116,8 @@ export class Interpreter {
                 }
                 // [a, b] is a :: b :: [], with what :: means here.
                 if (p.v.length && !this.preludeCons()) return this.matchPattern(listPatternExpansion(p), v, binds);
-                if (!this.isList(v)) return false;
+                // (A String is its characters: [a,b] takes "hi".)
+                if (!this.isList(v) && v.kind !== "string") return false;
                 let rest: Value = v;
                 for (const pattern of p.v) {
                     const cell = this.cell(rest);
@@ -7113,7 +7159,7 @@ export class Interpreter {
                     throw new APNError("runtime", `'${op}' is not a constructor, so it cannot take a value apart`, { hint: `bind it to a two-field constructor, as in \`(${op}) = Cons\`` });
                 }
                 if (!named && op !== "::") throw new APNError("runtime", `unbound operator '${op}'`, { hint: `bind it to a two-field constructor, as in \`(${op}) = Cons\`` });
-                if (!this.isList(v)) return false;
+                if (!this.isList(v) && v.kind !== "string") return false;
                 const cell = this.cell(v);
                 if (cell === null) return false;
                 const nm = new Map(binds);
@@ -7125,6 +7171,9 @@ export class Interpreter {
                 if (bare !== undefined) return !!bare;
                 if (this.builtinType(p.tag)) {
                     if (p.args.length !== 1) return false;
+                    // (String x takes a list of Chars as the String it is.)
+                    const text = p.tag === "String" && this.isList(v) ? this.asString(v) : undefined;
+                    if (text) return this.matchPattern(p.args[0], text, binds);
                     if (!NUMERIC_TYPES.includes(p.tag)) return this.matchesValueType(p.tag, v) && this.matchPattern(p.args[0], v, binds);
                     const number = this.numberOf(v);
                     if (!isNumeric(number)) return false;

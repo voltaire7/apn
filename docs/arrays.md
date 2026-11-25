@@ -24,8 +24,8 @@ operated on elementwise, but rectangular matrix helpers reject ragged matrices.
 
 Leaves must be numbers. Numeric type promotion, exact fractions, complex values,
 overflow checks and division-by-zero behavior are the same as scalar arithmetic.
-Scalar string `+` still concatenates strings; arrays of strings are not numeric
-arrays. Record type placeholders must be initialized before arithmetic demands
+A String is a list of Chars, which are numbers, so `+` on one adds item by
+item (`"ab" + 1` is `['b','c']`); `++` joins text. Record type placeholders must be initialized before arithmetic demands
 them. Lists and records cannot be implicitly mixed.
 
 Results are lazy. Shape and leaf errors appear when the relevant portion is

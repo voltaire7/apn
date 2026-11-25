@@ -50,7 +50,7 @@ for (const [source, error] of [
     ['[[1,2],[3,4]] + [10,20]', 'matching shapes'],
     ['[x = 1] + [y = 2]', 'record keys differ'],
     ['[1] + [x = 1]', 'matching shapes'],
-    ['["a"] + ["b"]', 'numeric leaves'],
+    ['[True] + [False]', 'numeric leaves'],
     ['[(127 : Int8)] + 1', 'out of range'],
     ['[1] / 0', 'zero'],
     ['std <- import "std"; [..] = std.array\ntranspose [[1],[2,3]]', 'equal row lengths'],

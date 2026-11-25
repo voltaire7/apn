@@ -28,7 +28,7 @@ for (
 for (
     const [source, message] of [
         ['f (x : Int) = x; f "bad"', "cannot use String"],
-        ['f 0 = 1; f 1 = "bad"; f 1 + 1', "cannot combine String and Int"],
+        ['f 0 = 1; f 1 = True; f 1 + 1', "cannot combine Bool and Int"],
         ["f x = x.x; f [y = 2]", "missing field"],
         ["([1,2] : Vect 3 Int)", "length mismatch"],
         ["([1,2,3] : Vect 2 Int)", "length mismatch"],
@@ -160,7 +160,7 @@ Deno.test("first-class builtin constructors remain checkable", () => {
     if (result.issues.length) throw new Error(JSON.stringify(result));
 });
 Deno.test("known primitive arithmetic errors are static", () => {
-    if (!checkSource('1 + "bad"').issues.length) throw new Error("known error escaped checking");
+    if (!checkSource('1 + True').issues.length) throw new Error("known error escaped checking");
     if (checkSource('"a" + "b"').issues.length) throw new Error("string addition was rejected");
 });
 Deno.test("affine indices substitute multiple arguments", () => {

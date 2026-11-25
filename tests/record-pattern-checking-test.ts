@@ -66,7 +66,7 @@ for (const [source, expected] of [
     const result = interpreter.renderString(interpreter.run(parse(source)));
     if (result !== expected) throw new Error(`expected ${expected}, got ${result}`);
 });
-for (const source of ["[x, z] = [y = 2, x = 1]; x", '[x, y] = [y = "b", x = 1]; y + 1']) {
+for (const source of ["[x, z] = [y = 2, x = 1]; x", '[x, y] = [y = True, x = 1]; y + 1']) {
     Deno.test(`checked standalone list pattern rejects: ${source}`, () => {
         const interpreter = new Interpreter();
         interpreter.enableChecking();

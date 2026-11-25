@@ -1006,6 +1006,16 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (items?.length) { const values = items.map(pairOf); return values.every(v => v) ? union(values as Ty[]) : undefined; }
         return pairOf(element);
     }
+    // A String where a list is asked: its characters (String = List Char).
+    const isString = (t: Ty) => t.k === "atom" && t.name === "String";
+    const characters = (): Ty => list(atom("Char"));
+    // A String whose text is known, where a list is asked: that many Chars
+    // ("ab" for [a,b]); the entry as it is otherwise.
+    const asCharacters = (argument: Entry): Entry => {
+        if (!isString(resolve(argument.type)) || typeof argument.string !== "string") return argument;
+        const items = [...argument.string].map(() => atom("Char"));
+        return { ...argument, type: { k: "list", element: atom("Char"), items, length: constant(BigInt(items.length)) } };
+    };
     // A record's [key, value] pairs, in order (of a length the run finds when
     // it has fields not known yet).
     function recordPairs(r: Extract<Ty, { k: "record" }>): Ty {
@@ -1182,6 +1192,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (a.k === "map") a = list(pair(a.key, a.value));
         if (b?.k === "record" && !(b.fields instanceof ModuleFields) && op !== "bind" && op !== "then") b = resolve(recordPairs(b));
         if (b?.k === "map" && op !== "bind" && op !== "then") b = list(pair(b.key, b.value));
+        if (isString(a)) a = characters();
+        if (b && isString(b) && op !== "bind" && op !== "then") b = characters();
         if (op === "bindFlip") return monadicType("bind", b, a);
         // m >>= k needs a function k; a value to run after m is m >> k.
         if (op === "bind" && ["list", "variant", "atom", "record", "map"].includes(resolve(b).k)) {
@@ -1531,8 +1543,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return problem(`cannot compare ${text(a)} and ${text(b)}`, undefined, hint);
         }
         if (t.op === "++") {
+            if (isString(a) && isString(b)) return a;
+            // (A String beside a list is its characters.)
+            if (isString(a) && b.k === "list" || a.k === "list" && isString(b)) return list(union([isString(a) ? atom("Char") : (a as Extract<Ty, { k: "list" }>).element, isString(b) ? atom("Char") : (b as Extract<Ty, { k: "list" }>).element]));
             if (a.k === "list" && b.k === "list") return list(union([a.element, b.element]));
-            if (a.k === "atom" && b.k === "atom" && a.name === "String" && b.name === "String") return a;
             return problem(`cannot append ${text(a)} and ${text(b)}`);
         }
         if (t.op === "*" && (callable(a) || callable(b))) {
@@ -1685,6 +1699,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A record is the list of its [key, value] pairs, where a list is asked, as a HashMap is.
         if (expected.k === "list" && actual.k === "record" && !(actual.fields instanceof ModuleFields)) return unify(expected, recordPairs(actual), e, seen);
         if (expected.k === "list" && actual.k === "map") return unify(expected, list(pair(actual.key, actual.value)), e, seen);
+        // A String is a List Char, and a list of Chars a String.
+        if (expected.k === "list" && isString(actual)) return unify(expected, characters(), e, seen);
+        if (isString(expected) && actual.k === "list") {
+            for (const item of actual.items ?? [actual.element]) unify(atom("Char"), item, e, seen);
+            return;
+        }
         if (expected.k === "ctor" || actual.k === "ctor") {
             if (expected.k === "ctor" && actual.k === "ctor" && expected.name === actual.name && expected.args.length === actual.args.length) {
                 expected.args.forEach((x, n) => unify(x, actual.args[n], e, seen));
@@ -2998,6 +3018,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const t = resolve(target), a = resolve(actual);
         // A record, where a list is asked, is the list of its pairs.
         if (t.k === "list" && a.k === "record" && !(a.fields instanceof ModuleFields)) return convert(t, recordPairs(a), e, explicitFloat, seen, runtimeProjection, matching);
+        // A String, where a list is asked, is its characters; a list of Chars
+        // where a String is, the String it is.
+        if (t.k === "list" && isString(a)) return convert(t, characters(), e, explicitFloat, seen, runtimeProjection, matching);
+        if (isString(t) && a.k === "list") {
+            for (const item of a.items ?? [a.element]) convert(atom("Char"), item, e, explicitFloat, seen, runtimeProjection, matching);
+            return target;
+        }
         if (t.k === "list" && a.k === "map") return convert(t, list(pair(a.key, a.value)), e, explicitFloat, seen, runtimeProjection, matching);
         // Anything converts to Dynamic, without deciding its own type.
         if (isExplicit(t)) return target;
@@ -3246,6 +3273,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         // Numeric/array arithmetic and callable * retain runtime overload selection.
         const x = resolve(a), y = resolve(b);
+        // (A String's arithmetic is its characters', numbers each: "ab" + 1.)
+        if (["+", "-", "*", "/", "%", "^"].includes(op) && (isString(x) || isString(y)) && ![x, y].some(t => ["fn", "overload", "intrinsic"].includes(t.k))) {
+            return operatorApplication(op, isString(x) ? { type: characters() } : left, isString(y) ? { type: characters() } : right, e);
+        }
         if (x.k === "atom" && y.k === "atom") {
             if (NUMERIC_TYPES.includes(x.name) && NUMERIC_TYPES.includes(y.name)) {
                 const mixed = mixedTypes(x, y);
@@ -3253,7 +3284,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (["Float", "Float32", "Float64"].includes(x.name) && ["Float", "Float32", "Float64"].includes(y.name)) return x.name === "Float" ? y : x;
                 return arithmeticResult(op, x, y, lossless);
             }
-            if (op === "+" && x.name === "String" && y.name === "String") return atom("String");
             return problem(`operator '${op}' cannot combine ${text(x)} and ${text(y)}`, e);
         }
         if (op !== "*" && op !== "\\" && (x.k === "type" || y.k === "type")) {
@@ -3445,6 +3475,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // is the one given.)
         if (param.p === "var") { const { ref: _, ...given } = argument; scope.set(param.name, given); return; }
         if (param.p === "wildcard") return;
+        if (param.p === "list" || param.p === "cons") argument = asCharacters(argument);
         const a = resolve(argument.type);
         // A list whose items are known: its first and the rest, each its own,
         // with what is known of its value.
@@ -4075,6 +4106,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return result;
         }
         if (f.k === "fn") {
+            if (resolve(f.input).k === "list") argument = asCharacters(argument);
             const at = parameterAt(f), given = resolve(argument.type);
             const params = at >= 0 ? f.summary!.clauses[0].params : [], param = params[at];
             // (A list known empty too: it has nothing to take apart.)
@@ -4313,7 +4345,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (f.k === "atom" && NUMERIC_TYPES.includes(f.name)) {
             return problem("cannot apply a number", e, e.t === "unop" && e.op === "neg" ? "to subtract, space the '-' on both sides (x - 1)" : undefined);
         }
-        if (f.k === "atom" && ["String", "Char", "Bool"].includes(f.name)) {
+        // A String applied is indexed as its characters are ("hi" 1).
+        if (isString(f)) return application(characters(), argument, e);
+        if (f.k === "atom" && ["Char", "Bool"].includes(f.name)) {
             return problem(`cannot apply ${text(f)}`, e);
         }
         // A value known only as some Function (a Function field): any argument,

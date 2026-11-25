@@ -140,17 +140,28 @@ because every `Int` is in the union.
 ## Text
 
 A `Char` is a sized integer, as `UInt8` is: a `UInt` that is a Unicode
-scalar value, a code point that is no surrogate.
+scalar value, a code point that is no surrogate. A `String` is a list of them,
+a name for `List Char` as `Int8` is for its range of `Int`.
 
 ```apn
 Char = (n : UInt) | n <= 1114111 && (n < 55296 || n > 57343)
-String = | Text (List Char)  # text: to (List Char) and from (List Char) convert
+String = List Char
 ```
 
 So a `Char` is its number, printed as the character (`'a'`): `'a' == 97`,
 `(97 : Char)` is `'a'`, `to Int 'a'` is `97`, and `'a' + 1` is `'b'`, a `Char`
 as `(1 : UInt8) + 2` is a `UInt8`. A result that is no scalar value is an error
 (`(0 : Char) - 1`, `(55296 : Char)`), never a wrapped one.
+
+So a `String` is its characters, printed as text (`"hi"`): what takes a list
+takes it (`head "hi"` is `'h'`, `"hi" 1` is `'i'`, `c :: cs` and `[a,b]` take
+it apart, `map`, `filter` and `length`), `"hi" == ['h','i']`, and `"" == []`.
+`typeOf "hi"` is `String`, and the name stays through an item update (`s 0 =
+'H'`) and `++` of two Strings; `++` with another list and `map` give a list.
+A list of Chars is a `String` where one is asked (`(['h','i'] : String)` and a
+typed `(s : String)` take it), as `(x : Int8)` takes `5`. Its arithmetic is a
+list's, item by item (`"ab" + 1` is `['b','c']`); `++` joins text. The run
+stores a `String` as its text and a `Char` as its character.
 
 ## Records, functions and types
 

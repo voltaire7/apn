@@ -1,7 +1,7 @@
 import { Interpreter } from "../src/interp.ts";
 import { parseDocument } from "../src/parser.ts";
 import { checkSource } from "../src/type-checker.ts";
-for (const source of ['"old" "new"', "'a' 'b'", '"old" missing', "'a' missing", 'x = "old"; x "new"', '0 123']) {
+for (const source of ["'a' 'b'", "'a' missing", '0 123']) {
     Deno.test(`reject scalar application: ${source}`, () => {
         const i = new Interpreter();
         try { i.renderString(i.run(parseDocument(source))); } catch (e) {
@@ -37,7 +37,7 @@ for (const [source, expected] of [
     const actual = i.renderString(i.run(parseDocument(source)));
     if (actual !== expected) throw new Error(actual);
 });
-for (const source of ['[x = False] [x = 1]', '[x = "old"] [x = 1]', "[x = 'a'] [x = 1]"]) {
+for (const source of ['[x = False] [x = 1]', '[x = "old"] [x = 1]']) {
     Deno.test(`scalar default retains kind: ${source}`, () => {
         const i = new Interpreter();
         try { i.renderString(i.run(parseDocument(source))); } catch (e) {
@@ -48,7 +48,26 @@ for (const source of ['[x = False] [x = 1]', '[x = "old"] [x = 1]', "[x = 'a'] [
     });
 }
 Deno.test('gradual checker rejects scalar calls', () => {
-    for (const source of ['"old" "new"', "'a' 'b'", '0 123']) {
+    for (const source of ["'a' 'b'", '0 123']) {
         if (!checkSource(source).issues.some(x => x.message.includes('cannot apply'))) throw new Error(source);
     }
+});
+
+// A String is its characters: applied to a key, it is looked up as an
+// association list, which a list of Chars is not; a Char slot takes a number.
+for (const source of ['"old" "new"', 'x = "old"; x "new"']) {
+    Deno.test(`a String's key lookup fails: ${source}`, () => {
+        const i = new Interpreter();
+        try { i.renderString(i.run(parseDocument(source))); } catch (e) {
+            if (!String(e).includes('association lookup')) throw e;
+            if (!checkSource(source).issues.some(x => x.message.includes('association lookup'))) throw new Error("check accepted it");
+            return;
+        }
+        throw new Error('expected lookup failure');
+    });
+}
+Deno.test("a Char slot takes a number", () => {
+    const i = new Interpreter();
+    const actual = i.renderString(i.run(parseDocument("[x = 'a'] [x = 98]")));
+    if (actual !== "[x = 'b']") throw new Error(actual);
 });

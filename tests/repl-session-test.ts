@@ -42,13 +42,13 @@ Deno.test("a session inside a function sees its names, typed by their values", (
         'x = "later"', "r <- f 3", "print r",
     ].join("\n");
     const { echoes, printed } = session(program, [[
-        "n + 1", 'n ++ "a"', "take 2 xs", "h 2", 'h "a"', "x", 'x ++ "a"', "m = 10", "m",
+        "n + 1", 'n ++ "a"', "take 2 xs", "h 2", "h True", "x", 'x ++ "a"', "m = 10", "m",
     ]]);
     equal(echoes, [
         // n is the literal 3 passed in: an Int, exactly.
         "4", "type error: cannot append Int and String",
         // A range is data; h, a function, is Dynamic: its misuse fails when run.
-        "[1,2]", "5", "runtime error: cannot apply '+' to string and int",
+        "[1,2]", "5", "runtime error: cannot apply '+' to bool and int",
         // f sees the x before x = "later".
         "1", "type error: cannot append Int and String",
         "10", "10",
