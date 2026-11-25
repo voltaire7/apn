@@ -293,7 +293,7 @@ Behavior: `docs/templates-and-types.md`, `docs/zero-initialization.md`.
   zero. Detect recursive defaults.
 - Variant family identity stays separate from constructor names.
 - Tests: `tests/template-application-test.ts`, `tests/zero-initialization-test.ts`,
-  `tests/collection-shapes-test.ts`, `tests/named-dotted-application-test.ts`.
+  `tests/collection-shapes-test.ts`, `tests/keyed-dot-test.ts`.
 
 ## Patterns
 
