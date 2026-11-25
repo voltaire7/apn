@@ -1808,11 +1808,10 @@ export class Interpreter {
                         // eager: read the OLD record and the RHS fully BEFORE building the
                         // new one, so  vec.[x, y] = vec.[y, x]  swaps correctly
                         let rec = this.dataValue(this.eval(e.rec));
-                        const parents: Array<[Extract<Value, { kind: "record" }>, string]> = [];
+                        const parents: Array<[Value, string]> = [];
                         for (const key of e.path ?? []) {
-                            if (rec.kind !== "record") throw new APNError("runtime", "nested field assignment requires a record");
                             parents.push([rec, key]);
-                            rec = this.dataValue(this.recordField(rec, key));
+                            rec = this.dataValue(this.keyedField(rec, key));
                         }
                         // code.x = v replaces the item binding x with x = v, as
                         // code i = (x = v) does: the items after it see it.
@@ -1820,11 +1819,7 @@ export class Interpreter {
                         const binding = this.isList(rec) && e.entries.length === 1 && !e.aliases && only !== "_" ? this.codeBinding(rec, only) : undefined;
                         if (binding) {
                             if (!binding.simple) throw new APNError("runtime", `code binds ${only} with a pattern; replace the item: code ${binding.index} = (...)`);
-                            r = this.setIndex(rec, binding.index, mkList([]), { expr: bindingItem(only, e.value), env: this.env });
-                            for (let n = parents.length - 1; n >= 0; n--) {
-                                const [parent, key] = parents[n], child = r;
-                                r = this.keepType(parent, { kind: "record", v: parent.v.map(([k, v]) => [k, k === key ? child : v]) });
-                            }
+                            r = this.rebuild(parents, this.setIndex(rec, binding.index, mkList([]), { expr: bindingItem(only, e.value), env: this.env }));
                             break;
                         }
                         if (this.isList(rec) && this.cell(rec) === null) rec = mkList([]);
@@ -1833,7 +1828,7 @@ export class Interpreter {
                         else if (rec.kind === "list" && rec.v.length === 0) base = []; // [] seeds a record
                         // Another value's fields are set by with v "x" value, when clauses for
                         // with give it fields; a list's or HashMap's by the builtin with.
-                        const keyed = base === null && (this.isList(rec) || rec.kind === "hashmap") && !e.aliases && e.entries[0] !== "_";
+                        const keyed = base === null && (this.isList(rec) || rec.kind === "hashmap") && e.entries[0] !== "_";
                         const through = base === null && !CALLABLE_KINDS.has(rec.kind) ? this.extended("with") : undefined;
                         if (base === null && !through && !keyed) {
                             throw new APNError("runtime", `cannot set a field on a ${rec.kind}`, {
@@ -1845,12 +1840,7 @@ export class Interpreter {
                             const spread = this.dataValue(this.eval(expression));
                             if (spread.kind !== "record") throw new APNError("runtime", "record flattening expects a record");
                             if (rec.kind === "record") for (const [key] of spread.v) if (!base.some(([k]) => k === key)) this.newField(rec, key);
-                            let merged: Value = this.keepType(rec, { kind: "record", v: [...new Map([...base!, ...spread.v])] });
-                            for (let n = parents.length - 1; n >= 0; n--) {
-                                const [parent, key] = parents[n];
-                                merged = this.keepType(parent, { kind: "record", v: parent.v.map(([k, v]) => [k, k === key ? merged : v]) });
-                            }
-                            r = merged;
+                            r = this.rebuild(parents, this.keepType(rec, { kind: "record", v: [...new Map([...base!, ...spread.v])] }));
                             break;
                         }
                         const rhsValue = this.demand(this.eval(e.value));
@@ -1859,7 +1849,8 @@ export class Interpreter {
                             if (rhsValue.kind !== "record") throw new APNError("runtime", "renamed selection assignment requires a record");
                             const fields = new Map(rhsValue.v);
                             if (fields.size !== new Set(e.aliases).size || e.aliases.some(name => !fields.has(name))) throw new APNError("runtime", "replacement fields must match selection names");
-                            if (e.entries.some(name => !base!.some(([key]) => key === name))) throw new APNError("runtime", "renamed selection requires existing fields");
+                            const present = (name: string) => base ? base.some(([key]) => key === name) : this.hasKey(rec, name);
+                            if (e.entries.some(name => !present(name))) throw new APNError("runtime", "renamed selection requires existing fields");
                             rhs = mkList(e.aliases.map(name => this.demand(fields.get(name)!)));
                         }
                         if (rhs.kind !== "list") {
@@ -1875,10 +1866,7 @@ export class Interpreter {
                         r = through ? e.entries.reduce((v, key, i) => this.apply(this.apply(this.apply(through, v), mkStr(key)), values[i]), rec)
                             : keyed ? e.entries.reduce((v, key, i) => this.assignItem(v, mkStr(key), values[i]), rec)
                             : this.assignFields(rec.kind === "record" ? rec : { kind: "record", v: base! }, e.entries.map((key, i) => [key, values[i]]));
-                        for (let i = parents.length - 1; i >= 0; i--) {
-                            const [parent, key] = parents[i];
-                            r = this.keepType(parent, { kind: "record", v: parent.v.map(([name, value]) => [name, name === key ? r : value]) });
-                        }
+                        r = this.rebuild(parents, r);
                         break;
                     }
                     case "pipe": {
@@ -5687,6 +5675,25 @@ export class Interpreter {
         }));
     }
 
+    // A step of a nested assignment's path (r.a.b = v): a record's field, or
+    // on a list or HashMap get v "key", as v.key reads it.
+    private keyedField(rec: Value, key: string): Value {
+        if (rec.kind === "record") return this.recordField(rec, key);
+        if (this.isList(rec)) return this.codeBinding(rec, key)?.value ?? this.associationValue(rec, key);
+        if (rec.kind === "hashmap") return this.mapLookup(rec, mkStr(key));
+        throw new APNError("runtime", "nested field assignment requires a record, list or HashMap");
+    }
+    // The containers of a nested assignment's path, each with its key's value
+    // replaced by the one inside it, innermost first.
+    private rebuild(parents: Array<[Value, string]>, child: Value): Value {
+        return parents.reduceRight((inner, [parent, key]) => parent.kind === "record"
+            ? this.keepType(parent, { kind: "record", v: parent.v.map(([name, value]) => [name, name === key ? inner : value]) })
+            : this.assignItem(parent, mkStr(key), inner), child);
+    }
+    private hasKey(rec: Value, key: string): boolean {
+        try { this.keyedField(rec, key); return true; }
+        catch (error) { if (error instanceof APNError) return false; throw error; }
+    }
     // (Its last pair with the key, as code's last binding of a name is read.)
     private associationValue(entries: Value, key: string): Value {
         let rest = entries, found: Value | undefined;

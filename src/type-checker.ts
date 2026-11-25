@@ -4909,10 +4909,23 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     unify(t, { k: "record", fields: new Map(key === undefined ? [] : [[key, variable()]]), open: true }, e);
                     return resolve(t);
                 };
-                for (const key of e.path ?? []) {
+                const path = e.path ?? [];
+                const reached = (n: number): Expr => path.slice(0, n).reduce<Expr>((r, field) => ({ t: "recordAccess", rec: r, field }), e.rec);
+                for (const [n, key] of path.entries()) {
                     if (rec.k === "dynamic") return unknown();
                     if (rec.k === "var") rec = opened(rec, key);
-                    if (rec.k !== "record") return problem("nested field assignment requires a record", e);
+                    // Through a list or HashMap, r.a.b = v is r.a = [r.a.b = v]
+                    // there: its key takes the inner assignment's value.
+                    if (rec.k === "list" || rec.k === "map") {
+                        const inner: Expr = { ...e, rec: reached(n + 1), path: path.slice(n + 1) };
+                        let result = infer({ t: "setFields", rec: reached(n), entries: [key], value: { t: "list", v: [inner] } }, scope);
+                        for (let i = parents.length - 1; i >= 0; i--) {
+                            const [parent, field, open] = parents[i];
+                            result = { k: "record", fields: new Map([...parent, [field, result]]), open };
+                        }
+                        return result;
+                    }
+                    if (rec.k !== "record") return problem("nested field assignment requires a record, list or HashMap", e);
                     if (!rec.fields.has(key) && rec.open) rec.fields.set(key, variable());
                     const child = rec.fields.get(key);
                     if (!child) return problem(`missing field '${key}'`, e);
@@ -4945,11 +4958,18 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     }
                     return made;
                 }
-                // On a list or HashMap, v.[x,y] = vs is v "x" = vs 0, then v "y" = vs 1.
-                if ((rec.k === "list" || rec.k === "map") && !parents.length && !e.aliases && e.entries[0] !== "_") {
-                    const item = (n: number): Expr => e.value.t === "list" ? e.value.v[n] : { t: "app", f: e.value, a: { t: "int", v: BigInt(n) } };
-                    if (e.value.t === "list" && e.value.v.length !== e.entries.length) return problem(`${e.entries.length} fields need ${e.entries.length} values`, e);
-                    return infer(e.entries.reduce((target: Expr, key, n) => ({ t: "setItem", rec: target, index: { t: "string", v: key }, value: item(n) }), e.rec), scope);
+                // On a list or HashMap, v.[x,y] = vs is v "x" = vs 0, then v "y" = vs 1
+                // (v.[y = x] = r is v "y" = r.x).
+                if ((rec.k === "list" || rec.k === "map") && e.entries[0] !== "_") {
+                    const item = (n: number): Expr => e.aliases ? { t: "recordAccess", rec: e.value, field: e.aliases[n] }
+                        : e.value.t === "list" ? e.value.v[n] : { t: "app", f: e.value, a: { t: "int", v: BigInt(n) } };
+                    if (!e.aliases && e.value.t === "list" && e.value.v.length !== e.entries.length) return problem(`${e.entries.length} fields need ${e.entries.length} values`, e);
+                    let result = infer(e.entries.reduce((target: Expr, key, n) => ({ t: "setItem", rec: target, index: { t: "string", v: key }, value: item(n) }), reached(path.length)), scope);
+                    for (let i = parents.length - 1; i >= 0; i--) {
+                        const [parent, field, open] = parents[i];
+                        result = { k: "record", fields: new Map([...parent, [field, result]]), open };
+                    }
+                    return result;
                 }
                 if (rec.k !== "record") return problem("field assignment requires a record", e);
                 const fields = new Map(rec.fields);

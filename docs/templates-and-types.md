@@ -191,6 +191,7 @@ named arguments, see [lists and records as arguments](pattern-functions.md#lists
 | Record, one-field selection | `obj.[x]` returns a one-element list | `obj.[x] = [value]` |
 | Nested record | `obj.child.x` | `obj.child.x = value` |
 | Nested field selection | `obj.child.[x,y]` | `obj.child.[x,y] = [a,b]` |
+| Association list or HashMap, literal key | `xs.x`, `xs.[x,y]`, `json.user.name` | `xs.x = value`, `json.user.name = value` |
 | Record, positional entry | `obj 0` returns `[key,value]` | `obj 0 = [key,value]` |
 | Record, renamed selection | `obj.[a = x, b = y]` | `obj.[x = a, y = b] = [a = 10, b = 20]` |
 | Record, typed fields | `obj.[x : Float]` declares `x` | `obj.[x : Float, y] = [1, 2]` declares `x` anew |

@@ -59,6 +59,12 @@ for (const [source, expected] of [
     ['m = ([x = 1, y = 2] : HashMap _ _)\nm.x + 1', '2'],
     ['f (xs : List Int) = 1\nf (r : Record) = 2\n[f [a = 1], f [1]]', '[2,1]'],
     ['f (r : Record) = r.a + 1\nf [a = 1]', '2'],
+    ['j = [["user", [["name","a"]]]]\nj.user.name = "b"\nj.user.age = 3\nj', '[["user", [["name","b"], ["age", 3]]]]'],
+    ['r = [user = [["name","a"]]]\nr.user.name = "b"\nr', '[user = [["name","b"]]]'],
+    ['j = [["a", [b = [["c", 1]]]]]\nj.a.b.c = 2\nj', '[["a", [b = [["c", 2]]]]]'],
+    ['m = ([["u", [x = 1]]] : HashMap _ _)\nm.u.x = 2\nm.u.x', '2'],
+    ['j = from JSON "{\\"user\\": {\\"name\\": \\"a\\"}}"\nj.user.name = "b"\nto JSON j', '"{\\"user\\":{\\"name\\":\\"b\\"}}"'],
+    ['a = [["x", 1], ["y", 2]]\na.[y = x] = [x = 5]\na', '[["x", 1], ["y", 5]]'],
     ['f (r : Record) = r.[a,b]\nf [a = 1, b = 2]', '[1,2]'],
 ] as const) Deno.test(`keyed dot, checked: ${source}`, () => {
     const i = new Interpreter();

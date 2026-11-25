@@ -830,7 +830,11 @@ An empty list `[]` becomes a record on its first field assignment.
 `obj.[x] = [10]` requires a one-element RHS list; `obj.[x] = 10` errors.
 A `_` among the fields takes its value and discards it, as in a list
 pattern: `obj.[x,_] = [1,2]` sets `x` alone.
-`obj.child.x = 10` and `obj.child.[x,y] = [10,20]` rebuild nested parent records.
+`obj.child.x = 10` and `obj.child.[x,y] = [10,20]` rebuild nested parents. A
+parent may be an association list or HashMap, as a JSON object is: each step
+is `get` and its rebuild `with`, so `json.user.name = "b"` is `json "user" =
+(json.user "name" = "b")` with the inner update's value. `obj.[y = x] = r`
+assigns `r.x` to `y`, on an association list too.
 See the [access and assignment reference](templates-and-types.md#access-and-assignment-reference)
 for forms, conversion rules, scoping, and failure behavior.
 
