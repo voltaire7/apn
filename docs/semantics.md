@@ -489,7 +489,8 @@ code 1 = x * 3              # x is the list's: [30,5]
 Code's bindings are its fields, as a record's are: `code.x` is the value
 the last item binding `x` gives, and `code.x = v` replaces that item with
 `x = v`, an update as above (`code.[x] = [v]` too). On a list binding no `x`,
-`.x` is association lookup, as below (`[["x", 1]].x` is `1`). An `x <- m`
+`.x` is association lookup, as below (`[["x", 1]].x` is `1`, and `.x = v`
+assigns it). An `x <- m`
 item binds `x` only when `do` runs the code, so `code.x` is an error there,
 as is replacing a binding made by a pattern (`[a,b] = ...`), which replaces
 as an item (`code 0 = ...`):
@@ -1670,7 +1671,9 @@ distinct. Duplicate keys keep the last value, at the position first inserted.
 `insert [["x",123]] m` returns `m` with those entries, and `remove key m` one
 without the key; the old map stays as it was. `lookup key m` or `m key`
 retrieves a value, raising an error when absent; use `has key m` when absence
-is expected. `keys`, `values`, `pairs`, `length`, and `null` operate on maps.
+is expected. `m key = v` binds `m` to a copy with the key's value replaced or
+added at the end, as for an association list, and `m.x` is `m "x"` (`m.x = v`
+is `m "x" = v`), as on any value that is not a record. `keys`, `values`, `pairs`, `length`, and `null` operate on maps.
 Values stay lazy; keys are evaluated at construction. `(m : HashMap k v)` is a
 map's pattern, `k` and `v` its keys' and values' types (see
 [intrinsics](intrinsics.md#maps)).
@@ -1682,7 +1685,8 @@ The nonnumeric type names are types as the numeric ones are: `Bool`, `String`,
 `Char`, `List a`, `Record`, `Function`, `Type`, and `Variant`. Ascription to one
 checks a value of its kind without forcing list elements or coercing unrelated
 values (`([1,missing] : List _)` reads nothing), and their typed patterns work
-in overloads, e.g. `f (x : Bool) = x`; `isType` tests them. Use declared
+in overloads, e.g. `f (x : Bool) = x`; `isType` tests them. A `Record`
+holds any record, whose fields the run reads (`f (r : Record) = r.a`). Use declared
 constructors to create a particular variant; `Variant` holds any such value.
 
 A typed pattern whose type is a lowercase name, `(x : t)`, binds `t` to the

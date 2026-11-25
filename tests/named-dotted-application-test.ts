@@ -46,3 +46,23 @@ Deno.test("a list's names are known only at runtime: xs.(e) is rejected", () => 
     const issues = checkSource('xs = [["x", 1]]; xs.(x + 1)').issues.map(i => i.message).join("; ");
     if (!issues.includes("scoped evaluation requires a record")) throw new Error(issues || "accepted");
 });
+
+// On a list or HashMap, v.x is get v "x" and v.x = y is with v "x" y, checked
+// and run; a Record parameter takes any record, its fields read when it runs.
+for (const [source, expected] of [
+    ['a = [["x", 1]]\na.x = 5\na.y = 6\na', '[["x", 5], ["y", 6]]'],
+    ['a = [["x", 1], ["y", 2]]\nb = [7,8]\na.[x,y] = b\na', '[["x", 7], ["y", 8]]'],
+    ['[["x", 1], ["y", 2]].[y = x, x = y]', '[y = 1, x = 2]'],
+    ['m = ([["x", 1], ["y", 9]] : HashMap _ _)\nm.y = 2\n[m.x,m.y]', '[1,2]'],
+    ['m = ([["x", 1], ["y", 2]] : HashMap _ _)\nm.[y = x]', '[y = 1]'],
+    ['m = ([[1,10]] : HashMap _ _)\nn = m\nm 1 = 11\nm 2 = 20\n[n,m]', '[[[1,10]],[[1,11],[2,20]]]'],
+    ['m = ([x = 1, y = 2] : HashMap _ _)\nm.x + 1', '2'],
+    ['f (xs : List Int) = 1\nf (r : Record) = 2\n[f [a = 1], f [1]]', '[2,1]'],
+    ['f (r : Record) = r.a + 1\nf [a = 1]', '2'],
+    ['f (r : Record) = r.[a,b]\nf [a = 1, b = 2]', '[1,2]'],
+] as const) Deno.test(`keyed dot, checked: ${source}`, () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    const actual = i.renderString(i.run(parseDocument(source)));
+    if (actual !== expected) throw new Error(actual);
+});

@@ -774,7 +774,7 @@ export class Interpreter {
             !(previous.kind === "thunk" && previous.body.t === "placeholder")) {
             let collection = this.dataValue(previous);
             // Another value is assigned to when clauses for with give it slots.
-            if (collection.kind === "record" || this.isList(collection) || !CALLABLE_KINDS.has(collection.kind) && this.extended("with")) {
+            if (collection.kind === "record" || collection.kind === "hashmap" || this.isList(collection) || !CALLABLE_KINDS.has(collection.kind) && this.extended("with")) {
                 for (const clause of clauses) {
                     if (clause.params.length !== 1) throw new APNError("runtime", "collection assignment needs one index or field name");
                     const key = this.dataValue(this.eval(this.assignmentKey(clause.params[0])));
@@ -1037,6 +1037,13 @@ export class Interpreter {
     // (written code, as a list's items are, or one already made).
     private assignItem(collection: Value, key: Value, given: Expr | Value): Value {
         const evaluate = () => "kind" in given ? given : this.eval(given);
+        // A HashMap's key takes the value: a copy with it set or added at the end.
+        const map = collection.kind === "hashmap" ? collection.entries : undefined;
+        if (map) {
+            const entries = new Map(map), held = entries.get(this.hashKey(key));
+            entries.set(this.hashKey(key), [held ? held[0] : key, held ? this.assignSlot(held[1], this.demand(evaluate())) : this.demand(evaluate())]);
+            return { kind: "hashmap", entries };
+        }
         if (this.isList(collection)) {
             // An association list's key: its last pair with the key replaced,
             // as code's last binding of a name is the one read; a new key's
@@ -1755,9 +1762,10 @@ export class Interpreter {
                         // record's field is (a list binding nothing applies).
                         const binding = this.isList(rec) && !e.scoped ? this.codeBinding(rec, e.field) : undefined;
                         if (binding) { r = binding.value; break; }
-                        if (this.isList(rec) && e.scoped) throw new APNError("runtime", "scoped evaluation requires a record", { hint: "its names are known only at runtime: open a record (to Record xs).(e)" });
-                        // On a list, v.x is get v "x": its key's value, as a record's.
+                        if ((this.isList(rec) || rec.kind === "hashmap") && e.scoped) throw new APNError("runtime", "scoped evaluation requires a record", { hint: "its names are known only at runtime: open a record (to Record xs).(e)" });
+                        // On a list or HashMap, v.x is get v "x": its key's value, as a record's.
                         if (this.isList(rec)) { r = this.associationValue(rec, e.field); break; }
+                        if (rec.kind === "hashmap") { r = this.mapLookup(rec, mkStr(e.field)); break; }
                         if (rec.kind === "io") throw new APNError("runtime", "an action has no fields", { hint: "bind its result first: `x <- action; x.field`" });
                         // Another value's field is get v "x", when clauses for get give it fields.
                         if (rec.kind !== "record" && !e.scoped && this.extended("get", rec)) { r = this.apply(rec, mkStr(e.field)); break; }
@@ -1774,36 +1782,20 @@ export class Interpreter {
                         break;
                     }
                     case "pluck": {
-                        let rec = this.dataValue(this.eval(e.rec));
-                        if (this.isList(rec) && e.quoted !== false && e.entries.every(x => typeof x === "string")) {
-                            r = mkList((e.entries as string[]).map(key => this.associationValue(rec, key)));
-                            break;
-                        }
-                        if (this.isList(rec)) throw new APNError("runtime", "a list has no fields", { hint: LIST_FIELDS });
-                        if (rec.kind !== "record") throw new Error("dotted application expects a list or record");
-                        if (e.quoted === false) throw new Error("record selection expects literal field names");
-                        const byKey = new Map(rec.v);
-                        if (e.entries.every((x) => typeof x === "string")) {
-                            const out: Value[] = [];
-                            for (const n of e.entries as string[]) {
-                                const v = byKey.get(n);
-                                if (v === undefined) {
-                                    this.missingField(rec, n);
-                                }
-                                out.push(v);
-                            }
-                            r = { kind: "list", v: out };
-                        } else {
-                            const out: Array<[string, Value]> = [];
-                            for (const [src, dst] of e.entries as Array<[string, string]>) {
-                                const v = byKey.get(src);
-                                if (v === undefined) {
-                                    this.missingField(rec, src);
-                                }
-                                out.push([dst, v]);
-                            }
-                            r = { kind: "record", v: out };
-                        }
+                        const rec = this.dataValue(this.eval(e.rec));
+                        if (e.quoted === false && this.isList(rec)) throw new APNError("runtime", "a list has no fields", { hint: LIST_FIELDS });
+                        if (e.quoted === false) throw new APNError("runtime", "record selection expects literal field names");
+                        // Each key's value: a record's field, or get v "key" on a list or HashMap.
+                        const byKey = rec.kind === "record" ? new Map(rec.v) : undefined;
+                        const look = (key: string): Value => {
+                            if (this.isList(rec)) return this.associationValue(rec, key);
+                            if (rec.kind === "hashmap") return this.mapLookup(rec, mkStr(key));
+                            if (!byKey) throw new APNError("runtime", `cannot select fields of a ${rec.kind}`);
+                            return byKey.get(key) ?? this.missingField(rec as Extract<Value, { kind: "record" }>, key);
+                        };
+                        r = e.entries.every((x) => typeof x === "string")
+                            ? mkList((e.entries as string[]).map(look))
+                            : { kind: "record", v: (e.entries as Array<[string, string]>).map(([src, dst]) => [dst, look(src)] as [string, Value]) };
                         break;
                     }
                     case "setItem": {
@@ -1839,9 +1831,11 @@ export class Interpreter {
                         let base: Array<[string, Value]> | null = null;
                         if (rec.kind === "record") base = rec.v;
                         else if (rec.kind === "list" && rec.v.length === 0) base = []; // [] seeds a record
-                        // Another value's fields are set by with v "x" value, when clauses for with give it fields.
+                        // Another value's fields are set by with v "x" value, when clauses for
+                        // with give it fields; a list's or HashMap's by the builtin with.
+                        const keyed = base === null && (this.isList(rec) || rec.kind === "hashmap") && !e.aliases && e.entries[0] !== "_";
                         const through = base === null && !CALLABLE_KINDS.has(rec.kind) ? this.extended("with") : undefined;
-                        if (base === null && !through) {
+                        if (base === null && !through && !keyed) {
                             throw new APNError("runtime", `cannot set a field on a ${rec.kind}`, {
                                 hint: rec.kind === "io" ? "bind the action's result first: x <- action; x.field = 1" : "only records accept fields (an empty list promotes to a record)",
                             });
@@ -1879,6 +1873,7 @@ export class Interpreter {
                         }
                         const values = rhs.v;
                         r = through ? e.entries.reduce((v, key, i) => this.apply(this.apply(this.apply(through, v), mkStr(key)), values[i]), rec)
+                            : keyed ? e.entries.reduce((v, key, i) => this.assignItem(v, mkStr(key), values[i]), rec)
                             : this.assignFields(rec.kind === "record" ? rec : { kind: "record", v: base! }, e.entries.map((key, i) => [key, values[i]]));
                         for (let i = parents.length - 1; i >= 0; i--) {
                             const [parent, key] = parents[i];

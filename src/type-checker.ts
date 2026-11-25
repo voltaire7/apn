@@ -1710,6 +1710,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         // A Function field or parameter accepts any function.
         if (expected.k === "atom" && expected.name === "Function" && ["fn", "overload", "intrinsic"].includes(actual.k)) return;
+        if (expected.k === "atom" && expected.name === "Record" && actual.k === "record") return;
         if (expected.k === "atom" && actual.k === "atom") {
             if (expected.name === actual.name) return;
             if (expected.name === "Number" && NUMERIC_TYPES.includes(actual.name)) {
@@ -3964,9 +3965,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // Int): its keys are k's and its values v's.
             if (t.k === "map" && !f.applied) {
                 if (a.k === "map") { convert(t.key, a.key, e); convert(t.value, a.value, e); return t; }
-                if (a.k === "record") return problem("a HashMap is made from an association list", e, 'write its entries as [key,value] pairs: ([["a", 1]] : HashMap _ _)');
+                // (A record is the association list of its fields.)
                 const key = variable(), value = variable();
-                unify(list(pair(key, value)), a, e);
+                if (a.k === "record") { unify(atom("String"), key, e); unify(union([...a.fields.values()]), value, e); }
+                else unify(list(pair(key, value)), a, e);
                 convert(t.key, key, e);
                 convert(t.value, value, e);
                 return t;
@@ -4943,6 +4945,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     }
                     return made;
                 }
+                // On a list or HashMap, v.[x,y] = vs is v "x" = vs 0, then v "y" = vs 1.
+                if ((rec.k === "list" || rec.k === "map") && !parents.length && !e.aliases && e.entries[0] !== "_") {
+                    const item = (n: number): Expr => e.value.t === "list" ? e.value.v[n] : { t: "app", f: e.value, a: { t: "int", v: BigInt(n) } };
+                    if (e.value.t === "list" && e.value.v.length !== e.entries.length) return problem(`${e.entries.length} fields need ${e.entries.length} values`, e);
+                    return infer(e.entries.reduce((target: Expr, key, n) => ({ t: "setItem", rec: target, index: { t: "string", v: key }, value: item(n) }), e.rec), scope);
+                }
                 if (rec.k !== "record") return problem("field assignment requires a record", e);
                 const fields = new Map(rec.fields);
                 if (e.entries.length === 1 && e.entries[0] === "_") {
@@ -5086,15 +5094,17 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     fields.set(field, slotValue(old, value, e.value, bound.has(field)));
                     return { k: "record", fields, closed: rec.closed, ...bound.size ? { bound } : {} };
                 }
+                // A HashMap's key takes the value, as its type says.
+                if (rec.k === "map") { convert(rec.key, infer(e.index, scope), e.index); convert(rec.value, value, e.value); return rec; }
                 return unknown();
             }
             case "pluck": {
                 let rec = resolve(infer(e.rec, scope));
-                if (isExplicit(rec)) { runtimeChecks++; return explicitDynamic; }
+                if (isExplicit(rec) || rec.k === "atom" && rec.name === "Record") { runtimeChecks++; return explicitDynamic; }
                 // A value known only by its uses (a parameter): a field named
                 // nowhere in scope can only be selected, so it is a record with
                 // those fields, as w.x opens one. With every name bound it may
-                // be a list given their values, which the run decides.
+                // be an association list, which the run decides.
                 const keys = e.entries.map(entry => typeof entry === "string" ? entry : entry[0]);
                 if (rec.k === "var" && e.quoted !== false && keys.some(key => !scope.has(key))) {
                     unify(rec, { k: "record", fields: new Map(keys.map(key => [key, variable()])), open: true }, e);
@@ -5109,8 +5119,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                         ? { k: "list", element: union(selected), length: constant(BigInt(selected.length)), items: selected }
                         : { k: "record", fields: new Map(e.entries.map((x, n) => [(x as [string, string])[1], selected[n]])) };
                 }
-                if (rec.k === "list" && pairValue(rec) && e.quoted !== false && e.entries.every(x => typeof x === "string")) {
-                    return { k: "list", element: pairValue(rec)!, length: constant(BigInt(e.entries.length)) };
+                // On a list or HashMap, each key's value is get v "key".
+                const keyed = rec.k === "list" ? pairValue(rec) : rec.k === "map" ? (unify(atom("String"), rec.key, e), rec.value) : undefined;
+                if (keyed && e.quoted !== false) {
+                    return e.entries.every(x => typeof x === "string")
+                        ? { k: "list", element: keyed, length: constant(BigInt(e.entries.length)) }
+                        : { k: "record", fields: new Map(e.entries.map(x => [(x as [string, string])[1], keyed])) };
                 }
                 if (rec.k === "list") return problem("a list has no fields", e, LIST_FIELDS);
                 if (e.values) infer(e.values, scope);
@@ -5127,13 +5141,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 let rec = resolve(infer(e.rec, scope));
                 // A Mutable cell's fields are its contents' (as it applies as them).
                 while (rec.k === "mutable") rec = resolve(rec.value);
-                if (isExplicit(rec)) { runtimeChecks++; return explicitDynamic; }
+                // So is a field of any record (r : Record): its fields are known when it runs.
+                if (isExplicit(rec) || rec.k === "atom" && rec.name === "Record") { runtimeChecks++; return explicitDynamic; }
                 // code.x: the value code's binding of x gives.
                 const bound = rec.k === "list" && !e.scoped ? codeBinding(rec, e.field) : undefined;
                 if (bound) return bound.entry.type;
-                if (rec.k === "list" && e.scoped) return problem("scoped evaluation requires a record", e, "its names are known only at runtime: open a record (to Record xs).(e)");
-                // On a list, v.x is get v "x": its key's value, as a record's.
+                if ((rec.k === "list" || rec.k === "map") && e.scoped) return problem("scoped evaluation requires a record", e, "its names are known only at runtime: open a record (to Record xs).(e)");
+                // On a list or HashMap, v.x is get v "x": its key's value, as a record's.
                 if (rec.k === "list" && pairValue(rec)) return pairValue(rec)!;
+                if (rec.k === "map") { unify(atom("String"), rec.key, e); return rec.value; }
                 if (rec.k === "list") return problem(`a list has no field '${e.field}'`, e, LIST_FIELDS);
                 if (e.scoped && e.argument) {
                     if (rec.k === "dynamic" || rec.k === "var") return unknown();
@@ -8409,13 +8425,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             throw error;
         } finally { choosing--; requirements.length = saved; }
     }
-    // A value's type for the run (see CheckOptions.valueTypes): a list's or a
-    // variant's, whose element or arguments typed patterns decide by; a
+    // A value's type for the run (see CheckOptions.valueTypes): a list's (a
+    // record's, the list of its pairs) or a variant's, whose element or
+    // arguments typed patterns decide by; a
     // do-block action's, whose result typeOf names before it runs.
     function recordValueType(e: Expr, t: Ty): void {
         if (!options.valueTypes) return;
         const r = resolve(t);
-        if (r.k === "list" || r.k === "variant" && r.args.length && (e.t === "block" || !isIO(r)) && !isPending(r)) recordType(options.valueTypes, e, r);
+        if (r.k === "list" || r.k === "record" && !(r.fields instanceof ModuleFields) || r.k === "variant" && r.args.length && (e.t === "block" || !isIO(r)) && !isPending(r)) recordType(options.valueTypes, e, r);
     }
     // Recorded once per source position; a position inferred as two types
     // (a generic body at different calls) decides nothing (null).
@@ -8475,7 +8492,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function defineBinding(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr, previous: Entry | undefined): void {
         const collection = previous && resolve(previous.type), c = clauses[0];
         // (Another value is assigned to when clauses for with give it slots.)
-        if (collection && (collection.k === "list" || collection.k === "record" || isExplicit(collection) || extendedFunctions.has("with") && gotten(collection)) && c.params.length === 1) {
+        if (collection && (collection.k === "list" || collection.k === "record" || collection.k === "map" || isExplicit(collection) || extendedFunctions.has("with") && gotten(collection)) && c.params.length === 1) {
             const p = c.params[0];
             const asKey = (p: Pattern): Expr | undefined => {
                 if (p.p === "var") return { t: "var", name: p.name };
@@ -8938,6 +8955,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             budget = STATEMENT_BUDGET;
             const t = resolve(target as Ty), a = resolve(actual as Ty), wanted = resolve(t.k === "type" ? t.value : t);
             const at: Expr = { t: "placeholder" };
+            // A list template takes a record's fields by name ([x] : [Int] takes
+            // [x = 1]), which the run decides.
+            if (wanted.k === "list" && wanted.items && a.k === "record") return true;
             // A record type takes a list of its fields' values in order, as a call does.
             if (wanted.k === "record" && a.k === "list" && a.items) {
                 const fields = [...wanted.fields.values()];

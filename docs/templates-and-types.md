@@ -143,7 +143,8 @@ their exact string contents.
 
 String-key assignment updates the last matching pair, preserving its key and
 the rest of the list; a key the list lacks gets a pair at the end, as a record
-gains a field (`entries "z" = 3` is `[["x", 1], ["y", 2], ["z", 3]]`). The old
+gains a field (`entries "z" = 3`, or `entries.z = 3`, is `[["x", 1], ["y", 2],
+["z", 3]]`). The old
 payload's usual slot-conversion rules apply; unrelated payloads are not forced.
 
 ```apn
