@@ -181,7 +181,7 @@ for (const source of [
     'f w = w.[x,y]; f [x = 1]',
     // A field bound to a type is a value: the record is no type.
     'f (t : Type) = t; f [a = Int]',
-    '"ab" * c -> c + 1',
+    '"ab" * c -> c ++ "x"',
     // A record its type made keeps its fields.
     'Quote = [quote : String, year : Int]; q = [] : Quote; q.yaer = 1',
     'Quote = [quote : String, year : Int]; q = [] : Quote; q "yaer" = 1',

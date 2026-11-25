@@ -120,3 +120,28 @@ Deno.test("large inexact complex square roots remain finite", () => {
     const result = interp.run(parse("sqrt (makeRectangular 1e308 1e308)"));
     if (result.kind !== "complex" || !Number.isFinite(asFloat(result.re)) || !Number.isFinite(asFloat(result.im))) throw new Error("Complex root overflowed");
 });
+// A Char is a sized integer: a UInt that is a Unicode scalar value, printed as
+// the character. It is its number, and keeps its name as an Int8 does.
+for (const checked of [false, true]) {
+    for (const [source, expected] of [
+        ["'a' == 97", "True"], ["'a' + 1", "'b'"], ["typeOf ('a' + 1)", "Char"], ["to Int 'a'", "97"],
+        ["(97 : Char)", "'a'"], ["'a' < 98", "True"], ["isType Integer 'a'", "True"],
+        ["f (c : Char) = c; f 98", "'b'"], ["f (n : Int) = n + 1; f 'a'", "98"],
+        ["['a'..'e']", '"abcde"'],
+        // (A map's key type is exact in the check, as an Int8's is: by value, at the run.)
+        ...checked ? [] : [["([['a', 1]] : HashMap _ _) 97", "1"]],
+    ]) Deno.test(`Char (checked=${checked}): ${source}`, () => {
+        const interp = new Interpreter();
+        if (checked) interp.enableChecking();
+        const shown = interp.renderString(interp.run(parse(source)));
+        if (shown !== expected) throw new Error(`expected ${expected}, got ${shown}`);
+    });
+    for (const source of ["(0 : Char) - 1", "(55296 : Char)", "(1114112 : Char)", "'a' + (1 : UInt)"]) {
+        Deno.test(`Char rejects (checked=${checked}): ${source}`, () => {
+            const interp = new Interpreter();
+            if (checked) interp.enableChecking();
+            try { interp.run(parse(source)); } catch (error) { if (error instanceof APNError) return; throw error; }
+            throw new Error("accepted");
+        });
+    }
+}

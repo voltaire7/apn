@@ -1588,9 +1588,9 @@ integer with an `Int`, whose result (not the `Int`) must fit:
 
 #### Fixed-width types
 
-The fixed-width types are the sized integers (`Int8` ... `UInt128`, `UInt`) and
-the fixed precisions (`Float32`, `Float64`); `Int` and `Float` are flexible and
-join any of them. Two different fixed-width types do not mix: `+`, `-`, `*`,
+The fixed-width types are the sized integers (`Int8` ... `UInt128`, `UInt`,
+`Char`) and the fixed precisions (`Float32`, `Float64`); `Int` and `Float` are
+flexible and join any of them. Two different fixed-width types do not mix: `+`, `-`, `*`,
 `/`, `%`, `^`, `expt` and elementwise array arithmetic on them are an error
 (`(1 : Int32) + (2 : Int64)`, `(1 : Float32) + (2 : Float64)`,
 `(1 : Int32) + (2.5 : Float32)`), and `(x : Int64)` converts one explicitly. A
@@ -1686,7 +1686,8 @@ Iterating a conversion converts each: `100 * to Int` is the integers `0` through
 `99`, and `[1..100] * to Int` `1` through `100`; `100 * (0 : Int)` multiplies.
 
 The nonnumeric type names are types as the numeric ones are: `Bool`, `String`,
-`Char`, `List a`, `Record`, `Function`, `Type`, and `Variant`. Ascription to one
+`List a`, `Record`, `Function`, `Type`, and `Variant` (a `Char` is a number:
+see [text](intrinsics.md#text)). Ascription to one
 checks a value of its kind without forcing list elements or coercing unrelated
 values (`([1,missing] : List _)` reads nothing), and their typed patterns work
 in overloads, e.g. `f (x : Bool) = x`; `isType` tests them. A `Record`

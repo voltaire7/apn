@@ -5,13 +5,14 @@ import type { Pattern } from "./ast.ts";
 // The numeric classes: sets of numbers of several types, none a value's own
 // type (Integer holds an Int and a UInt8).
 export const NUMERIC_CLASSES = new Set(["Number", "Real", "Integer", "Exact", "Inexact"]);
-export const NUMERIC_TYPES = ["Int", "UInt", ...[8, 16, 32, 64, 128].flatMap((n) => [`Int${n}`, `UInt${n}`]), "Float", "Float32", "Float64", "Fraction", "Complex", "ComplexExact", ...NUMERIC_CLASSES];
+// (A Char is a sized integer too: its code point, a Unicode scalar value.)
+export const NUMERIC_TYPES = ["Int", "UInt", ...[8, 16, 32, 64, 128].flatMap((n) => [`Int${n}`, `UInt${n}`]), "Char", "Float", "Float32", "Float64", "Fraction", "Complex", "ComplexExact", ...NUMERIC_CLASSES];
 // The built-in types a value of a type the program defines converts to through
 // its to instance where one is needed: an index, arithmetic, a typed pattern.
 export const SCALAR_TYPES = new Set([...NUMERIC_TYPES, "String", "Char", "Bool"]);
 // The scalar types a value has as its own (not a class).
 export const OWN_SCALAR_TYPES = new Set([...SCALAR_TYPES].filter(t => !NUMERIC_CLASSES.has(t)));
-export const TYPE_NAMES = [...NUMERIC_TYPES, "Dynamic", "Vect", "Mutable", "Pointer", "HashMap", "Bool", "String", "Char", "List", "Record", "Function", "Type", "Variant", "IO"];
+export const TYPE_NAMES = [...NUMERIC_TYPES, "Dynamic", "Vect", "Mutable", "Pointer", "HashMap", "Bool", "String", "List", "Record", "Function", "Type", "Variant", "IO"];
 // Types that are their own constructors: Mutable 0 makes a
 // cell, Pointer an address. Every other type is given a value only ascribed
 // (a HashMap too: ([a = 1] : HashMap String Int)).
@@ -21,7 +22,7 @@ const canonical = (name: string) => name === "Float64" ? "Float" : name;
 const HOLDERS: Record<string, (name: string) => boolean> = {
     Number: () => true,
     Real: name => name !== "Complex" && name !== "ComplexExact",
-    Integer: name => /^U?Int\d*$/.test(name),
+    Integer: name => /^U?Int\d*$/.test(name) || name === "Char",
     Exact: name => !/^(Float|Complex$)/.test(name),
     Inexact: name => /^(Float|Complex$)/.test(name),
 };
@@ -73,7 +74,8 @@ export function castNumeric(name: string, value: Numeric, explicit = false): Num
         return value;
     }
     let result: Numeric;
-    const int = name.match(/^(U?Int)(8|16|32|64|128)?$/);
+    // A Char: a UInt that is a Unicode scalar value (no surrogate).
+    const int = name === "Char" ? ["Char", "UInt"] : name.match(/^(U?Int)(8|16|32|64|128)?$/);
     if (int) {
         const real = toReal(value);
         if (!isInteger(real) && !explicit) throw new APNError("runtime", `lossy conversion to ${name}; round explicitly before applying the type`);
@@ -85,6 +87,7 @@ export function castNumeric(name: string, value: Numeric, explicit = false): Num
             const bits = BigInt(int[2]), min = unsigned ? 0n : -(1n << (bits - 1n)), max = unsigned ? (1n << bits) - 1n : (1n << (bits - 1n)) - 1n;
             if (n < min || n > max) throw new APNError("runtime", `value out of range for ${name}`);
         }
+        if (name === "Char" && (n > 1114111n || n >= 55296n && n <= 57343n)) throw new APNError("runtime", `${n} is no Char: a Char is a Unicode scalar value`);
         result = integer(n);
     } else if (name === "Float" || name === "Float32") {
         const real = toReal(value), v = asFloat(real);
@@ -133,7 +136,7 @@ function integerQuotient(result: Numeric): Numeric {
 // A sized integer type (Int8 ... UInt128, UInt): a type of its own over a
 // range of Int (docs/intrinsics.md); Int itself is none.
 export function sizedInteger(name: string | undefined): string | undefined {
-    return name && name !== "Int" && /^U?Int(8|16|32|64|128)?$/.test(name) ? name : undefined;
+    return name && name !== "Int" && /^(U?Int(8|16|32|64|128)?|Char)$/.test(name) ? name : undefined;
 }
 // A fixed-width number type: a sized integer or a fixed-precision float
 // (Float32, Float64). Int and Float are flexible: they join any of them.

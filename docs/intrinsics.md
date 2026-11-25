@@ -139,14 +139,18 @@ because every `Int` is in the union.
 
 ## Text
 
-A `Char`'s number is a Unicode scalar value, a code point that is no
-surrogate:
+A `Char` is a sized integer, as `UInt8` is: a `UInt` that is a Unicode
+scalar value, a code point that is no surrogate.
 
 ```apn
-Scalar = (n : UInt) | n <= 1114111 && (n < 55296 || n > 57343)
-Char = | CodePoint Scalar
+Char = (n : UInt) | n <= 1114111 && (n < 55296 || n > 57343)
 String = | Text (List Char)  # text: to (List Char) and from (List Char) convert
 ```
+
+So a `Char` is its number, printed as the character (`'a'`): `'a' == 97`,
+`(97 : Char)` is `'a'`, `to Int 'a'` is `97`, and `'a' + 1` is `'b'`, a `Char`
+as `(1 : UInt8) + 2` is a `UInt8`. A result that is no scalar value is an error
+(`(0 : Char) - 1`, `(55296 : Char)`), never a wrapped one.
 
 ## Records, functions and types
 

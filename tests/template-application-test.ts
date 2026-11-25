@@ -97,7 +97,7 @@ for (const [source, error] of [
     ['([1,2,3] : [Int,Int])', 'same length'],
     ['("h" : [Char,Char])', 'same length'],
     ['("hey" : [Char,Char])', 'same length'],
-    ['("hi" : [Int])', 'expects a number'],
+    ['("hi" : [Int])', 'same length'],
     ['xs = [].[]\nxs 0 = 1', 'out of range'],
     ['xs = [Int]\nxs 1 = 1', 'out of range'],
     ['Option a = Some a | None\n(Some (.2 : Float) : Option Int)', 'lossy conversion'],

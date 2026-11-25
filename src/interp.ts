@@ -15,7 +15,7 @@ import { ACTIONS, MODELED, NATIVE_EXPORTS, NATIVES, RETIRED_NATIVES, STANDARD_NA
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { bundledText, IMPORT_ONE, loadPath, type ModuleFile, readLoad, resolveModule, sourcePath, unknownModule } from "./modules.ts";
 import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_CLASSES, NUMERIC_TYPES, OWN_SCALAR_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
-import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Real } from "./numbers.ts";
+import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Numeric, type Real } from "./numbers.ts";
 import { ACTION_SHOWN, APNError, LIST_FIELDS, didYouMean, missingTypeParameters, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { type Alternative, type Binding, clausePlaces, listRole, readPatterns, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, declaresNames, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, unionClause, unionKind } from "./ast.ts";
@@ -1005,7 +1005,16 @@ export class Interpreter {
     // number its to instance makes (an Int or a Float).
     private arithmeticValue(value: Value): Value {
         const v = this.dataValue(value);
-        return this.builtinValue("Int", v) ?? this.builtinValue("Float", v) ?? v;
+        return this.numberOf(this.builtinValue("Int", v) ?? this.builtinValue("Float", v) ?? v);
+    }
+    // A Char is its code point, a number of type Char (Char is a UInt that is a
+    // Unicode scalar value): read so where numbers are, and a number of that
+    // type is the Char again. (The run stores a Char as its text.)
+    numberOf(v: Value): Value {
+        return v.kind === "char" ? { kind: "int", v: BigInt(v.v.codePointAt(0)!), typeName: "Char" } : v;
+    }
+    charOf(v: Value): Value {
+        return v.kind === "int" && v.typeName === "Char" ? { kind: "char", v: String.fromCodePoint(Number(v.v)) } : v;
     }
 
     // A value of a type the program defines where a built-in type is needed:
@@ -2092,7 +2101,7 @@ export class Interpreter {
             if (r.kind === "pending") this.ambiguous(r);
             throw new APNError("runtime", `cannot apply '${op}' to ${l.kind} and ${r.kind}`);
         };
-        if (isNumeric(l) && isNumeric(r) && ["+", "-", "*", "/", "%"].includes(op)) return typedArithmetic(op, l, r);
+        if (isNumeric(l) && isNumeric(r) && ["+", "-", "*", "/", "%"].includes(op)) return this.charOf(typedArithmetic(op, l, r));
         if (op === "\\") {
             const functions = ["closure", "clauseFn", "native", "contract"];
             if (!functions.includes(l.kind) || !functions.includes(r.kind)) {
@@ -2109,7 +2118,7 @@ export class Interpreter {
         }
         if (op === "^") {
             if (!isNumeric(l) || !isNumeric(r)) return bad();
-            return typedPower(l, r);
+            return this.charOf(typedPower(l, r));
         }
         switch (op) {
             case "+":
@@ -2137,7 +2146,7 @@ export class Interpreter {
     private arrayNegate(value: Value): Value {
         const v = this.arithmeticValue(value);
         if (v.kind === "variant" && v.family?.base) return this.conform({ kind: "type", name: v.family.name, family: v.family }, this.arrayNegate(v.v[0]));
-        if (isNumeric(v)) return v.typeName ? castNumeric(v.typeName, negate(v)) : negate(v);
+        if (isNumeric(v)) return v.typeName ? this.charOf(castNumeric(v.typeName, negate(v))) : negate(v);
         if (this.isList(v)) return this.defer(() => {
             const cell = this.cell(v);
             return cell ? { kind: "cons", head: this.defer(() => this.arrayNegate(cell.head)), tail: this.defer(() => this.arrayNegate(cell.tail)) } : mkList([]);
@@ -2148,7 +2157,7 @@ export class Interpreter {
 
     private arrayArithmetic(op: string, left: Value, right: Value, broadcast = true): Value {
         const l = this.arithmeticValue(left), r = this.arithmeticValue(right);
-        if (isNumeric(l) && isNumeric(r)) return op === "^" ? typedPower(l, r) : typedArithmetic(op, l, r);
+        if (isNumeric(l) && isNumeric(r)) return this.charOf(op === "^" ? typedPower(l, r) : typedArithmetic(op, l, r));
         const ll = this.isList(l), rl = this.isList(r);
         if (ll && rl) return this.defer(() => {
             const a = this.cell(l), b = this.cell(r);
@@ -2284,6 +2293,8 @@ export class Interpreter {
             }
         }
         if (isNumeric(a) && isNumeric(b)) return equalNumbers(a, b);
+        // (A Char equals the number that is its code point.)
+        if (a.kind === "char" && isNumeric(b) || isNumeric(a) && b.kind === "char") return equalNumbers(this.numberOf(a) as Numeric, this.numberOf(b) as Numeric);
         // A named subtype equals a plain value of its base by payload
         // (Money 1.2 == 1.2); two different names are never equal.
         const named = (v: Value) => v.kind === "variant" && !!v.family?.base;
@@ -2319,6 +2330,7 @@ export class Interpreter {
 
     compare(a: Value, b: Value): number {
         a = this.dataValue(a); b = this.dataValue(b);
+        if (a.kind === "char" && isNumeric(b) || isNumeric(a) && b.kind === "char") { a = this.numberOf(a); b = this.numberOf(b); }
         if (isNumeric(a) && isNumeric(b)) return compareNumbers(a, b);
         if (a.kind === "int" && b.kind === "int") return a.v < b.v ? -1 : a.v > b.v ? 1 : 0;
         if (a.kind === "float" && b.kind === "float") return a.v - b.v;
@@ -3905,10 +3917,11 @@ export class Interpreter {
         const value = pattern.tag === "Mutable" ? this.reference(arg) : pattern.tag === "Type" ? this.demand(arg) : this.dataValue(arg);
         if (SCALAR_TYPES.has(pattern.tag) && this.builtinValue(pattern.tag, value)) return -1;
         if (!NUMERIC_TYPES.includes(pattern.tag)) return this.matchesValueType(pattern.tag, value) ? 1 : -1000;
-        if (!isNumeric(value)) return -1000;
-        if (matchesType(pattern.tag, value)) return 1;
+        const number = this.numberOf(value);
+        if (!isNumeric(number)) return -1000;
+        if (matchesType(pattern.tag, number)) return 1;
         if (NUMERIC_CLASSES.has(pattern.tag)) return -1000;
-        try { castNumeric(pattern.tag, value); return 0; } catch { return -1000; }
+        try { castNumeric(pattern.tag, number); return 0; } catch { return -1000; }
     }
     // Whether a typed (or bare) type pattern takes every value another pattern
     // does, by the types they name (see clausePlaces): a literal of it, or a
@@ -4971,7 +4984,7 @@ export class Interpreter {
         if (name !== "Function" && name !== "Mutable") value = this.dataValue(value);
         if (name === "Pointer") return value.kind === "pointer";
         if (name === "Mutable") return value.kind === "mutable";
-        if (isNumeric(value)) return NUMERIC_TYPES.includes(name) && matchesType(name, value);
+        if (isNumeric(value) || value.kind === "char") return NUMERIC_TYPES.includes(name) && matchesType(name, this.numberOf(value) as Numeric);
         if (name === "List") return this.isList(value) || value.kind === "record" || value.kind === "hashmap";
         if (name === "Type" && value.kind === "functionType") return true;
         // A type still taking parameters is a function of types (Option).
@@ -5026,8 +5039,9 @@ export class Interpreter {
         if (name === "Mutable") return declared ? { kind: "mutable", v: value, schema: declared } : { kind: "mutable", v: value };
         if (name === "String" && this.isList(value)) return this.callNative("fromChars", [value]);
         if (NUMERIC_TYPES.includes(name)) {
+            value = this.numberOf(value);
             if (!isNumeric(value)) throw new APNError("runtime", `${name} expects a number`);
-            return castNumeric(name, value);
+            return this.charOf(castNumeric(name, value));
         }
         if (!this.matchesValueType(name, value)) throw new APNError("runtime", `${name} constructor expects a ${name} value`);
         return value;
@@ -5037,8 +5051,8 @@ export class Interpreter {
     // any value with equality, a list, record or constructor's by its parts.
     hashKey(value: Value): string {
         value = this.dataValue(value);
-        if (isNumeric(value)) return "number:" + numericHash(value);
-        if (value.kind === "string" || value.kind === "char" || value.kind === "bool") return value.kind + ":" + String(value.v);
+        if (isNumeric(value) || value.kind === "char") return "number:" + numericHash(this.numberOf(value) as Numeric);
+        if (value.kind === "string" || value.kind === "bool") return value.kind + ":" + String(value.v);
         if (this.isList(value) || value.kind === "record" || value.kind === "hashmap") return `list:[${[...this.elements(value)].map(item => this.hashKey(item)).join(",")}]`;
         if (value.kind === "variant") return `variant:${value.tag}(${value.v.map(item => this.hashKey(item)).join(",")})`;
         if (value.kind === "type") return "type:" + this.renderString(value);
@@ -7112,11 +7126,12 @@ export class Interpreter {
                 if (this.builtinType(p.tag)) {
                     if (p.args.length !== 1) return false;
                     if (!NUMERIC_TYPES.includes(p.tag)) return this.matchesValueType(p.tag, v) && this.matchPattern(p.args[0], v, binds);
-                    if (!isNumeric(v)) return false;
+                    const number = this.numberOf(v);
+                    if (!isNumeric(number)) return false;
                     // (x : Int32) binds what 5 : Int32 makes, an Int32; an
                     // aggregate ((x : Number)) the value as it is.
                     let converted: Value;
-                    try { converted = castNumeric(p.tag, v); } catch { return false; }
+                    try { converted = this.charOf(castNumeric(p.tag, number)); } catch { return false; }
                     return this.matchPattern(p.args[0], NUMERIC_CLASSES.has(p.tag) ? v : converted, binds);
                 }
                 // A view's pattern: its matcher takes the value apart into the
