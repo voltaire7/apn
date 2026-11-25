@@ -298,7 +298,7 @@ function helpText(): string {
         `  x ~ [ pat -> expr, ... ]   (match: an operator; alternatives are pattern lambdas)`,
         `  literal patterns: 0  1.5  "s"  'c'  True  [1..9]   (tried before other clauses)`,
         `  func ((Int -> Int) f) = Int { f 123 }   (checked function contract)`,
-        `  ((a -> a) f), (a -> a).(+ 1), (a -> a) == typeOf f   a lambda read as a function type`,
+        `  ((a -> a) f), ((+ 1) : a -> a), (a -> a) == typeOf f   a lambda read as a function type`,
         `  List Int is a list of any length; [Int] is exactly one Int; [Int..] endlessly many`,
         `  f x = 1; f x = "one"   overloads by result type: (f 0 : Int) is 1, (f 0 : String) "one"`,
         `  Option a = Some a | None`,

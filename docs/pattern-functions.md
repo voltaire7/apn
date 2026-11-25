@@ -260,7 +260,7 @@ functions: `((a -> b) -> List a -> List b)`. See "Function types" in
 
 In expressions, `->` creates a lambda, regardless of whether its names refer to
 types; it is read as a type only where a type is expected (a typed pattern, a
-constructor field, `(a -> a).(+ 1)`, `isType`, or beside a type in `==`).
+constructor field, an ascription (`((+ 1) : a -> a)`), `isType`, or beside a type in `==`).
 `(Int -> Int) function` therefore applies a pattern-matching lambda; it does not
 construct a function contract. `a -> a` is the identity lambda.
 

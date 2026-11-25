@@ -154,7 +154,12 @@ interface Known {
 }
 // A function's clauses and defining scope, so a direct call by name can
 // evaluate what its result value is from what is known about the arguments.
-interface Summary { clauses: (ClauseOrder & { body: Expr; guard?: Expr })[]; scope: Scope }
+// captured: the outer names its clauses use. A copy of its type made for a
+// call (an instance) maps those whose types share the copied variables, so a
+// lambda typed at that call sees what its function was given there (f in
+// ra f seed = my (v, _ -> f v) seed xs is the call's f); origin is the summary
+// it copies, which calls are cached by, and substituted the names it maps.
+interface Summary { clauses: (ClauseOrder & { body: Expr; guard?: Expr })[]; scope: Scope; captured?: string[]; origin?: Summary; substituted?: string[] }
 type ViewParts = { build: Expr; match: Expr; scope: Scope };
 interface Entry {
     type: Ty;
@@ -681,6 +686,15 @@ function variables(
     else children(t).forEach((x) => variables(x, found, seen));
     return found;
 }
+// Whether t holds a variable that vars maps (one a copy replaces).
+function sharesVariable(t: Ty, vars: Map<Ty, Ty>, seen = new Set<Ty>()): boolean {
+    if (!vars.size) return false;
+    t = resolve(t);
+    if (vars.has(t)) return true;
+    if (t.k === "var" || seen.has(t)) return false;
+    seen.add(t);
+    return children(t).some(x => sharesVariable(x, vars, seen));
+}
 // Whether t holds the node op, following links and deciding nothing.
 function holds(t: Ty, op: Ty, seen = new Set<Ty>()): boolean {
     while (t.k === "var" && t.link) t = t.link;
@@ -791,12 +805,22 @@ function copy(
         case "operation":
             Object.assign(result, { args: t.args.map(go), solution: t.solution && go(t.solution), decided: t.decided && go(t.decided), known: t.known && substituteKnown(t.known, subst, value) });
             break;
-        case "fn":
+        case "fn": {
             Object.assign(result, {
                 input: go(t.input), output: go(t.output), checks: t.checks?.map(go),
                 callArgs: t.callArgs?.map(a => ({ ...a, ...substituteKnown(a, subst, value), type: go(a.type) })),
             });
+            const summary = t.summary, shared = summary?.captured?.filter(name => {
+                const entry = summary.scope.get(name);
+                return !!entry && sharesVariable(entry.type, vars);
+            });
+            if (summary && shared?.length) {
+                const scope = new Map(summary.scope);
+                for (const name of shared) scope.set(name, { ...summary.scope.get(name)!, type: go(summary.scope.get(name)!.type) });
+                (result as Extract<Ty, { k: "fn" }>).summary = { ...summary, scope, origin: summary.origin ?? summary, substituted: shared };
+            }
             break;
+        }
         case "list": {
             let length = t.length;
             if (length && subst && length.terms.has(subst[0])) length = substituteIndex(length, subst);
@@ -2248,6 +2272,19 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (e.t === "block" && e.stmts.length === 1 && e.style === "(") return lambdaLiteral(e.stmts[0]);
         return e.t === "lambda" || e.t === "patternLambda" ? e : undefined;
     }
+    // Every lowercase name the expressions use, lambdas' bodies included.
+    function namesIn(es: Expr[]): string[] {
+        const names = new Set<string>();
+        const walk = (x: unknown): void => {
+            if (Array.isArray(x)) { x.forEach(walk); return; }
+            if (!x || typeof x !== "object" || "p" in (x as object)) return;
+            const n = x as Record<string, unknown>;
+            if (n.t === "var" && /^[a-z]/.test(n.name as string)) names.add(n.name as string);
+            for (const value of Object.values(n)) if (value && typeof value === "object") walk(value);
+        };
+        walk(es);
+        return [...names];
+    }
     // The lowercase names an expression uses without binding them.
     function freeNames(e: Expr): string[] {
         const names = new Set<string>();
@@ -3337,10 +3374,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     const typedCalls = new WeakMap<Summary, Map<string, CallFrame[]>>(), callFrames: CallFrame[] = [];
     function typedCall(summary: Summary, args: Entry[], e: Expr): Ty | undefined {
         if (typingCall > 256) problem(CALL_COST, e);
-        const types = args.map(a => text(resolve(a.type))).join("\u0000"), values = args.map(a => knownPrint(a)).join("\u0000");
+        // (A copy's captured names count as arguments: see Summary.)
+        const captured = summary.substituted?.map(name => text(resolve(summary.scope.get(name)!.type))) ?? [];
+        const types = [...args.map(a => text(resolve(a.type))), ...captured].join("\u0000"), values = args.map(a => knownPrint(a)).join("\u0000");
         const fits = (frame: CallFrame) => !frame.decided || frame.values === values;
-        const calls = typingCalls.get(summary) ?? new Map<string, CallFrame[]>();
-        typingCalls.set(summary, calls);
+        const origin = summary.origin ?? summary;
+        const calls = typingCalls.get(origin) ?? new Map<string, CallFrame[]>();
+        typingCalls.set(origin, calls);
         const pending = calls.get(types)?.find(fits);
         if (pending) return pending.result;
         // In code that never runs (see typesInTrial), a recursive call is its
@@ -3365,8 +3405,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // (One whose parameters are all names depends on their types, and the
         // values that decided it: typed once, for each of its calls given them.)
         const names = summary.clauses.every(c => c.params.slice(0, args.length).every(q => q.p === "var"));
-        const finished = typedCalls.get(summary) ?? new Map<string, CallFrame[]>();
-        typedCalls.set(summary, finished);
+        const finished = typedCalls.get(origin) ?? new Map<string, CallFrame[]>();
+        typedCalls.set(origin, finished);
         const done = names ? finished.get(types)?.find(fits) : undefined;
         if (done) return copy(done.result);
         const frame: CallFrame = { result: variable(), values, decided: false };
@@ -5151,13 +5191,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return unknown();
             }
             case "recordAccess": {
-                // (a -> a).(+ 1): a function read as a type converts the value,
-                // like [Int].[1].
-                const lambda = e.rec.t === "block" && e.rec.stmts.length === 1 ? e.rec.stmts[0] : e.rec;
-                if (e.scoped && e.argument && (lambda.t === "lambda" || lambda.t === "patternLambda")) {
-                    const t = lambdaType(lambda, scope, new Map());
-                    return application({ k: "fn", input: t, output: t, coerce: true }, { type: infer(e.argument, scope) }, e);
-                }
                 let rec = resolve(infer(e.rec, scope));
                 // A Mutable cell's fields are its contents' (as it applies as them).
                 while (rec.k === "mutable") rec = resolve(rec.value);
@@ -5173,8 +5206,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 if (rec.k === "list") return problem(`a list has no field '${e.field}'`, e, LIST_FIELDS);
                 if (e.scoped && e.argument) {
                     if (rec.k === "dynamic" || rec.k === "var") return unknown();
-                    // A function held in a name, read as a type at runtime.
-                    if (rec.k === "fn") { runtimeChecks++; infer(e.argument, scope); return unknown(); }
+                    if (rec.k === "fn" || rec.k === "overload") return problem("scoped evaluation requires a record", e, "a function converts to a function type by ascription: (f : a -> a)");
                     if (rec.k !== "record") return problem("scoped evaluation requires a record", e);
                     const local = new Map(scope);
                     for (const [name, type] of rec.fields) local.set(name, { type, mono: true });
@@ -8282,6 +8314,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const all = c.params.flatMap(patternNames);
             return { index, place: places[index], params: c.params, body: c.body, refutable: new Set([...recursiveName ? [recursiveName] : [], ...all.filter((x, n) => all.indexOf(x) !== n)]), scope: parent };
         }) };
+        const own = new Set([...params.flatMap(patternNames), ...recursiveName ? [recursiveName] : []]);
+        summary.captured = namesIn([body, ...guard ? [guard] : []]).filter(name => !own.has(name) && parent.has(name));
         for (let n = inputs.length - 1; n >= 0; n--) {
             const parameter = params[n];
             const selfName = parameter.p === "var" && parameter.name === recursiveName ? recursiveName : undefined;

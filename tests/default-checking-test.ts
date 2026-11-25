@@ -1755,3 +1755,21 @@ for (const [source, output] of [
         if (shown !== value) throw new Error(`expected ${value}, got ${shown}`);
     });
 }
+
+// A lambda a function makes sees what that function was given at the call (f
+// in ra's (v, _ -> f v) is tick), so a step's declared length holds in the fold.
+for (const [source, value] of [
+    ["fl (xs : Vect k a) : Vect k a = xs\ntick [a,b,c] = fl [b,c,a]\nra f seed = foldl (v, _ -> f v) seed [1,2,3]\nra tick [1,2,3]", "[1,2,3]"],
+    ["fl (xs : Vect 3 a) : Vect 3 a = xs\ntick [a,b,c] = fl [b,c,a]\nmy f acc (x :: xs) = my f (f acc x) xs\nmy _ acc [] = acc\n"
+        + "ra f seed = my (v, _ -> f v) seed [1]\nra tick [1,2,3]", "[2,3,1]"],
+    ["ra f seed = foldl (v, _ -> f v) seed [1,2,3]\nra (x -> x ++ \"!\") \"a\"", '"a!!!"'],
+] as const) Deno.test(`a lambda sees its function's arguments: ${source}`, () => {
+    const shown = run(session(), source);
+    if (shown !== value) throw new Error(`expected ${value}, got ${shown}`);
+});
+for (const source of [
+    "fl (xs : Vect k a) : Vect k a = xs\ntick [a,b,c] = fl [b,c,a]\nra f seed = foldl (v, _ -> f v) seed [1,2,3]\nra tick [1,2,3,4]",
+    "ra f seed = foldl (v, _ -> f v) seed [1,2,3]\nx : Int = ra (x -> x ++ \"!\") \"a\"",
+    // A function converts to a function type by ascription, not through a dot.
+    "(a -> a).(+ 1) 2",
+]) Deno.test(`a lambda's function arguments reject: ${source}`, () => rejected(session(), source));

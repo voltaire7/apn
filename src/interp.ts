@@ -1769,7 +1769,8 @@ export class Interpreter {
                         if (rec.kind === "io") throw new APNError("runtime", "an action has no fields", { hint: "bind its result first: `x <- action; x.field`" });
                         // Another value's field is get v "x", when clauses for get give it fields.
                         if (rec.kind !== "record" && !e.scoped && this.extended("get", rec)) { r = this.apply(rec, mkStr(e.field)); break; }
-                        if (rec.kind !== "record") throw new Error("record access on non-record");
+                        if (rec.kind !== "record" && e.scoped) throw new APNError("runtime", "scoped evaluation requires a record", CALLABLE_KINDS.has(rec.kind) ? { hint: "a function converts to a function type by ascription: (f : a -> a)" } : undefined);
+                        if (rec.kind !== "record") throw new APNError("runtime", `${withArticle(this.typeText(rec))} has no field '${e.field}'`);
                         if (e.scoped && e.argument) {
                             const outer = this.env;
                             const local = new Env(outer);

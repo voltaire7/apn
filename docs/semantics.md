@@ -2119,8 +2119,8 @@ static error) and leaves the rest to the run.
 
 Where a type is expected, a lambda is read as the function type it spells out,
 as `[Int]` is both a list and a positional type: in a typed pattern
-(`((a -> a) f)`), a constructor field (`MkCounter (s -> [a,s])`), dotted
-application (`(a -> a).(+ 1)`), `isType`'s first argument, and beside a type in
+(`((a -> a) f)`), a constructor field (`MkCounter (s -> [a,s])`), an
+ascription (`((+ 1) : a -> a)`), `isType`'s first argument, and beside a type in
 `==` or `!=`. Elsewhere it stays a lambda. In the type, a lowercase name bound
 to a type (or to a function, which builds one) is that type; any other is a
 type variable, the same one throughout the signature. `(a -> b) -> List a ->
