@@ -363,7 +363,6 @@ leave that binding unchanged. Selected outer values are checked before publishin
 unrelated values remain deferred. Nested lazy checks may still fail when later
 consumed. Side effects performed during evaluation are not rolled back.
 
-Dotted templates return ordinary lists without a persistent container schema;
 `Vect n t` retains its explicit schema through list updates. Unbound names and
 existing functions keep ordinary pattern-definition behavior: `f i = i + 1`
 defines a function, while an expression-only target such as `arr (i + 1) = value`
