@@ -2067,6 +2067,17 @@ export class Interpreter {
         }
         if (op === "++") {
             const record = this.dataValue(lThunk);
+            // A named subtype joins as its base does and keeps its name when the
+            // result fits ("ab" : Name) ++ "c" is a Name), as in arithmetic.
+            const family = (v: Value) => v.kind === "variant" && v.family?.base ? v.family : undefined;
+            const given = family(record) || record.kind === "string" ? this.dataValue(rThunk) : undefined;
+            const ln = family(record), rn = given && family(given);
+            if (ln || rn) {
+                if (ln && rn && ln !== rn) throw new APNError("runtime", `cannot combine ${ln.name} and ${rn.name}`, { hint: `convert one explicitly, as in \`(x : ${rn.name})\`` });
+                const base = (v: Value) => family(v) ? (v as Extract<Value, { kind: "variant" }>).v[0] : v;
+                const name = (ln ?? rn)!;
+                return this.conform({ kind: "type", name: name.name, family: name }, this.operate("++", base(record), base(given!)));
+            }
             const joined = record.kind === "record" ? this.joinRecord(record, rThunk) ?? this.mergeRecords(record, this.dataValue(rThunk)) : undefined;
             if (joined) return joined;
             const l = this.code(record);
@@ -2613,6 +2624,8 @@ export class Interpreter {
             hint: "use a type constructor or replace a default inside a template",
         });
         if (CALLABLE_KINDS.has(f.kind)) throw new APNError("runtime", "get takes a value, not a function");
+        // A named subtype's value is indexed as its base is (Name "hi" 1).
+        if (f.kind === "variant" && f.family?.base) return this.builtinGet(this.dataValue(f.v[0]), arg);
         switch (f.kind) {
             case "hashmap": return this.mapLookup(f, this.demand(arg));
             // (A String is its characters: "hi" 1 is 'i'.)
@@ -2754,7 +2767,12 @@ export class Interpreter {
     // A value that is a list as stored or as its definition says: a record
     // (its pairs), a HashMap (its entries) and a String (its characters).
     listy(v: Value): boolean {
-        return this.isList(v) || v.kind === "record" || v.kind === "hashmap" || v.kind === "string";
+        return this.sequence(v) || v.kind === "record" || v.kind === "hashmap";
+    }
+    // A list a list pattern takes apart: one stored as a list, a String (its
+    // characters), and a named subtype's value whose base is one (Name = String).
+    sequence(v: Value): boolean {
+        return this.isList(v) || v.kind === "string" || v.kind === "variant" && !!v.family?.base && this.sequence(this.dataValue(v.v[0]));
     }
 
     fromArray(values: Value[], i = 0): Value {
@@ -2792,6 +2810,8 @@ export class Interpreter {
         // A record is the list of its [key, value] pairs, as a HashMap is.
         if (v.kind === "record") return v.v.length ? { head: mkList([mkStr(v.v[0][0]), v.v[0][1]]), tail: { ...v, v: v.v.slice(1) } } : null;
         if (v.kind === "hashmap") return this.cell(mkList([...v.entries.values()].map(([key, value]) => mkList([key, value]))));
+        // A named subtype's value is its base's list (Name = String).
+        if (v.kind === "variant" && v.family?.base) return this.cell(v.v[0]);
         // A String is its characters (String = List Char), stored as its text.
         if (v.kind === "string") {
             const first = v.v.codePointAt(0);
@@ -3091,7 +3111,8 @@ export class Interpreter {
         return this.defer(() => {
             const cell = this.cell(xs);
             if (cell === null) {
-                const right = this.code(this.dataValue(ys));
+                let right = this.code(this.dataValue(ys));
+                if (right.kind === "variant" && right.family?.base) right = this.dataValue(right.v[0]);
                 if (right.kind === "string") return right;
                 if (!this.isList(right)) throw new APNError("runtime", "list append expects a list");
                 return this.rerun(right, { before, changed: new Set(before.keys()) });
@@ -3752,7 +3773,8 @@ export class Interpreter {
         return this.defer(() => {
             const cell = this.cell(xs);
             if (cell === null) {
-                const right = this.code(this.dataValue(ys));
+                let right = this.code(this.dataValue(ys));
+                if (right.kind === "variant" && right.family?.base) right = this.dataValue(right.v[0]);
                 if (right.kind === "string") return right;
                 if (!this.isList(right)) throw new APNError("runtime", "list append expects a list");
                 return right;
@@ -7118,7 +7140,7 @@ export class Interpreter {
                 // [a, b] is a :: b :: [], with what :: means here.
                 if (p.v.length && !this.preludeCons()) return this.matchPattern(listPatternExpansion(p), v, binds);
                 // (A String is its characters: [a,b] takes "hi".)
-                if (!this.isList(v) && v.kind !== "string") return false;
+                if (!this.sequence(v)) return false;
                 let rest: Value = v;
                 for (const pattern of p.v) {
                     const cell = this.cell(rest);
@@ -7160,7 +7182,7 @@ export class Interpreter {
                     throw new APNError("runtime", `'${op}' is not a constructor, so it cannot take a value apart`, { hint: `bind it to a two-field constructor, as in \`(${op}) = Cons\`` });
                 }
                 if (!named && op !== "::") throw new APNError("runtime", `unbound operator '${op}'`, { hint: `bind it to a two-field constructor, as in \`(${op}) = Cons\`` });
-                if (!this.isList(v) && v.kind !== "string") return false;
+                if (!this.sequence(v)) return false;
                 const cell = this.cell(v);
                 if (cell === null) return false;
                 const nm = new Map(binds);

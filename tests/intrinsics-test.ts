@@ -89,3 +89,28 @@ for (const checked of [false, true]) {
         });
     }
 }
+
+// A named subtype of String is a String with its name: a list of its
+// characters, which ++ keeps the name of (as arithmetic keeps a Count's).
+for (const checked of [false, true]) {
+    for (const [source, expected] of [
+        ['Name = String; n : Name = "ab"; [n ++ "c", typeOf (n ++ "c")]', '["abc",Name]'],
+        ['Name = String; n : Name = "ab"; "x" ++ n', '"xab"'],
+        ['Name = String; n : Name = "ab"; [head n, length n, n 1]', "['a', 2, 'b']"],
+        ['Name = String; f (c :: cs) = cs; n : Name = "ab"; f n', '"b"'],
+    ]) Deno.test(`named String (checked=${checked}): ${source}`, () => {
+        const i = new Interpreter();
+        if (checked) i.enableChecking();
+        const shown = i.renderString(i.run(parseDocument(source)));
+        if (shown !== expected) throw new Error(`expected ${expected}, got ${shown}`);
+    });
+    Deno.test(`named Strings of two names do not join (checked=${checked})`, () => {
+        const i = new Interpreter();
+        if (checked) i.enableChecking();
+        try { i.run(parseDocument('Name = String; Tag = String; a : Name = "a"; b : Tag = "b"; a ++ b')); } catch (error) {
+            if (String(error).includes("cannot combine")) return;
+            throw error;
+        }
+        throw new Error("accepted");
+    });
+}

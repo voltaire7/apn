@@ -3622,6 +3622,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (!valueBlind(f)) argument = { ...argument, ...needed(argument) };
         // A Mutable cell applies as its contents (an index into a list cell).
         while (f.k === "mutable") f = resolve(f.value);
+        // A named subtype's value applies as its base's does (Name "hi" 1).
+        if (f.k === "variant" && f.base) return application(f.base, argument, e, builtin, ascribed);
         // A constructor given a type for a field that is no type is the
         // values it makes from that type's (UserId Int, Point Int Int), as at
         // runtime: applied to a value of it, then a type once complete.

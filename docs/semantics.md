@@ -326,7 +326,10 @@ to all its parameters, a type that remembers how it was written (`Point`,
 `Pairs 2 Int`), as do the values made with it (`typeOf p` is `Point`), which
 patterns read back (`(Pairs n a xs)`). A scalar
 type (`Count = Int`) makes a named subtype: a `Count` is an `Int` wherever one is accepted and keeps its name when
-a result fits (`(5 : Count) + 1` is `6`, a `Count`). A constructor (`UserId (id : Int) =
+a result fits (`(5 : Count) + 1` is `6`, a `Count`); one of a list is that
+list where a list is taken (`n : Name = "ab"` for `Name = String`: `head n`,
+`n 1`, `c :: cs`), and `++` keeps its name as arithmetic does (`n ++ "c"` is a
+`Name`). A constructor (`UserId (id : Int) =
 _`) makes a distinct type: `UserId 1` has none of an Int's operations, builtins
 and `(x : Int)` patterns reject it, its clauses give it what it needs
 (`UserId a + UserId b = UserId (a + b)`), and `(UserId x)` takes it apart.
