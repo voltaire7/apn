@@ -1,9 +1,9 @@
 # The core
 
-**Draft.** This page is the core APN is moving toward: the few primitives the
-rest of the language should be written in. Each primitive says how far today's
-interpreter has it. [Semantics](semantics.md) stays authoritative for what a
-program means; this page is where the implementation should go.
+This page is the core of APN: the few primitives the rest of the language is
+written in, each with how far today's interpreter has it, and the one step
+still open ([constructors as views](#45-data-and-views)).
+[Semantics](semantics.md) stays authoritative for what a program means.
 
 One idea runs through the language: **a value is what you can take apart, and
 every value comes apart the same way.**
@@ -70,9 +70,12 @@ pure code, so `Vect (S k) a` and `factorial 3` in a type are computed through
 them.
 
 The matcher gives the fields or does not match. One arity per name holds for
-free: the builder takes as many arguments as the matcher gives fields. A
-constructor made by `tag` would be the view whose matcher reads the tag, so
-views would be the one way to take data apart.
+free: the builder takes as many arguments as the matcher gives fields.
+
+Still open: a constructor made by `tag` would be the view whose matcher reads
+the tag, so views would be the one way to take data apart. Today a constructor
+pattern is matched by the tag directly; the step would change no program's
+meaning, only how many ways the interpreter and the checker take data apart.
 
 ### 6. Sets
 
@@ -108,7 +111,7 @@ they were written in, so quoting needs no form of its own. Evaluation is lazy;
 
 | Today | In the core |
 | --- | --- |
-| A checker rule written by hand for each native (`Takes`, `S`, ...) | the type of its definition |
+| A checker rule written by hand for each native (`Takes`, `S`, ...) | the type of its definition (done: the views are the prelude's, typed as it is) |
 | Natives with an APN definition in [intrinsics](intrinsics.md) (list functions, maps, `$`, `\`, `&&`, `\|\|`) | prelude definitions, with the interpreter's version kept as a faster way to compute the same thing (done; step 2 says why the rest stay) |
 
 `tests/intrinsics-test.ts` already runs the definitions against the natives,
@@ -159,10 +162,14 @@ during it ([record-scoped expressions](semantics.md#record-scoped-expressions)).
    - `negate`: a real number is a `Complex`, so no short definition flips
      both a float's zero and each part of a complex number (`0 - x` makes
      `negate 0.0` `0.0`, not `-0.0`).
-   - `++`, `get` and `with`: their definitions cover lists by position. Records
-     and HashMaps no longer keep them native, as both are lists of pairs; strings
-     (`++` joins their characters), association keys and index lists are the
-     native's still, and whether a definition can take them is untried.
+   - `++`, `get` and `with`: their definitions cover lists by position, strings
+     too, as a String is its characters. What keeps them native is code and
+     records: `r ++ [z = x + 1]` joins the written record in `r`'s scope (its
+     `x` is `r.x`), which a function given the evaluated list cannot, and
+     `r [x = 10]` is `r` with that field assigned, by the field's declared type
+     as `r.x = 10` is. Their other cases (index lists `xs [0,2]`, index records
+     `xs [a = 0]`, association keys) a definition could take, but one name
+     moves whole or not at all.
    - Ranges: the checker reads a range's items and length from its bounds
      (`[1..n]` has `n` items), which its definition's cells do not give.
    - `map`, `>>=` and `<*>`: an action's instance acts on the world, which
