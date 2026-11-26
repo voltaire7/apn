@@ -150,10 +150,12 @@ loop action = action >> loop action
 # adds a type by defining to or from for it beside it, as for map. JSON names
 # JSON text, which to JSON writes as a String.
 JSON = String
-# tag owner ctor fields: a value that ctor made, belonging to owner, which
-# patterns of ctor read back (Some a = tag Option Some [a]). A constructor's _
-# is one: the value Box x = _ makes for Box 5 is tag Box Box [5].
+# tag owner ctor fields: a value that ctor made, belonging to owner (Some a =
+# tag Option Some [a]); untag ctor v: its fields, and on any value ctor did not
+# make no match. A constructor is the view of the two: Box x = _ is
+# Box = view (x -> tag Box Box [x]) (untag Box).
 tag = intrinsics.tag
+untag = intrinsics.untag
 # with v k x: a copy of v with k set to x; xs 2 = x binds xs to with xs 2 x.
 # Clauses for with for a type, beside it, join it, as for get:
 #     with (Grid cells) [Int r, Int c] x = Grid (with cells (3 * r + c) x)

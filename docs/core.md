@@ -1,8 +1,7 @@
 # The core
 
 This page is the core of APN: the few primitives the rest of the language is
-written in, each with how far today's interpreter has it, and the one step
-still open ([constructors as views](#45-data-and-views)).
+written in, each with how far today's interpreter has it.
 [Semantics](semantics.md) stays authoritative for what a program means.
 
 One idea runs through the language: **a value is what you can take apart, and
@@ -28,7 +27,7 @@ built-in behaves exactly as its APN definition ([intrinsics](intrinsics.md)).
 | 1 | Names and application | `f x` | present |
 | 2 | Clauses: lambdas with patterns and guards, tried most specific first | `p \| g -> e` | present |
 | 3 | A scope binding its names for all of itself | `{ xs = 1 :: xs; ... }` | present |
-| 4 | Making data: a tagged value | `intrinsics.tag` | present |
+| 4 | Data: a tagged value, and its fields read back | `tag`, `untag` | present |
 | 5 | Views: a pattern defined by a function that takes a value apart | `view build match` | present |
 | 6 | Sets: types as values, union, intersection, refinement, membership | `A \| B`, `x : T` | present |
 | 7 | Actions as values, run only by statements and `<-` | `x <- m` | present |
@@ -52,11 +51,13 @@ needs.
 
 ### 4–5. Data and views
 
-`intrinsics.tag` makes a constructor's values, and a constructor pattern takes
-them apart. A **view** is the same pattern over a value that is not stored that
-way: a number is not stored as `S (S Z)`, nor a function as `Takes`. A view is
-a builder and a matcher, given by a function rather than a keyword
-([views](semantics.md#patterns-variants-and-scope)). The built-in views are the
+`tag` makes a constructor's values and `untag` reads their fields back. A
+**view** is a builder and a matcher, given by functions rather than a keyword
+([views](semantics.md#patterns-variants-and-scope)), and it is the one way to
+take data apart: a constructor is the view of `tag` and `untag`
+(`Box x = _` is `Box = view (x -> tag Box Box [x]) (untag Box)`), and a value
+not stored that way is taken apart by a matcher of its own: a number is not
+stored as `S (S Z)`, nor a function as `Takes`. The built-in views are the
 prelude's: `Takes` and `Gives` ([intrinsics](intrinsics.md#functions-takes-and-gives)),
 and `Z` and `S`:
 
@@ -70,12 +71,10 @@ pure code, so `Vect (S k) a` and `factorial 3` in a type are computed through
 them.
 
 The matcher gives the fields or does not match. One arity per name holds for
-free: the builder takes as many arguments as the matcher gives fields.
-
-Still open: a constructor made by `tag` would be the view whose matcher reads
-the tag, so views would be the one way to take data apart. Today a constructor
-pattern is matched by the tag directly; the step would change no program's
-meaning, only how many ways the interpreter and the checker take data apart.
+free: the builder takes as many arguments as the matcher gives fields. The
+interpreter matches a constructor's pattern by its tag directly, a faster way
+to compute what `untag` gives; a nullary constructor (`None = _`) is the value
+it tags, as a nullary view is the value it builds.
 
 ### 6. Sets
 

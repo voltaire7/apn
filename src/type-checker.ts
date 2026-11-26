@@ -865,7 +865,37 @@ function copy(
 // interfaces; unsupported operations require an explicit Dynamic boundary.
 // Operators that evaluate their operands (&& and || their left one first).
 const STRICT_OPERATORS = new Set(["+", "-", "*", "/", "%", "^", "==", "!=", "<", ">", "<=", ">=", "&&", "||"]);
+// The clause X a = body a view's definition X = view (a -> body) (untag X)
+// spells: its builder tags its values, which its matcher reads back.
+function viewConstructor(name: string, clauses: { params: Pattern[]; body: Expr }[]): { params: Pattern[]; body: Expr } | undefined {
+    const [clause] = clauses;
+    let body = clause?.body;
+    while (body?.t === "block" && body.style === "(" && body.stmts.length === 1) body = body.stmts[0];
+    if (clauses.length !== 1 || clause.params.length || body?.t !== "app" || body.f.t !== "app" || body.f.f.t !== "var" || body.f.f.name !== "view") return undefined;
+    let build = body.f.a;
+    while (build.t === "block" && build.stmts.length === 1) build = build.stmts[0];
+    return build.t === "lambda" && untagOf(body.a) === name ? { params: build.params.map((p): Pattern => ({ p: "var", name: p })), body: build.body } : undefined;
+}
+// C, for a matcher written untag C (or intrinsics.untag C).
+function untagOf(match: Expr): string | undefined {
+    while (match.t === "block" && match.stmts.length === 1) match = match.stmts[0];
+    return match.t === "app" && match.a.t === "var" && (match.f.t === "var" && match.f.name === "untag" || untagNamed(match)) ? match.a.name : undefined;
+}
+function untagNamed(match: Expr): boolean {
+    while (match.t === "block" && match.stmts.length === 1) match = match.stmts[0];
+    const f = match.t === "app" ? match.f : undefined;
+    return f?.t === "recordAccess" && f.field === "untag" && f.rec.t === "var" && f.rec.name === "intrinsics";
+}
 export function checkTypes(program: TopLevel[], options: CheckOptions = {}): CheckResult {
+    // A view making and taking apart its own values is the constructor it
+    // spells, checked as one (see viewConstructor), unless the program binds
+    // view or untag itself.
+    if (!program.some(s => (s.t === "def" || s.t === "patDef") && ["view", "untag"].some(name => s.t === "def" ? s.name === name : patternNames(s.pattern).includes(name)))) {
+        program = program.map(s => {
+            const clause = s.t === "def" ? viewConstructor(s.name, s.clauses) : undefined;
+            return clause && s.t === "def" ? { ...s, clauses: [{ ...s.clauses[0], ...clause }] } : s;
+        });
+    }
     const issues: TypeIssue[] = [];
     // How often each name is bound: a top-level value bound once can keep its
     // body to run where it is used (see LazyTop).
@@ -2257,6 +2287,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (fields.k !== "list" || !fields.items) return undefined;
         const declared = scope.get(ctor.name);
         if (isConstructor(declared)) return fields.items.reduce<Ty>((made, field) => application(made, { type: field }, e), declared!.type);
+        // Into a declared type (Shape = Circle r | Square s): a value of it,
+        // its parameters fresh, as no declaration says which field is which.
+        const type = resolve(scope.get(owner.name)?.type ?? unknown()), family = type.k === "type" ? resolve(type.value) : undefined;
+        if (family?.k === "variant" && family.name === owner.name && scope.get(owner.name)?.declaration) return { ...family, args: family.args.map(() => variable()) };
         return { k: "variant", name: owner.name, args: fields.items, fields: true };
     }
     // What a capitalized function makes from any arguments: the type a pattern
@@ -2779,6 +2813,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }
                 // A view's pattern: its fields are what its matcher gives. Which
                 // values it takes apart only the matcher decides, as it runs.
+                // One whose matcher is untag C takes apart C's values, as C's pattern does.
+                const by = entry?.viewParts && untagged(entry.viewParts.match, entry.viewParts.scope);
+                if (by && by !== p.tag && isConstructor(scope.get(by))) return bind({ ...p, tag: by }, expected, scope, e, bound);
                 if (entry?.view) {
                     const matcher = resolve(copy(entry.view));
                     const given = matcher.k === "fn" ? resolve(matcher.output) : undefined;
@@ -8404,6 +8441,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return t.k === "variant";
     }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
+        // A view making and taking apart its own values, X = view (a -> tag X X
+        // [a]) (untag X), is the constructor X a = tag X X [a]: so it runs.
+        const own = constructorView(name, clauses, scope);
+        if (own) clauses = [own];
         const owner = defining?.name;
         if (scope !== topScope && !localNames.has(name)) localNames.set(name, owner ? { owner, field: recordScopes.has(scope) } : undefined);
         try {
@@ -8422,6 +8463,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             } else views.delete(name);
         }
         finally { if (ownDefinitions.has(scope)) ownDefinitions.get(scope)!.add(name); else ownDefinitions.set(scope, new Set([name])); }
+    }
+    // A view of untag's in a block (see viewConstructor).
+    function constructorView(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope): { params: Pattern[]; body: Expr } | undefined {
+        return scope.get("view")?.builtin && scope.get("untag")?.denotes === "intrinsics.untag" ? viewConstructor(name, clauses) : undefined;
+    }
+    // C, for a matcher untag C.
+    function untagged(match: Expr, scope: Scope): string | undefined {
+        const name = untagOf(match);
+        return name && (scope.get("untag")?.denotes === "intrinsics.untag" || untagNamed(match)) ? name : undefined;
     }
     // The names each scope's own definitions bind (a block's scope starts
     // with none: what it sees of its parent's is not its own).
@@ -9022,6 +9072,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("do", { type: { k: "intrinsic", name: "do" } });
     scope.set("intrinsics.match", { type: { k: "intrinsic", name: "match", arity: 2 } });
     scope.set("intrinsics.tag", { type: { k: "intrinsic", name: "tag", arity: 3 } });
+    // untag ctor v: the fields of a value ctor made (a constructor's pattern's
+    // matcher; see the view pattern in bind).
+    scope.set("intrinsics.untag", { type: fn(variable(), fn(variable(), list(variable()))) });
     scope.set("intrinsics.union", { type: { k: "intrinsic", name: "union", arity: 1 } });
     scope.set("intrinsics.intersection", { type: { k: "intrinsic", name: "intersection", arity: 1 } });
     scope.set("intrinsics.refine", { type: { k: "intrinsic", name: "refine", arity: 2 } });

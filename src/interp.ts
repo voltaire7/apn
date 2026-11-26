@@ -254,6 +254,9 @@ export class Interpreter {
     // record of types is named where written as one (Point = [x : Float]), not
     // computed (ts = t :: ts), whose values are data first.
     private namedValue(name: string, value: Value, body: Expr): Value {
+        // A view bound to a capitalized name is that name's constructor: tag
+        // and untag know it by it (Box = view (a -> tag Box Box [a]) (untag Box)).
+        if (value.kind === "native" && value.view && !value.viewName && /^[A-Z]/.test(name)) value.viewName = name;
         while (body.t === "block" && body.stmts.length === 1) body = body.stmts[0];
         // Written as types: names of types, types applied, lists and records of them.
         const writtenType = (e: Expr): boolean => e.t === "var" ? /^[A-Z]/.test(e.name) : e.t === "placeholder" ? true
@@ -2469,7 +2472,10 @@ export class Interpreter {
                     const code = this.dataValue(args[0]);
                     if (this.isList(code) && this.codeItems(code)) throw new TailLoad(code, this.env);
                 }
-                return this.callNative(f.name, args, f.tag);
+                const result = this.callNative(f.name, args, f.tag);
+                // (untag's no match is a pattern's; called, it is a clause that does not fit.)
+                if (result.kind === "nomatch" && !probe) throw new APNError("runtime", `no clause of '${f.name}' matches the given arguments`, { hint: "untag c v takes apart only a value c made" });
+                return result;
             }
             case "clauseFn": {
                 const raw = [...f.applied, arg];
@@ -5533,7 +5539,9 @@ export class Interpreter {
                 if (!this.interactive) throw new APNError("runtime", "repl needs a terminal: run the program with apn");
                 this.session(this.interactive);
                 return mkList([]);
-            case "intrinsics.tag": return this.tagged(args[0], args[1], args[2]);
+            // (A view's name holds its definition until first read.)
+            case "intrinsics.tag": return this.tagged(this.reference(args[0]), this.reference(args[1]), args[2]);
+            case "intrinsics.untag": return this.untagged(this.reference(args[0]), args[1]);
             case "intrinsics.get": return this.builtinGet(this.force(args[0]), args[1]);
             case "intrinsics.with": return this.assignItem(this.dataValue(args[0]), this.dataValue(args[1]), args[2]);
             case "intrinsics.union": return this.union([...this.elements(args[0])].map(x => this.reference(x)));
@@ -6439,12 +6447,23 @@ export class Interpreter {
     // it, the type it belongs to and its fields (Some a = tag Option Some [a]).
     // Patterns read the fields back; the value does nothing else.
     private tagged(owner: Value, ctor: Value, fields: Value): Value {
-        const name = ctor.kind === "variant" ? ctor.tag : ctor.kind === "native" ? ctor.tag ?? ctor.name : ctor.kind === "clauseFn" || ctor.kind === "type" ? ctor.name : undefined;
-        if (!name || !/^[A-Z]/.test(name) && !(ctor.kind === "native" && ctor.tag)) {
-            throw new APNError("runtime", "tag's constructor must be a capitalized definition or constructor", { hint: "Some a = tag Option Some [a]" });
-        }
+        const name = this.constructorName(ctor, "tag");
         if (!this.isList(fields)) throw new APNError("runtime", "tag's fields must be a list", { hint: `tag ${this.ownerName(owner) ?? "Option"} ${name} [x]` });
         return { kind: "variant", tag: name, v: [...this.elements(fields)], family: this.ownerFamily(owner) };
+    }
+    // The name a constructor tags its values with, as tag and untag read it.
+    private constructorName(ctor: Value, by: "tag" | "untag"): string {
+        const name = ctor.kind === "variant" ? ctor.tag : ctor.kind === "native" ? ctor.tag ?? ctor.viewName ?? ctor.name : ctor.kind === "clauseFn" || ctor.kind === "type" ? ctor.name : undefined;
+        if (!name || !/^[A-Z]/.test(name) && !(ctor.kind === "native" && ctor.tag)) {
+            throw new APNError("runtime", `${by}'s constructor must be a capitalized definition or constructor`, { hint: by === "tag" ? "Some a = tag Option Some [a]" : "untag Some (Some 5) is [5]" });
+        }
+        return name;
+    }
+    // untag ctor v: the fields of a value ctor made, matching nothing else: a
+    // constructor's pattern is the view view ctor (untag ctor).
+    private untagged(ctor: Value, value: Value): Value {
+        const name = this.constructorName(ctor, "untag"), v = this.dataValue(value);
+        return v.kind === "variant" && v.tag === name ? mkList(v.v) : { kind: "nomatch" };
     }
     // The type a tagged value belongs to: a declared one's family, or one per
     // capitalized definition, so its values share it.
@@ -6457,7 +6476,10 @@ export class Interpreter {
         if ((given.kind === "native" && given.tag || given.kind === "variant") && given.family) return given.family;
         const owner = given;
         if (owner.kind === "type" && owner.family && !owner.family.base) return owner.family;
-        const key = owner.kind === "type" ? owner.alias : owner.kind === "clauseFn" ? owner.clauses : undefined, name = this.ownerName(owner);
+        // A view named as a constructor is its own values' type, as the
+        // definition its builder is would be.
+        const view = owner.kind === "native" && owner.view && owner.viewName ? owner : undefined;
+        const key = view ?? (owner.kind === "type" ? owner.alias : owner.kind === "clauseFn" ? owner.clauses : undefined), name = view?.viewName ?? this.ownerName(owner);
         if (!key || !name || !/^[A-Z]/.test(name)) {
             throw new APNError("runtime", "tag's owner must be a type the program defines", { hint: "Some a = tag Option Some [a]" });
         }
@@ -6466,10 +6488,11 @@ export class Interpreter {
             // A definition tagging its own values (Box a = tag Box Box [a]) is
             // what Box x = _ declares: its parameters are its type's, each the
             // type of the field in its place (typeOf (Box 3) is Box Int).
-            const names = owner.kind === "type" ? owner.alias?.parameters : undefined;
+            const build = view?.build && this.force(view.build);
+            const names = build?.kind === "closure" ? build.params : owner.kind === "type" ? owner.alias?.parameters : undefined;
             const run = owner.kind === "type" ? owner.alias?.run : undefined;
             const [clause] = run?.kind === "clauseFn" && run.clauses.length === 1 ? run.clauses : [];
-            let body = clause?.body;
+            let body = build?.kind === "closure" ? build.body : clause?.body;
             while (body?.t === "block" && body.stmts.length === 1) body = body.stmts[0];
             // Its fields as its tag lists them (tag Pt Pt [y,x]).
             let head = body;

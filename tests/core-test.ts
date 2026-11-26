@@ -17,6 +17,8 @@ const BOX = "Box a = tag Box Box [a]\n";
 // Name params = _ declares a constructor: an application that stands for
 // nothing but itself, one field per parameter.
 const CTOR = "Box x = _\nRect (w : Float) (h : Float) = _\nNothing = _\n";
+// Box x = _ written as the view it is.
+const BOX_VIEW = "VBox = view (a -> tag VBox VBox [a]) (untag VBox)\n";
 // Name fields : T = _ declares a constructor into T: one type, as a union
 // declaration (Maybe a = Just a | Nada) makes.
 const MAYBE = "Just x : Maybe x = _\nNada : Maybe a = _\n";
@@ -143,6 +145,16 @@ for (const checked of [true, false]) {
         ["Pos (x : Int) : Num = x < 0 ? Pos (0 - x) : _\n[Pos -2, typeOf (Pos 1)]", "[Pos 2, Num]"],
         ["N : V Z a = _\nC a (xs : V k a) : V (S k) a = _\ntypeOf (C 1 (C 2 N))", "V 2 Int"],
         ["f = {\n    Lo : Lvl = _\n    Hi : Lvl = _\n    [Lo, typeOf Hi]\n}\nf", "[Lo,Lvl]"],
+        // A constructor is the view of tag and untag: untag gives a value's
+        // fields, and a view over it takes the constructor's values apart.
+        [CTOR + "[untag Box (Box 5), untag Rect (Rect 1 2), untag Nothing Nothing]", "[[5],[1.0,2.0],[]]"],
+        [BOX_VIEW + "unbox (VBox x) = x\n[unbox (VBox 6), typeOf (VBox 6), VBox 1 == VBox 1]", "[6, VBox Int, True]"],
+        [CTOR + "MyBox = view Box (untag Box)\nmine (MyBox x) = x\nkind (Box _) = 1\nkind _ = 0\n[mine (Box 7), kind (MyBox 1)]", "[7,1]"],
+        [BOX_VIEW + "kind (VBox _) = 1\nkind _ = 0\n[kind (VBox 1), kind 2]", "[1,0]"],
+        // Into a declared type, as a constructor declared into it would be.
+        ["Shape = Circle Float | Square Float\nC2 = view (r -> tag Shape C2 [r]) (untag C2)\n" +
+            "area (C2 r) = r * r\narea (Circle r) = r\n[area (C2 3), area (Circle 3), typeOf (C2 3)]", "[9,3.0,Shape]"],
+        ["Shape = Circle Float | Square Float\nC2 r = tag Shape C2 [r]\narea (C2 r) = r * r\narea (Circle r) = r\n[area (C2 3), area (Circle 3)]", "[9,3.0]"],
     ] as const) Deno.test(`core (checked=${checked}): ${source}`, () => {
         const actual = run(source, checked);
         if (actual !== expected) throw new Error(`${actual} != ${expected}`);
@@ -151,6 +163,11 @@ for (const checked of [true, false]) {
         [BOX + "unbox (Box x) = x\nunbox 5", checked ? "cannot use Int where Box is required" : "no clause"],
         [BOX + "Box 5 + 1", checked ? "cannot combine Box and Int" : "cannot apply '+'"],
         ["tag Int Int [1]", "tag's owner must be a type the program defines"],
+        [CTOR + "untag Box 5", "no clause of 'intrinsics.untag' matches"],
+        [CTOR + "untag 5 (Box 1)", "untag's constructor must be a capitalized definition"],
+        // The fields' types are the constructor's, either way it is written.
+        [CTOR + "MyBox = view Box (untag Box)\nmine (MyBox x) = x\nmine (Box True) + 1", checked ? "cannot combine Bool and Int" : "cannot apply '+'"],
+        [BOX_VIEW + "unbox (VBox x) = x\nunbox (VBox True) + 1", checked ? "cannot combine Bool and Int" : "cannot apply '+'"],
         ["Box a = tag Box (x -> x) [a]\nBox 1", "tag's constructor must be a capitalized definition"],
         [CTOR + 'Rect "a" 2', checked ? "cannot use String where Float is required" : "Float expects a number"],
         [CTOR + "Box 5 + 1", checked ? "cannot combine Box Int and Int" : "cannot apply '+'"],

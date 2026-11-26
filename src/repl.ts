@@ -312,6 +312,7 @@ function helpText(): string {
         `  Add x (Num 0) = x, then Add x y = _   (rules before a constructor's declaration run first)`,
         `  Percent (x : Float) = x > 100 ? Percent 100.0 : _   (a constructor's logic; _ is the value itself)`,
         `  Box a = tag Box Box [a]   (a tagged value: its constructor, owner and fields)`,
+        `  untag Box (Box 5) => [5]   (its fields; a constructor is view (a -> tag Box Box [a]) (untag Box))`,
         `  assert c x           x once c holds (a failure reports c and its location)`,
         `  [1,2,3]  [0..5] [0,0.5..100] [0..]  ranges; 0:[] conses`,
         `  ['a'..'e'] => "abcde"; take 6 (iterate (*2) 1) => [1,2,4,8,16,32]`,

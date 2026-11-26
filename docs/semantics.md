@@ -1275,6 +1275,22 @@ Nat 4                           # 5
 The fields' types are what the matcher gives. Which values a view's pattern
 matches only the matcher decides, so the checker leaves it to the run.
 
+A constructor is a view too: `untag ctor v` (`intrinsics.untag`) gives the
+fields of a value `ctor` made and matches nothing else, so `Box x = _` is the
+view of `tag` and `untag`, and a view bound to a capitalized name tags its
+values by that name:
+
+```apn
+Box = view (a -> tag Box Box [a]) (untag Box)   # what Box a = _ declares
+untag Box (Box 5)               # [5]
+MyBox = view Box (untag Box)    # MyBox x matches Box 5, as Box x does
+```
+
+A nullary constructor (`None = _`) is the value it tags, which no view of
+itself can build; `untag None None` is `[]`. The checker types a view over
+`untag C` as `C`'s pattern, and one tagging and untagging itself as the
+constructor it spells.
+
 A type in a pattern takes its parameters, then a value. Applied to exactly its
 parameters it matches a type value, each name binding the part in its place:
 `(Option t)` given `Option Int` binds `t` to `Int`, `(Vect n a)` given `Vect 3

@@ -26,6 +26,8 @@ export const NATIVES: Array<[string, number]> = [
     ["to", 2], ["from", 2],
     // tag owner ctor fields: a value made by ctor, belonging to owner.
     ["intrinsics.tag", 3],
+    // untag ctor v: the fields of a value ctor made; it matches nothing else.
+    ["intrinsics.untag", 2],
     // get v k: what applying a value that is not a function gives (xs 2, r "x").
     ["intrinsics.get", 2],
     // with v k x: a copy of v with k set to x (xs 2 = x binds xs to with xs 2 x).

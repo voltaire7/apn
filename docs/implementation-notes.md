@@ -600,7 +600,14 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
   owner's or one per capitalized definition (`ownerFamily`); the checker types
   `tag Owner Ctor [fields]` by its shape (`taggedType`): a declared
   constructor's application, else a `fields` variant of the field types, which
-  a pattern of the tagging function binds. Tests: `tests/core-test.ts`.
+  a pattern of the tagging function binds. `untag` (`untagged`) reads a
+  variant's fields back, a `nomatch` that is an error outside a pattern; a
+  view's definition names it (`namedValue`), so `tag` takes it as constructor
+  and owner (`ownerFamily`, its builder's parameters its type's). A
+  constructor pattern matches by tag (`matchPattern`), as `untag` would. The
+  checker defines a view tagging and untagging itself as the constructor it
+  spells (`viewConstructor`), and types a view over `untag C` as `C`'s pattern.
+  Tests: `tests/core-test.ts`.
 - A capitalized function is a `type` value with `alias`: its clauses as a
   `clauseFn` (`run`), so choosing among them is a function's; `construct`
   applies it, as the checker's `construct` does. A non-scalar type it gives is

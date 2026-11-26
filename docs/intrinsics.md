@@ -332,7 +332,7 @@ reasons:
   message` stops with an error; a definition can use them, not make them.
 - **Reading values as data**: `typeOf`, `isType`, `==`, `<` and the other
   comparisons, `|` and `&` (`intrinsics.union`, `intrinsics.intersection`),
-  `intrinsics.refine`, `intrinsics.tag`, `pairs` of a record, `to` and `from`
+  `intrinsics.refine`, `intrinsics.tag` and `intrinsics.untag`, `pairs` of a record, `to` and `from`
   with their built-in instances (`String`, `JSON`, `List Char`), `format`, and
   `parse` of a literal. Each is a function by cases over every kind of value,
   which a definition could give only by matching the model of each type:
