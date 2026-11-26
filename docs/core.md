@@ -128,68 +128,6 @@ than expanding `v.(e)` to `{ [..] = v; e }`, which it behaves as: `[..]` needs
 the names it binds before the run, and a `Dynamic` record's are known only
 during it ([record-scoped expressions](semantics.md#record-scoped-expressions)).
 
-## Proposal: every name a type of its own
-
-**Draft, not built.** Today `X = T` makes a named subtype: an `X` is a `T`
-wherever one is asked, and a `T` is an `X` too (`f (c : Count)` takes `5`;
-`Shader = String` would take every string, which is why it is
-`Shader = | Glsl String`). Its name is kept by a rule of its own (`(1 : Int8)
-+ 2` is an `Int8`). Three mechanisms say where a value fits: that subtype
-rule, distinct types (`UserId (id : Int) = _`) and `to` instances
-(`to Int East = 1`). The proposal keeps two:
-
-1. **`X = T` makes a type of its own.** Its values are `T`'s with `X`'s name.
-   Ascription crosses the definition in both directions and nothing else
-   does: `(t : X)` makes an `X` from a `T` (checking `T`, and a refinement's
-   condition), and `(x : T)` gives the `T` back, so `("hi" : String) : List
-   Char` is `['h','i']`. Where a `T` is asked an `X` is no `T`, a `T` is no
-   `X` (`f (c : Count)` rejects `5`), and `==` never converts
-   (`"hi" == ['h','i']` is `False`).
-2. **A `to` instance is what makes a subtype.** `to T x` is `x : T`, as a
-   function; an instance (`to (List Char) (s : String) = (s : List Char)`)
-   declares that an `X` converts where a `T` is asked, at the places
-   conversions apply (an index, arithmetic, a typed pattern). Without one,
-   an `X` is used as a `T` only by writing `(x : T)`.
-
-What it means for the built-in names, which follow the same rules
-([intrinsics](intrinsics.md)):
-
-- `Shader = String` replaces `Shader = | Glsl String`: plain strings are no
-  `Shader`s, and the module declares `to String` only if it wants one.
-- `String = List Char` and `Char = (n : UInt) | ...` keep their names
-  (`typeOf "hi"` is `String`). The prelude declares `to (List Char)` for a
-  `String` and `to UInt` for a `Char`, so they work as lists and numbers where
-  conversions apply.
-- A name kept through arithmetic is a clause, as a program's own type keeps
-  its (`Money a + Money b = Money (a + b)`): `(c : Char) + (n : Int) =
-  ((c : UInt) + n : Char)` keeps `'a' + 1` the `Char` `'b'`, and the sized
-  integers have the same clauses in place of the rule they have now.
-
-It removes the subtype rule, the rule that a pattern takes a base value, and
-the built-in name-keeping. It costs what the last changes gave strings:
-`"hi" == ['h','i']` and `"" == []` are `False` again, and `"hi" 1`,
-`head "hi"` and `c :: cs` work only where a conversion applies.
-
-**Implementation.** A value of `X` is already stored as its `T` value with
-`X`'s name: an `Int8` is an `Int` named `Int8`, a named subtype's value a
-variant holding its base, and a `String` or `Char` the run's text kinds.
-Ascription to `X` checks the value is a `T` and names it; ascription to `T`
-of an `X` drops the name. `to T x` asks the program's instances first, as
-now, then is that ascription. The checker gives `X` its own type, equal only
-to itself, with the two ascriptions as its only rules beside the instances,
-which it already reads where conversions apply.
-
-**Open questions.**
-
-- **Where conversions apply.** For a `String` to stay usable as a list, list
-  and cons patterns (`c :: cs`, `[a,b]`) and functions written over lists
-  (`head`, `map`) would have to convert through `to (List _)` too: either
-  list patterns become a place conversions apply, or strings use
-  `(s : List Char)` explicitly.
-- **How an alias is written** when `X = T` always makes a new type, for the
-  cases that want one (a long type given a short name).
-- **`==` between an `X` and a `T`:** `False`, as above, or a static error.
-
 ## Order of work
 
 1. Views as a primitive; `S`/`Z` and `Takes`/`Gives` move to the prelude (done).
