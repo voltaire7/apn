@@ -18,8 +18,10 @@ merges function clauses between submissions. Failed static checks install no
 bindings. If execution fails, the submission's binding map is restored; already
 performed I/O and mutations of reference contents are not undone.
 
-`--lint --types` and optional editor diagnostics retain gradual analysis, reporting
-known contradictions without requiring every operation to be established.
+`--lint --types` and optional editor diagnostics run the same check, imports
+included, and report every issue it finds rather than stopping at the first. A
+file linted alone may be a module of a program further up, so its imports
+search every parent folder; a standard library file is checked as its import is.
 
 The checker infers polymorphic functions, propagates application constraints,
 checks structural record fields, constructor patterns,

@@ -40,6 +40,10 @@ Deno.test("lint reports real layout and syntax errors without executing APN", ()
     // So in the shorthand Vect n a xs, also when a lambda's pattern repeats it.
     equal(unused("f (xs : Vect n a) (ys : Vect m a) = [n,m,xs,ys]\ng = (xs : Vect n a) -> (ys : Vect m a) -> [n,m,xs,ys]"), []);
     equal(unused("f (xs : Vect n a) = [n,xs]").map(d => d[2]), ["'a' is never used; write _ to discard it"]);
+    // A name bound twice compares the two: f x x uses x, as (k : a) (m : HashMap a _) uses a.
+    equal(unused("f x x = 1\ng (k : a) (m : HashMap a b) = [k,m]").map(d => d[2]), ["'b' is never used; write _ to discard it"]);
+    // A function type uses its input: (g : a -> b), and k : t -> Int ascribes one.
+    equal(unused("f (g : a -> b) = g\nh t k : Int = k : t -> Int"), []);
     // A literal zero divisor warns, except IEEE division with a Float on either side.
     const zero = (source: string) => lint(source).filter(d => d.code === "zeroDivisor").map(d => [d.range.start.line, d.range.start.character, d.range.end.character]);
     equal(zero("a = 1 / 0\nb = (/ 0)\nc = quotient 7 -0\nd = 7 % 0.0\ne = modulo 7 0"), [[0, 8, 9], [1, 7, 8], [2, 15, 17], [3, 8, 11], [4, 13, 14]]);
@@ -116,6 +120,15 @@ Deno.test("outline omits nested bindings", () => {
 
 Deno.test("outline supports apostrophes and excludes comparison expressions", () => {
     equal(symbols("double' x = x * 2\ndouble' 1 == 2\ndouble' \"=\"\n").map((s) => s.name), ["double'"]);
+});
+// The linter checks a file as a run does, imports included: what an import
+// gives is its type, not Dynamic, and a package's module finds its siblings.
+Deno.test("type diagnostics check imports as a run does", () => {
+    for (const file of ["examples/standard-library.apn", "examples/p5js/snake.apn", "examples/packages/shapes/solid/box.apn"]) {
+        const url = new URL(`../${file}`, import.meta.url);
+        const types = lint(Deno.readTextFileSync(url), true, new URL(".", url).pathname).filter(d => d.code === "type");
+        equal([file, types.map(d => d.message)], [file, []]);
+    }
 });
 Deno.test("optional type diagnostics share the checker", () => {
     const source = 'f (x : Int) = x\nf "bad"';

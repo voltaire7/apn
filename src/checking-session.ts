@@ -1,7 +1,7 @@
 import { APNError } from "./errors.ts";
 import { parse } from "./parser.ts";
-import { loadPath, readLoad, resolveModule, unknownModule } from "./modules.ts";
-import { type CheckOptions, checkTypes, type LocalName, dynamicEntry, importedValue, mayMutate, moduleType, moduleValue, recursiveValue, settleRecursive, type TypeBridge, type TypeScope } from "./type-checker.ts";
+import { inLibrary, loadPath, readLoad, resolveModule, unknownModule } from "./modules.ts";
+import { type CheckOptions, checkTypes, type LocalName, dynamicEntry, importedValue, mayMutate, moduleType, moduleValue, recursiveValue, settleRecursive, type TypeBridge, type TypeIssue, type TypeScope } from "./type-checker.ts";
 import { type Expr, type TopLevel } from "./ast.ts";
 type Ty = ReturnType<typeof moduleValue>;
 
@@ -77,7 +77,38 @@ export class CheckingSession {
         let exports: TypeScope = new Map();
         let value: Ty | undefined;
         const result = checkTypes(program, {
-            strict: true, initial, library, before, file,
+            ...this.options(program, directory, library), strict: true, initial, before, file,
+            result: (bound, published, last) => { scope = bound; exports = published; value = last; },
+        });
+        // A module's [..] opens names in its own scope, which no other program shares.
+        if (result.opaqueUse && !library) this.opaqueUses.add(program);
+        if (result.issues.length) {
+            const issue = result.issues[0];
+            const error = new APNError("type", issue.message, issue);
+            error.src = issue.source;
+            throw error;
+        }
+        return { scope, exports, value };
+    }
+
+    // Every issue a run's check of a program finds, not only its first: the
+    // linter's. A file linted alone may be a module of a program further up,
+    // so its imports search every parent folder; a standard library file is
+    // checked as an import of it is.
+    issues(program: TopLevel[], directory = "."): TypeIssue[] {
+        this.root = "/";
+        this.mutation ||= mayMutate(program);
+        const library = inLibrary(directory, this.moduleSources);
+        const { issues } = checkTypes(program, { ...this.options(program, directory, library), strict: true, ...library ? { file: false } : {} });
+        // A contradiction met twice (by its statement, then by a check left to
+        // the end) is one issue.
+        return issues.filter((issue, n) => issues.findIndex(other => other.pos === issue.pos && other.message === issue.message) === n);
+    }
+
+    // What every check of a program in this session shares.
+    private options(program: TopLevel[], directory: string, library: boolean): CheckOptions {
+        return {
+            library,
             runtimeNames: !library && this.runtimeNames ? new Set(this.runtimeNames()) : undefined,
             inputs: library ? undefined : this.inputs,
             localNames: library ? undefined : this.localNames,
@@ -91,17 +122,7 @@ export class CheckingSession {
             bridge: bridge => { this.bridge = bridge; },
             imports: module => this.module(module, directory),
             loads: path => this.load(path, directory),
-            result: (bound, published, last) => { scope = bound; exports = published; value = last; },
-        });
-        // A module's [..] opens names in its own scope, which no other program shares.
-        if (result.opaqueUse && !library) this.opaqueUses.add(program);
-        if (result.issues.length) {
-            const issue = result.issues[0];
-            const error = new APNError("type", issue.message, issue);
-            error.src = issue.source;
-            throw error;
-        }
-        return { scope, exports, value };
+        };
     }
 
     // The value of the module spec names from directory, its own copy for this

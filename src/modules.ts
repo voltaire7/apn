@@ -119,12 +119,18 @@ export function resolveModule(spec: string, directory: string, bundle?: Record<s
     }
     const start = absolute(directory, files);
     // Inside the standard library, a bare name is a module beside the file.
-    if (start.startsWith(files.lib)) return find(files, start, spec, true);
+    if (inLibrary(directory, bundle)) return find(files, start, spec, true);
     for (const folder of searchFolders(start, root === undefined ? undefined : absolute(root, files))) {
         const local = find(files, folder, spec, false);
         if (local) return local;
     }
     return undefined;
+}
+
+/** Whether code in directory is the standard library's own (one of its modules). */
+export function inLibrary(directory: string, bundle?: Record<string, string>): boolean {
+    const files = bundle ? bundleFiles(bundle) : disk;
+    return absolute(directory, files).startsWith(files.lib);
 }
 
 /** import given anything but one module's path (a list of them, say). */

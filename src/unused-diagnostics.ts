@@ -15,8 +15,9 @@ export function unusedDiagnostics(program: TopLevel[], source: string): Diagnost
         const used = new Set<string>();
         for (const e of [body, ...extra]) free(e, new Set(), used, new Set(names));
         const start = firstOffset(body);
-        for (const name of names) {
-            if (used.has(name) || name.startsWith("_") || name.startsWith("$")) continue;
+        // A name bound twice (f x x) is used: the second compares with the first.
+        for (const name of new Set(names)) {
+            if (used.has(name) || names.indexOf(name) !== names.lastIndexOf(name) || name.startsWith("_") || name.startsWith("$")) continue;
             const at = start === undefined ? undefined : lastWord(source, name, start);
             if (at === undefined) continue;
             diagnostics.push({
@@ -93,10 +94,11 @@ export function unusedDiagnostics(program: TopLevel[], source: string): Diagnost
 // The types a typed pattern may name, as Vect n a xs: the prelude's, and the
 // document's (set for each document checked).
 let typeNames = new Set<string>();
-// Vect n a xs is the typed pattern ((Vect n a) xs): its type's arguments are
-// expressions, compared when bound, and only its last part binds a value.
+// Vect n a xs is the typed pattern ((Vect n a) xs), as (m : HashMap a b) is:
+// its type's arguments are expressions, compared when bound, and only its
+// last part binds a value.
 function typed(p: Pattern): Pattern {
-    if (p.p !== "constr" || !typeNames.has(p.tag) || p.args.length < 2) return p;
+    if (p.p !== "constr" || !(p.typed || typeNames.has(p.tag)) || p.args.length < 2) return p;
     const parts = p.args.slice(0, -1).map((x): Expr => x.p === "var" ? { t: "var", name: x.name } : x.p === "int" ? { t: "int", v: x.v } : { t: "placeholder" } as Expr);
     return { p: "schema", type: parts.reduce((f, a): Expr => ({ t: "app", f, a }), { t: "var", name: p.tag } as Expr), value: p.args.at(-1)! };
 }
@@ -132,6 +134,14 @@ function namesIn(e: unknown): string[] {
     const n = e as Record<string, unknown>;
     if (n.t === "var") return [n.name as string];
     return Object.values(n).flatMap(v => v && typeof v === "object" ? namesIn(v) : []);
+}
+
+// The names a function type uses: a -> b's input a too, written as a parameter.
+function typeNamesIn(e: unknown): string[] {
+    const n = e as Record<string, unknown>;
+    if (n?.t === "lambda") return [...n.params as string[], ...typeNamesIn(n.body)];
+    if (n?.t === "block" && Array.isArray(n.stmts) && n.stmts.length === 1) return typeNamesIn(n.stmts[0]);
+    return namesIn(e);
 }
 
 type Clause = { params: Pattern[]; body: Expr; guard?: Expr };
@@ -233,7 +243,10 @@ function free(e: unknown, shadowed: Set<string>, used: Set<string>, values = new
     if ("p" in n) {
         const p = typed(n as Pattern);
         if (p !== n) { free(p, shadowed, used, values); return; }
-        if (n.p === "schema") free(n.type, shadowed, used, values);
+        // A lambda as a pattern's type ((k : t -> b), and so k : t -> b) is a
+        // function type: it uses its names.
+        if (n.p === "schema" && lambdaIn(n.type)) { for (const name of typeNamesIn(n.type)) if (!shadowed.has(name)) used.add(name); }
+        else if (n.p === "schema") free(n.type, shadowed, used, values);
         for (const value of Object.values(n)) if (value && typeof value === "object" && (Array.isArray(value) || "p" in value)) free(value, shadowed, used, values);
         return;
     }

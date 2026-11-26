@@ -1,4 +1,4 @@
-import { checkTypes } from "./type-checker.ts";
+import { CheckingSession } from "./checking-session.ts";
 import { matchDiagnostics } from "./match-diagnostics.ts";
 import { unusedDiagnostics } from "./unused-diagnostics.ts";
 import { divisionDiagnostics } from "./division-diagnostics.ts";
@@ -26,7 +26,7 @@ export function position(source: string, offset: number): Position {
 export function lint(source: string, types = false, directory = "."): Diagnostic[] {
     try {
         const program = parseDocument(source), diagnostics = [...matchDiagnostics(program, source, directory), ...unusedDiagnostics(program, source), ...divisionDiagnostics(program, source), ...terminationDiagnostics(program, source)];
-        if (types) for (const issue of checkTypes(program).issues) diagnostics.push({
+        if (types) for (const issue of new CheckingSession().issues(program, directory)) diagnostics.push({
             range: { start: position(source, issue.pos), end: position(source, issue.pos + issue.len) },
             severity: 1, source: "apn", code: "type", message: issue.message,
         });

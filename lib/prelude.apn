@@ -171,20 +171,20 @@ null (text : String) = text == ""
 null (m : HashMap _ _) = null (pairs m)
 null _ = False
 drop 0 xs = xs
-drop (n : UInt) [] = []
+drop (_ : UInt) [] = []
 drop (n : UInt) (_ :: xs) = drop (n - 1) xs
-filter keep [] = []
+filter _ [] = []
 filter keep (x :: xs) = keep x ? x :: filter keep xs : filter keep xs
 iterate f x = x :: iterate f (f x)
 take 0 _ = []
-take (n : UInt) [] = []
+take (_ : UInt) [] = []
 take (n : UInt) (x :: xs) = x :: take (n - 1) xs
-foldl f acc [] = acc
+foldl _ acc [] = acc
 foldl f acc (x :: xs) = {
     next = f acc x
     intrinsics.seq next (foldl f next xs)
 }
-foldr f z [] = z
+foldr _ z [] = z
 foldr f z (x :: xs) = f x (foldr f z xs)
 length [] = 0
 length (_ :: xs) : Int = 1 + length xs
@@ -194,9 +194,9 @@ zipWith _ _ _ = []
 enumerate xs = zipWith (i, x -> [i,x]) [0..] xs
 # A HashMap is an association list whose keys appear once, in the order they
 # were first inserted; pairs m is that list.
-keys (m : HashMap a b) : List a = map ([key,_] -> key) (pairs m)
-values (m : HashMap a b) : List b = map ([_,value] -> value) (pairs m)
-has (key : a) (m : HashMap a b) : Bool = not (null (filter ([k,_] -> k == key) (pairs m)))
+keys (m : HashMap a _) : List a = map ([key,_] -> key) (pairs m)
+values (m : HashMap _ b) : List b = map ([_,value] -> value) (pairs m)
+has (key : a) (m : HashMap a _) : Bool = not (null (filter ([k,_] -> k == key) (pairs m)))
 lookup (key : a) (m : HashMap a b) : b = filter ([k,_] -> k == key) (pairs m) ~ [
     [] -> fail "HashMap key not found"
     [_,value] :: _ -> value
