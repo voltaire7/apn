@@ -30,11 +30,11 @@ for (const [source, expected] of [
     [VEC + "elem (_ : Vec _ a) = a\nelem xs", "Int"],
     [VEC + "first (VCons x _) = x\nfirst xs", "1"],
     // Each clause may state its result's indices.
-    [VEC + APP + "(VCons x (app r ys) : Vec (n + m) a)\ntypeOf (app xs xs)", "Vec 4 Int"],
+    [VEC + APP + "VCons x (app r ys) : Vec (n + m) a\ntypeOf (app xs xs)", "Vec 4 Int"],
     // Proven by induction: an accumulator, a doubling, a proven function's claim.
-    [VEC + REV + "(rev r (VCons x acc) : Vec (n + m) a)\nrev xs VNil", "VCons 2 (VCons 1 VNil)"],
+    [VEC + REV + "rev r (VCons x acc) : Vec (n + m) a\nrev xs VNil", "VCons 2 (VCons 1 VNil)"],
     [VEC + "dbl (VNil : Vec n a) = VNil : Vec (2 * n) a\ndbl (VCons x r : Vec n a) = VCons x (VCons x (dbl r)) : Vec (2 * n) a\ntypeOf (dbl xs)", "Vec 4 Int"],
-    [VEC + APP + "(VCons x (app r ys) : Vec (n + m) a)\ntwice (v : Vec n a) = app v v : Vec (n + n) a\ntypeOf (twice xs)", "Vec 4 Int"],
+    [VEC + APP + "VCons x (app r ys) : Vec (n + m) a\ntwice (v : Vec n a) = app v v : Vec (n + n) a\ntypeOf (twice xs)", "Vec 4 Int"],
     // Recursion that does not shrink proves nothing: its claim is checked when it runs.
     [VEC + "loop (v : Vec n a) = loop v : Vec (n + 1) a\n1", "1"],
 ] as const) {
@@ -51,14 +51,14 @@ for (const [source, kind, message] of [
     [VEC + "first (VCons x _) = x\nfirst VNil", "type", "no clause of 'first' matches these arguments"],
     // Others when the program builds them.
     // A wrong claim is an error at its definition, called or not.
-    [VEC + APP + "(VCons x (app r ys) : Vec (n + m + 1) a)", "type", "the claim Vec (n + m + 1) a does not hold: when r is VNil, n + m + 1 is m + 2 but the body's index is m + 1"],
+    [VEC + APP + "VCons x (app r ys) : Vec (n + m + 1) a", "type", "the claim Vec (n + m + 1) a does not hold: when r is VNil, n + m + 1 is m + 2 but the body's index is m + 1"],
     [VEC + "app (VNil : Vec n a) (ys : Vec m a) = ys : Vec (n + m + 1) a", "type", "n + m + 1 is m + 1 but the body's index is m"],
-    [VEC + REV + "(rev r (VCons x acc) : Vec (n + m + 1) a)", "type", "when r is VNil, n + m + 1 is m + 2 but the body's index is m + 1"],
+    [VEC + REV + "rev r (VCons x acc) : Vec (n + m + 1) a", "type", "when r is VNil, n + m + 1 is m + 2 but the body's index is m + 1"],
     // The wrong clause is the one reported, not one that assumed its claim.
     [VEC + "app (VCons x r : Vec n a) (ys : Vec m a) = VCons x (app r ys) : Vec (n + m) a\napp (VNil : Vec n a) (ys : Vec m a) = ys : Vec (n + m + 1) a", "type", "n + m + 1 is m + 1 but the body's index is m"],
-    [VEC + APP + "(VCons x (app r ys) : Vec (n + m) a)\ntwice (v : Vec n a) = app v v : Vec (n + n + 1) a", "type", "n + n + 1 is 2 * n + 1 but the body's index is 2 * n"],
+    [VEC + APP + "VCons x (app r ys) : Vec (n + m) a\ntwice (v : Vec n a) = app v v : Vec (n + n + 1) a", "type", "n + n + 1 is 2 * n + 1 but the body's index is 2 * n"],
     // What the proof cannot decide is checked when it runs.
-    [VEC + APP + "(VCons x (app r ys) : Vec (n + m) a)\nboth (v : Vec n a) (w : Vec m a) = app v v : Vec (n + m) a\nboth xs (VCons 1 VNil)", "runtime", "expected Vec 3 Int, got Vec 4 Int"],
+    [VEC + APP + "VCons x (app r ys) : Vec (n + m) a\nboth (v : Vec n a) (w : Vec m a) = app v v : Vec (n + m) a\nboth xs (VCons 1 VNil)", "runtime", "expected Vec 3 Int, got Vec 4 Int"],
     ["Vec n a = VNil -> List a | VCons a (Vec k a) -> Vec (S k) a", "parse", "VNil must make a Vec"],
 ] as const) {
     Deno.test(`indexed families reject: ${source}`, () => {

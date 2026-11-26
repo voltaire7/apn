@@ -89,7 +89,7 @@ for (const [name, source, expected] of [
         [mapText, "return\nSome\nOk", "(>>=)\n[], f -> []\nx :: rest, f -> f x ++ (rest >>= f)\nSome x, f -> f x\nNone, _ -> None\nOk x, f -> f x\nErr error, _ -> Err error", mapText]],
     ["Result instances", 'std <- import "std"; [..] = std.option\nprint (map (+ 1) (Ok 1))\nprint (map (+ 1) (Err "bad"))\nprint (Ok 3 >>= x -> Ok (x + 1))', ["Ok 2", 'Err "bad"', "Ok 4"]],
     ["<*> derives from >>=", 'std <- import "std"; [..] = std.option\nprint (Some (+ 1) <*> Some 41)\nprint ([(+ 1), (* 2)] <*> [10,20])', ["Some 42", "[11,21,20,40]"]],
-    ["a user-defined monad", `${counter}\ncounted = ({\n    a <- tick\n    b <- tick\n    return (a * 100 + b)\n} : Counter Int Int)\nprint (runCounter counted 5)\nprint (runCounter (map (* 2) tick) 3)`,
+    ["a user-defined monad", `${counter}\ncounted : Counter Int Int = {\n    a <- tick\n    b <- tick\n    return (a * 100 + b)\n}\nprint (runCounter counted 5)\nprint (runCounter (map (* 2) tick) 3)`,
         ["[506,7]", "[6,4]"]],
     ["a user instance keeps the others", "Tree = Leaf Int | Node Tree Tree\nmap f (Leaf x) = Leaf (f x)\nmap f (Node l r) = Node (map f l) (map f r)\nprint (map (+ 1) (Node (Leaf 1) (Leaf 2)))\nprint (map (+ 1) [1,2])",
         ["Node (Leaf 2) (Leaf 3)", "[2,3]"]],

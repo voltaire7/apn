@@ -6,7 +6,7 @@ std <- import "std"
     bfsDistances neighbors starts = {
         initial = [
             frontier = unique starts
-            distances = (map (x -> [x,0]) starts : HashMap _ _)
+            distances : HashMap _ _ = map (x -> [x,0]) starts
             depth = 0
         ]
         step state = {

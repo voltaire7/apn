@@ -29,9 +29,9 @@ newBall (p : Sketch) = {
     xspeed <- p.random -2 2
     yspeed <- p.random -2 2
     return [
-        x = (x : Float), y = (y : Float), diameter = (diameter : Float)
-        xspeed = (xspeed : Float), yspeed = (yspeed : Float), direction = 0.7
-        restX = (xspeed : Float), restY = (yspeed : Float)
+        x : Float = x, y : Float = y, diameter : Float = diameter
+        xspeed : Float = xspeed, yspeed : Float = yspeed, direction = 0.7
+        restX : Float = xspeed, restY : Float = yspeed
     ]
 }
 

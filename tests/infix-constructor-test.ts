@@ -18,7 +18,7 @@ for (const [source, expected] of [
     ["f (x :: _) = x; f [1,2]", "1"],
     [VEC + "first (x :: _) = x\nfirst (1 :: 2 :: VNil)", "1"],
     [VEC + "typeOf (1 :: 2 :: VNil)", "Vec 2 Int"],
-    [VEC + APP + "(x :: app r ys : Vec (n + m) a)\ntypeOf (app (1 :: VNil) (2 :: VNil))", "Vec 2 Int"],
+    [VEC + APP + "x :: app r ys : Vec (n + m) a\ntypeOf (app (1 :: VNil) (2 :: VNil))", "Vec 2 Int"],
     ["P a b = | MkP a b\n(:+) = MkP\nswap (x :+ y) = y :+ x\nswap (1 :+ \"a\")", 'MkP "a" 1'],
     ["P a b = | MkP a b\n(:+) = MkP\n1 :+ 2 ~ [x :+ y -> x + y]", "3"],
 ] as const) {
@@ -31,7 +31,7 @@ for (const [source, expected] of [
 }
 for (const [source, message] of [
     // The proofs follow x :: xs as VCons x xs.
-    [VEC + APP + "(x :: app r ys : Vec (n + m + 1) a)", "when r is VNil, n + m + 1 is m + 2 but the body's index is m + 1"],
+    [VEC + APP + "x :: app r ys : Vec (n + m + 1) a", "when r is VNil, n + m + 1 is m + 2 but the body's index is m + 1"],
     ["(:-) = 3\nf (x :- _) = x\n1", "':-' is not a constructor"],
     ["f (x :- _) = x\n1", "':-' is not a constructor"],
 ] as const) {

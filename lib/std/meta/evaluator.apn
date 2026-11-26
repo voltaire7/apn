@@ -31,7 +31,7 @@ meNode scope tag arguments = typeOf tag == typeOf "text"
     : meApplyAll (meEval scope tag) (meList scope arguments)
 meForms = insert [["$",mePipe],["{}",meBlock],[":",meAscription]]
     ([["->",meLambda],["?:",meIf],["[]",meList]] : HashMap _ _)
-meAscription scope arguments = (meEval scope (head arguments) : meEval scope (arguments 1))
+meAscription scope arguments = meEval scope (head arguments) : meEval scope (arguments 1)
 meLambda scope arguments = meClosure (head arguments) (arguments 1) scope
 meIf scope arguments = meEval scope (head arguments)
     ? meEval scope (arguments 1)
@@ -65,8 +65,8 @@ meScope statements parent = {
     scope = [insert (meBindings statements (head scope)) parent]
     head scope
 }
-meClosure parameters body scope = ([["__closure", True], ["parameters",parameters]]
-    ++ [["body",body],["scope",scope]] : HashMap _ _)
+meClosure parameters body scope = [["__closure", True], ["parameters",parameters]]
+    ++ [["body",body],["scope",scope]] : HashMap _ _
 # A closure takes its parameters one at a time.
 meApply function argument = isType (HashMap _ _) function
     ? (has "__closure" function

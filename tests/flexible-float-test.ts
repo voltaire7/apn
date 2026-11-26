@@ -17,7 +17,7 @@ for (const [source, expected] of [
     ['(.1 : Float64) + (.2 : Float)', '0.30000000000000004 : Float64'],
     ['(.2 : Float) + (.1 : Float64)', '0.30000000000000004 : Float64'],
     ['[(.1 : Float32)] + [.2]', '[0.3] : [Float32]'],
-    ['r = [x = (.1 : Float32)] + [x = (.2 : Float)]; r.x', '0.3 : Float32'],
+    ['r = [x : Float32 = .1] + [x : Float = .2]; r.x', '0.3 : Float32'],
     ['(.5 : Float32) ^ (2 : Float)', '0.25 : Float32'],
     ['expt (.5 : Float32) (2 : Float)', '0.25 : Float32'],
     ['(.5 : Float32) ^ 2', '0.25 : Float32'],

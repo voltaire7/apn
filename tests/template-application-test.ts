@@ -18,7 +18,7 @@ for (const [source, expected] of [
     ['Characters = [Char,Char]\n("hi" : Characters)', "['h','i']"],
     ['to [Char,Char] "hi"', "['h','i']"],
     ['typeOf ("hi" : [Char,Char])', '[Char,Char]'],
-    ['[x = 0] [x = 123]', '[x = 123]'], ['[x = (0 : Int)] [x = floor .2]', '[x = 0]'], ['[x = (0 : Int32)] [x = 123]', '[x = 123]'],
+    ['[x = 0] [x = 123]', '[x = 123]'], ['[x : Int = 0] [x = floor .2]', '[x = 0]'], ['[x : Int32 = 0] [x = 123]', '[x = 123]'],
     ['[x = "old"] [x = "new"]', '[x = "new"]'], ['[x = False] [x = True]', '[x = True]'], ["[x = 'a'] [x = 'b']", "[x = 'b']"],
     ['(* 2) * [1,2,3,4]', '[2,4,6,8]'],
     ['to Int * [1,2,3,4]', '[1,2,3,4]'],
@@ -27,8 +27,8 @@ for (const [source, expected] of [
     ['([x = 123] : [x = 0, y : Int])', '[x = 123, y = 0]'],
     ['([x = 123, y = 2] : [x : Int])', '[x = 123, y = 2]'],
     ['([x = [1,2]] : [x : [Int,Int]])', '[x = [1,2]]'],
-    ['xs = ([0] : [Int])\nxs 0 = floor .2\nxs 0 = 123\nxs', '[123]'],
-    ['xs = ([0,0] : [Int,Float])\nxs -1 = 3\nxs', '[0,3.0]'],
+    ['xs : [Int] = [0]\nxs 0 = floor .2\nxs 0 = 123\nxs', '[123]'],
+    ['xs : [Int,Float] = [0,0]\nxs -1 = 3\nxs', '[0,3.0]'],
     ['v = [] : [x : Int, y : Int]\nv.y = 321\nv', '[x = 0, y = 321]'],
     ['v = [x = 123] : [x : Int, y : Int]\nv.y = 321\nv.y = floor .2\nv', '[x = 123, y = 0]'],
     ['v = [] : [x : Int, y : Int]\nv "y" = 321\nv', '[x = 0, y = 321]'],
@@ -84,8 +84,8 @@ for (const [source, expected] of [
     if (actual !== expected) throw new Error(`${actual} != ${expected}`);
 });
 for (const [source, error] of [
-    ['[x = (0 : Int)] [x = (.2 : Float)]', 'lossy conversion'],
-    ['[x = (0 : Int8)] [x = 128]', 'out of range'],
+    ['[x : Int = 0] [x : Float = .2]', 'lossy conversion'],
+    ['[x : Int8 = 0] [x = 128]', 'out of range'],
     ['[x = 0] [x = "hi"]', 'cannot use String where Int is required'],
     ['f (t : Type) = t\nf [a = Int]', 'no clause of'],
     ['[x = False] [x = 1]', 'cannot use Int where Bool is required'],
@@ -119,7 +119,7 @@ for (const [source, error] of [
 for (const assignment of ['v.x = .2 : Float', 'v "x" = .2 : Float', 'v.[x,y] = [2, (.2 : Float)]']) {
     Deno.test(`failed template update preserves binding: ${assignment}`, () => {
         const i = new Interpreter();
-        i.run(parseDocument('v = [x = (1 : Int), y = (2 : Int)]'));
+        i.run(parseDocument('v = [x : Int = 1, y : Int = 2]'));
         let failed = false;
         try { i.run(parseDocument(assignment)); } catch { failed = true; }
         const actual = i.renderString(i.run(parseDocument('v')));

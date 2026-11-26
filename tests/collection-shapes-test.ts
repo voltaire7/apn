@@ -7,7 +7,7 @@ for (const checked of [false, true]) {
             ["[10,20,30] [first = 0, last = 2]", "[first = 10, last = 30]"],
             ["[Int] [x = 0]", "[x : Int]"],
             ["choose i = [10,20] [x = i]; choose 1", "[x = 20]"],
-            ["[1] [x = (0 : Dynamic)]", "[x = 1]"],
+            ["[1] [x : Dynamic = 0]", "[x = 1]"],
             ["[x = 1] ~ [([x] : [t]) -> x, _ -> 0]", "1"],
             ["[answer = 1] ~ [([x] : [t]) -> x, _ -> 0]", "0"],
             [
@@ -22,19 +22,19 @@ for (const checked of [false, true]) {
             ["unused = missing : Dynamic; r = [1,unused] [good = 0]; r.good", "1"],
             ["([x = 1] : [Float])", "[x = 1.0]"],
             ["([1] : [Float])", "[1.0]"],
-            ["r = ([x = 1] : [Float]); r.x + .5", "1.5"],
+            ["r : [Float] = [x = 1]; r.x + .5", "1.5"],
             [
-                "unused = missing : Dynamic; r = ([good = 1, bad = unused] : [Int,Int]); r.good",
+                "unused = missing : Dynamic; r : [Int,Int] = [good = 1, bad = unused]; r.good",
                 "1",
             ],
             [
-                "source = [x = 1]; r = (source : [Float]); [source,r]",
+                "source = [x = 1]; r : [Float] = source; [source,r]",
                 "[[x = 1], [x = 1.0]]",
             ],
             ['([name = "a", age = 2] : [String,Int])', '[name = "a", age = 2]'],
             ["([nested = [x = 1]] : [[Float]])", "[nested = [x = 1.0]]"],
             ["f ([x] : [t]) = [t,x]; f [x = 1]", "[Int,1]"],
-            ["f ([x] : [t]) = [t,x]; f [extra = 2, x = (1 : Int32)]", "[Int32,1]"],
+            ["f ([x] : [t]) = [t,x]; f [extra = 2, x : Int32 = 1]", "[Int32,1]"],
             [
                 'f ([x,y] : [a,b]) = [a,b,x,y]; f [y = "hi", x = 1]',
                 '[Int, String, 1, "hi"]',

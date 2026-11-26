@@ -17,7 +17,7 @@ for (const [source, expected] of [
     const v = i.run(parseDocument(source)), actual = `${i.renderString(v)} : ${i.typeText(v)}`;
     if (actual !== expected) throw new Error(actual);
 });
-for (const source of ['(.2 : Int)', '(.2 : Int32)', '(1+2i : Float32)', 'v = [x = (.5 : Float32)]; v.x = .1', 'f (x : Float32) = x; f .1', '([.1] : Vect 1 Float32)']) {
+for (const source of ['(.2 : Int)', '(.2 : Int32)', '(1+2i : Float32)', 'v = [x : Float32 = .5]; v.x = .1', 'f (x : Float32) = x; f .1', '([.1] : Vect 1 Float32)']) {
     Deno.test(`float construction preserves strict conversions: ${source}`, () => {
         const i = new Interpreter();
         try { i.renderString(i.run(parseDocument(source))); } catch { return; }
@@ -29,5 +29,5 @@ Deno.test('checker accepts explicit floating rounding but rejects implicit narro
         const result = checkSource(source);
         if (result.issues.length) throw new Error(JSON.stringify(result.issues));
     }
-    if (!checkSource('v = [x = (.5 : Float32)]; v.x = .1').issues.length) throw new Error('implicit narrowing accepted');
+    if (!checkSource('v = [x : Float32 = .5]; v.x = .1').issues.length) throw new Error('implicit narrowing accepted');
 });

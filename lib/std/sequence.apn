@@ -15,7 +15,7 @@ reversed xs = foldl (acc, x -> x :: acc) [] xs
     replicate n x = take n (repeat x)
     cycle xs = null xs ? [] : xs ++ cycle xs
     zip xs ys = zipWith pair xs ys
-    zipWithIndex (xs : Vect n a) : Vect n [Int,a] = (zipWith pair [0..] xs : Dynamic)
+    zipWithIndex (xs : Vect n a) : Vect n [Int,a] = zipWith pair [0..] xs : Dynamic
     concat xss = foldr (++) [] xss
     concatMap f xs = concat (map f xs)
     flatten xss = concat xss
@@ -50,8 +50,8 @@ reversed xs = foldl (acc, x -> x :: acc) [] xs
 
     # The length a fold or a merge keeps is checked as the result is made
     # (: Dynamic); a String stays one.
-    reverse (text : String) = (reversed text : String)
-    reverse (xs : Vect n a) : Vect n a = (reversed xs : Dynamic)
+    reverse (text : String) : String = reversed text
+    reverse (xs : Vect n a) : Vect n a = reversed xs : Dynamic
 
     dropWhile predicate xs = head
         (filter (rest -> null rest || not (holds (predicate (head rest)))) (iterate tail xs))

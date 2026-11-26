@@ -88,7 +88,7 @@ for (const [source, message, kind] of [
 // Where the check cannot see it (Dynamic), the run refuses it.
 Deno.test("showing an action is a runtime error past a Dynamic boundary", () => {
     let message = "";
-    try { run('xs = ([print "hi"] : Dynamic)\nprint xs', false); } catch (error) { message = String(error); }
+    try { run('xs : Dynamic = [print "hi"]\nprint xs', false); } catch (error) { message = String(error); }
     if (!message.includes("an action has no value to show until it runs")) throw new Error(message || "accepted");
 });
 Deno.test("IO: an action is not a condition", () => {

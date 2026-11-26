@@ -1095,7 +1095,7 @@ for (const [source, expected] of [
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nprint (length box)\ng (f (r (counter + 0 == 0)))', '0'],
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nhead box\ng (f (r (counter + 0 == 3)))', '0'],
     ['counter = Mutable 0\nbox = Mutable [set counter 0]\nset box [set counter 3]\nhead box\nset counter 8\nhead box\ng (f (r (counter + 0 == 3)))', '0'],
-    ['counter = Mutable 0\nother = Mutable 7\nm = ([["a", 1]] : HashMap _ _)\nhas "a" m ? set counter 5 : return []\ng (f (r (other + 0 == 7)))', '0'],
+    ['counter = Mutable 0\nother = Mutable 7\nm : HashMap _ _ = [["a", 1]]\nhas "a" m ? set counter 5 : return []\ng (f (r (other + 0 == 7)))', '0'],
     // Lazily computed elements run where the program forces them: map's
     // elements when used, filter's predicate as its cells are reached.
     ['counter = Mutable 0; print (length (map (x -> set counter x) [1,2])); g (f (r (counter + 0 == 0)))', '0'],
@@ -1107,11 +1107,11 @@ for (const [source, expected] of [
     ['counter = Mutable 0\nbump x = set counter (counter + 1)\nxs = map (x -> bump x) [1,2]\ndo xs\ndo xs\ng (f (r (counter + 0 == 4)))', '0'],
     ['counter = Mutable 0\nbump x = set counter (counter + 1)\nys = [bump 0, bump 0]\ndo ys\ng (f (r (counter + 0 == 2)))', '0'],
     // An uncertain statement reaching a lazily computed list follows what it is computed from.
-    ['counter = Mutable 0\nother = Mutable 7\nys = map (x -> x * 2) [1,2]\nm = ([["a", 1]] : HashMap _ _)\nhas "a" m ? set counter (head ys) : return []\ng (f (r (other + 0 == 7)))', '0'],
+    ['counter = Mutable 0\nother = Mutable 7\nys = map (x -> x * 2) [1,2]\nm : HashMap _ _ = [["a", 1]]\nhas "a" m ? set counter (head ys) : return []\ng (f (r (other + 0 == 7)))', '0'],
     // A load reaches only what the loaded file's source names.
     ['counter = Mutable 0\nother = Mutable 7\nset other 8\nload "examples/advent-of-code/lanternfish"\ng (f (r (other + 0 == 8)))','0'],
     // A name use opened reaches the field it was opened from.
-    ['counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set counter 3]\n[..] = ns\nm = ([["a", 1]] : HashMap _ _)\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))','0'],
+    ['counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set counter 3]\n[..] = ns\nm : HashMap _ _ = [["a", 1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))','0'],
     // A function held by a pattern binding runs its body where it is called.
     ['counter = Mutable 0\nother = Mutable 7\nhb <- return (x -> 0)\ny <- return (hb 0)\ng (f (r (other + 0 == 7)))','0'],
     // Keys bound locally, and views stored in records, lists and cells or
@@ -1147,15 +1147,15 @@ for (const source of [
     'counter = Mutable 0\nk y = { set counter 4; return (counter + 0) }\nw <- k 0\ng (f (r (w == 0)))',
     'counter = Mutable 0; xs <- return [set counter 9, 1]; g (f (r (counter + 0 == 9)))',
     // A statement whose run is uncertain leaves what it can reach unknown.
-    'counter = Mutable 0\nm = ([["a", 1]] : HashMap _ _)\nhas "a" m ? set counter 5 : return []\ng (f (r (counter + 0 == 5)))',
+    'counter = Mutable 0\nm : HashMap _ _ = [["a", 1]]\nhas "a" m ? set counter 5 : return []\ng (f (r (counter + 0 == 5)))',
     // A function held by a pattern binding runs its body where it is called.
     'counter = Mutable 0\nother = Mutable 7\nhb <- return (x -> { set other 1; return 0 })\nhb 0\ng (f (r (other + 0 == 7)))',
     'counter = Mutable 0\nother = Mutable 7\nhs <- return [x -> { set other 1; return 0 }]\nhead hs 0\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\npick n = n > 0 ? x -> { set other 1; 0 } : x -> 0\nhb <- return (pick 1)\nm = ([["a", 1]] : HashMap _ _)\nhas "a" m ? hb 0 : 0\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\npick n = n > 0 ? x -> { set other 1; 0 } : x -> 0\nhb <- return (pick 1)\nm : HashMap _ _ = [["a", 1]]\nhas "a" m ? hb 0 : 0\ng (f (r (other + 0 == 7)))',
     'counter = Mutable 0\nother = Mutable 7\n[ha,hb] <- return [x -> return 0, x -> { set other 1; return 0 }]\nhb 0\ng (f (r (other + 0 == 7)))',
     // A name use opened reaches the field it was opened from.
-    'counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set other 3]\n[..] = ns\nm = ([["a", 1]] : HashMap _ _)\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))',
-    'counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set counter 3]\n[..] = ns\nm = ([["a", 1]] : HashMap _ _)\nhas "a" m ? bump 0 : return []\ng (f (r (counter + 0 == 0)))',
+    'counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set other 3]\n[..] = ns\nm : HashMap _ _ = [["a", 1]]\nhas "a" m ? bump 0 : return []\ng (f (r (other + 0 == 7)))',
+    'counter = Mutable 0\nother = Mutable 7\nns = [bump = x -> set counter 3]\n[..] = ns\nm : HashMap _ _ = [["a", 1]]\nhas "a" m ? bump 0 : return []\ng (f (r (counter + 0 == 0)))',
     'counter = Mutable 0; snap = counter + 0; set counter 4; g (f (r (snap + 0 == 0)))',
     'counter = Mutable 0\nsnap = counter + 0\nset counter 4\nprint snap\nset counter 9\ng (f (r (snap + 0 == 9)))',
     'counter = Mutable 0\ninit = set counter 5\ninit\nset counter 1\ninit\ng (f (r (counter + 0 == 1)))',
@@ -1222,7 +1222,7 @@ Deno.test("a pair accumulator and a changing state", () => {
         ["pr a b = [a,b]\nzw f (x :: xs) (y :: ys) = f x y :: zw f xs ys\nzw _ _ _ = []\n"
             + "g (xs : List Float) = map ([i,t] -> t + 0.5) (zw pr [0..1] xs)\ng [1.5,2.5]", "[2.0,3.0]"],
         // (A function passed as a value keeps its clauses; a union holds a map type once.)
-        [fold + '[..] <- import "std/sequence"\nm0 = ([[0,0]] : HashMap _ _)\n'
+        [fold + '[..] <- import "std/sequence"\nm0 : HashMap _ _ = [[0,0]]\n'
             + "seen acc node = has node (fst acc) ? acc : [fst acc, prepend node (snd acc)]\n"
             + "snd (myFoldl seen [m0,[]] (filter (x -> x < 9) [1]))", "[1]"],
         [state + "take 2 (iterate step [frontier = [0], d = 1])", "[[frontier = [0], d = 1], [frontier = [], d = 1]]"],
@@ -1243,7 +1243,7 @@ Deno.test("a breadth-first search over a fold written in APN checks", () => {
         "bfsDistances neighbors starts = {",
         "    initial = [",
         "        frontier = unique starts",
-        "        distances = (map (x -> [x,0]) starts : HashMap _ _)",
+        "        distances : HashMap _ _ = map (x -> [x,0]) starts",
         "        depth = 0",
         "    ]",
         "    step state = {",
@@ -1272,7 +1272,7 @@ Deno.test("a fail clause gives its function no type", () => {
     const first = 'first (x :: _) = x\nfirst [] = fail "empty"\n';
     for (const [source, value] of [
         [first + "f (segs : List [Int,Int]) = {\n    [x,y] = first segs\n    x + y\n}\nf [[1,2],[3,4]]", "3"],
-        [first + "segs = ([[1,2],[3,4]] : List [Int,Int])\n[x,y] = first segs\nx + y", "3"],
+        [first + "segs : List [Int,Int] = [[1,2],[3,4]]\n[x,y] = first segs\nx + y", "3"],
         [first + 'first [1, "a"] + 1', "2"],
     ]) if (run(session(), source) !== value) throw new Error(source);
 });
@@ -1322,8 +1322,8 @@ Deno.test("a list compared with one value hints at comparing its items, statical
         ["print (2 >= [1,2,3])", "(2 >=)"],
         ["n = 1\nprint ([1,2,3] <= n + 1)", "(<= (n + 1))"],
         // At runtime too, of the values compared (a rational's section parenthesized).
-        ["xs = ([1,2,3] : Dynamic)\nprint (2 >= xs)", "(2 >=)"],
-        ["xs = ([1,2,3] : Dynamic)\nprint (xs < -1/2)", "(< (-1/2))"],
+        ["xs : Dynamic = [1,2,3]\nprint (2 >= xs)", "(2 >=)"],
+        ["xs : Dynamic = [1,2,3]\nprint (xs < -1/2)", "(< (-1/2))"],
     ]) {
         try { run(session(), source); } catch (error) {
             const e = error as { message: string; hint?: string };

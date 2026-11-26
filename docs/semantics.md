@@ -138,8 +138,10 @@ Spacing is part of the syntax (a parse error otherwise):
 
 Parentheses appear only where they change how code reads: a group that reads
 the same without them is a parse error (`unnecessary parentheses`). So
-`print 5`, `print r.x`, `f -1`, `a + b * c`, `(f x) y` as `f x y`, and a lambda
-that ends its expression takes the rest without them: `xs >>= x -> f x`. They
+`print 5`, `print r.x`, `f -1`, `a + b * c`, `(f x) y` as `f x y`, a lambda
+that ends its expression takes the rest without them: `xs >>= x -> f x`, and a
+definition ascribed whole is declared, `x : T = e` for `x = (e : T)` (in a
+record entry too; `x = e : T` says the same where nothing follows). They
 stay where they group differently, as in `(a + b) * c`, `f (g x)`, `(-2) ^ 2`,
 `-(-x)` and `xs >>= (x -> f x) >>= g`, or where the bare spelling means
 something else:

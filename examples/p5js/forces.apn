@@ -23,7 +23,7 @@ initializeMovers (p : Sketch) = {
     made <- mapM (n -> {
         mass <- p.random 0.5 3
         return [
-            mass = (mass : Float), position = [(spacing * n + spacing / 2 : Float), 0.0]
+            mass : Float = mass, position = [(spacing * n + spacing / 2 : Float), 0.0]
             velocity = [0.0,0.0], hue = n
         ]
     }) [0..8]

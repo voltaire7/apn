@@ -1271,7 +1271,7 @@ print ([x = 1, y = 2] : [x : Int, y = 0]) # => [x = 1, y = 2]
 print ([x = 123] : [x : Int, y : Int]) # => [x = 123, y = 0]
 # ([1,2] : [Int]) and ([] : [Int]) error: one template slot requires one value.
 print [isType [Int] [1], isType [Int] [1,2]] # => [True,False]
-slots = ([0] : [Int])
+slots : [Int] = [0]
 slots 0 = floor .2
 print slots                         # => [0]
 slots 0 = 123
@@ -2033,7 +2033,7 @@ singlePluck.[x] = [10]
 print singlePluck                    # => [x = 10]
 # singlePluck.[x] = 10 errors: the RHS must be a list.
 
-nestedUpdate = [child = [x = (1 : Float), y = 2]]
+nestedUpdate = [child = [x : Float = 1, y = 2]]
 nestedUpdate.child.x = 10
 print nestedUpdate                  # => [child = [x = 10.0, y = 2]]
 nestedUpdate.child.[x,y] = [20,30]

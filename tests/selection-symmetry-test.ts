@@ -17,7 +17,7 @@ for (const checked of [false, true]) {
                 "v = [child = [x = 1, y = 2]]; v.child.[x = a] = [a = 3]; v",
                 "[child = [x = 3, y = 2]]",
             ],
-            ["v = [x = (1 : Float)]; v.[x = a] = [a = 3]; v", "[x = 3.0]"],
+            ["v = [x : Float = 1]; v.[x = a] = [a = 3]; v", "[x = 3.0]"],
             // _ takes its value and discards it, as in a list pattern.
             ["v = [x = 0, y = 0]; v.[x,_] = [1,2]; v", "[x = 1, y = 0]"],
             ["v = [x = 0, y = 0]; pair = [7,8]; v.[_,y] = pair; v", "[x = 0, y = 8]"],

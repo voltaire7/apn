@@ -69,7 +69,7 @@ addBubble (p : Sketch) = {
     radius = dist x y p.mouseX p.mouseY : Float
     name <- p.prompt "Enter a name for the new bubble"
     when (name != "") {
-        set bubbles (bubbles ++ [[x = x, y = y, radius = radius, name = (name : String)]])
+        set bubbles (bubbles ++ [[x = x, y = y, radius = radius, name : String = name]])
         p.storeItem "bubbles" bubbles
     }
 }

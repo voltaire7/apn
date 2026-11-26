@@ -30,7 +30,7 @@ newBoid (p : Sketch) x y = {
     return [
         position = [(x : Float), (y : Float)]
         velocity = [(dx : Float), (dy : Float)]
-        hue = (hue : Float)
+        hue : Float = hue
     ]
 }
 

@@ -11,8 +11,8 @@ isSpace c = contains c " \t\n\r\v\f               �
 
     # Unicode code-point operations: a String is its characters, astral ones too.
     textLength text = length text
-    textTake n text = (take n text : String)
-    textDrop n text = (drop n text : String)
+    textTake n text : String = take n text
+    textDrop n text : String = drop n text
     isBlank text = trim text == ""
     lines text = splitOn "\n" text
     unlines xs = joinWith "\n" xs
@@ -48,7 +48,7 @@ isSpace c = contains c " \t\n\r\v\f               �
 
     words text = filter (x -> x != "")
         (splitOn " " (map (c -> isSpace c ? ' ' : c) text))
-    trim text = (reverse (dropWhile isSpace (reverse (dropWhile isSpace text))) : String)
+    trim text : String = reverse (dropWhile isSpace (reverse (dropWhile isSpace text)))
 
     # Common puzzle-input shapes; CRLF and trailing blank lines are accepted.
     nonEmptyLines text = filter (line -> line != "") (map trim (lines text))

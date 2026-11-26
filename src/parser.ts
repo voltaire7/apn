@@ -942,6 +942,10 @@ class Parser {
     // group's verdict is decided where it stands, by the ( token's index; the
     // last parse of the tokens decides, so a speculative one is overruled.
     groups = new WeakMap<Expr, number>();
+    // The ( of an ascription written in parentheses, (e : T): needed but where
+    // it is a definition's whole right side, which x : T = e writes without.
+    ascriptionGroups = new WeakMap<Expr, number>();
+    unnecessaryHints = new Map<number, string>();
     unnecessary = new Map<number, boolean>();
     judge(group: Expr, fits: (e: Expr) => boolean): void {
         const open = this.groups.get(group);
@@ -1214,7 +1218,7 @@ class Parser {
                                 this.applyDeclarations(stmts);
                                 const block: Expr = { t: "block", stmts, style: close === ")" ? "(" : "{" };
                                 // An ascription's parentheses are its own syntax: (e : T) is e : T.
-                                if (ascribing) { this.unnecessary.set(open, false); return stmts[0] as Expr; }
+                                if (ascribing) { this.unnecessary.set(open, false); this.ascriptionGroups.set(stmts[0], open); return stmts[0] as Expr; }
                                 if (close === ")" && stmts.length === 1 && !["stmDef", "patDef", "setItem", "setFields"].includes(stmts[0].t)) {
                                     this.groups.set(block, open);
                                     this.unnecessary.set(open, false);
@@ -1505,7 +1509,7 @@ class Parser {
         const close = this.closer(open);
         const text = this.source.slice(this.toks[open].pos, this.toks[close].pos + 1);
         throw new APNError("parse", `unnecessary parentheses: ${text.includes("\n") || text.length > 40 ? "this group" : `\`${text}\``} reads the same without them`, {
-            pos: this.toks[open].pos, len: 1, hint: "remove the ( and its )",
+            pos: this.toks[open].pos, len: 1, hint: this.unnecessaryHints.get(open) ?? "remove the ( and its )",
         });
     }
 
@@ -2118,7 +2122,14 @@ class Parser {
         }
         const refined = operator === "=" ? this.refinement() : undefined;
         if (refined) return refined;
-        const body = this.parseExpr();
+        const start = this.i, body = this.parseExpr();
+        const ascribed = this.ascriptionGroups.get(body);
+        // x = (e : T) is x : T = e, a record entry's too.
+        // ((e : T) : U keeps its: the outer ascription needs them.)
+        if (operator === "=" && ascribed === start && this.closer(start) === this.i - 1 && !this.isSym(":")) {
+            this.unnecessary.set(start, true);
+            this.unnecessaryHints.set(start, "declare the type instead: x : T = e");
+        }
         // X = (A | B) is the union of A and B; without its parentheses the
         // statement declares constructors (see isTypeDeclaration): they're needed.
         const group = this.groups.get(body);

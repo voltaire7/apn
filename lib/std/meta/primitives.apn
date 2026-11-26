@@ -5,7 +5,7 @@
 std <- import "std"
 [..] = std.[text,sequence,function,option]
 [
-    metaPrimitives = ([
+    metaPrimitives = [
         ["^",(^)], ["+",(+)], ["-", (x, y -> x - y)], ["*",(*)], ["/",(/)], ["%",(%)]
         ["==",(==)],["!=",(!=)],["<",(<)],[">",(>)],["<=",(<=)],[">=",(>=)]
         ["++",(++)], ["::", (x, xs -> x :: xs)]
@@ -15,5 +15,5 @@ std <- import "std"
         ["lookup",lookup],["insert",insert]
         ["fail",fail],["seq",seq],["to",to],["from",from],["List",List],["Char",Char]
         ["Int",Int],["Float",Float],["String",String]
-    ] : HashMap _ _)
+    ] : HashMap _ _
 ]

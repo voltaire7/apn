@@ -49,7 +49,7 @@ for (const [name, source, expected] of [
         ["18", "1"]],
     ["isType reads a lambda as a type", "print (isType (Int -> Int) (+ 1))\nprint (isType (a -> b) 5)", ["True", "False"]],
     // _ is any type there too, a result's as a parameter's.
-    ["_ as a function type's result", 'func : Int -> Int -> _\nfunc a b = [a,b]\nprint (func 1 2)\nk = ((x -> x) : Int -> _)\nprint (k 3)\nprint (isType (Int -> _) (x -> x))',
+    ["_ as a function type's result", 'func : Int -> Int -> _\nfunc a b = [a,b]\nprint (func 1 2)\nk : Int -> _ = x -> x\nprint (k 3)\nprint (isType (Int -> _) (x -> x))',
         ["[1,2]", "3", "True"]],
     ["a constructor field of a function type", "Counter s a = | MkCounter (s -> [a,s])\nrunCounter (MkCounter f) s = f s\nprint (runCounter (MkCounter (s -> [s, s + 1])) 5)",
         ["[5,6]"]],
@@ -84,6 +84,6 @@ Deno.test("function types: the checker rejects a result of another type", () => 
     throw new Error("accepted");
 });
 Deno.test("function types: each call decides the variables afresh", () => {
-    const actual = run('pick = ((x, y -> x) : a -> b -> a)\nh = pick 1\nprint [h 2, h "s"]', false);
+    const actual = run('pick : a -> b -> a = x, y -> x\nh = pick 1\nprint [h 2, h "s"]', false);
     if (JSON.stringify(actual) !== JSON.stringify(["[1,1]"])) throw new Error(JSON.stringify(actual));
 });

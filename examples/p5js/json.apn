@@ -16,7 +16,7 @@ Msg =
     | Released String Float
 
 init = [
-    [bubbles = ([] : List Bubble), pressed = [0.0,0.0], creating = False]
+    [bubbles : List Bubble = [], pressed = [0.0,0.0], creating = False]
     task.perform Loaded (readFile "assets/bubbles.json")
 ]
 

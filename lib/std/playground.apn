@@ -123,7 +123,7 @@ scene screen shapes = svg.svg [
 noKeys = [
     up = False, down = False, left = False, right = False
     space = False, enter = False, shift = False, backspace = False
-    keys = ([] : List String)
+    keys : List String = []
 ]
 advance updateMemory msg game = {
     computer = game.computer

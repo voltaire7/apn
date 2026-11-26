@@ -57,17 +57,17 @@ Deno.test("a length whose evaluation runs past the budget is an error", () => {
     if (!issues(endless).some(m => m.includes("takes more than 300000 steps"))) throw new Error(issues(endless).join("; "));
     if (run(endless) !== "1") throw new Error("demanded an unused length");
     // Over a parameter, a length is checked at runtime, as any value is.
-    const over = "count n acc = n == 0 ? acc : count (n - 1) (acc + 1)\nf n = ([1,2] : Vect (count n 0) Int)\n1";
+    const over = "count n acc = n == 0 ? acc : count (n - 1) (acc + 1)\nf n : Vect (count n 0) Int = [1,2]\n1";
     if (issues(over).length) throw new Error(issues(over).join("; "));
 });
 // So is a refinement's predicate, a type an alias chooses, and recursion
 // deeper than the checker follows; a name's value is computed as its body's.
 for (const [source, error] of [
-    ["Big = (n : Int) | n > count 1000000 0\nx = (5 : Big)\nx", "takes more than 300000 steps"],
-    ["Pick flag = flag ? Int : String\nx = (5 : Pick (count 1000000 0 > 3))\nx", "takes more than 300000 steps"],
-    ["m = count 1000000 0\nx = ([1,2] : Vect m Int)\nx", "takes more than 300000 steps"],
-    ["m = count 100000 0\nx = ([1,2] : Vect m Int)\nx", "length mismatch: expected 100000, got 2"],
-    ["deep n = n == 0 ? 0 : 1 + deep (n - 1)\nx = ([1,2] : Vect (deep 100000) Int)\nx", "nests calls deeper than the checker follows"],
+    ["Big = (n : Int) | n > count 1000000 0\nx : Big = 5\nx", "takes more than 300000 steps"],
+    ["Pick flag = flag ? Int : String\nx : Pick (count 1000000 0 > 3) = 5\nx", "takes more than 300000 steps"],
+    ["m = count 1000000 0\nx : Vect m Int = [1,2]\nx", "takes more than 300000 steps"],
+    ["m = count 100000 0\nx : Vect m Int = [1,2]\nx", "length mismatch: expected 100000, got 2"],
+    ["deep n = n == 0 ? 0 : 1 + deep (n - 1)\nx : Vect (deep 100000) Int = [1,2]\nx", "nests calls deeper than the checker follows"],
     // A value only evaluated to know more of it stays unknown past the budget.
     ["s = count 1000000 0\nprint (s + 1)", ""],
 ]) Deno.test(`past the budget: ${source.split("\n")[0]}`, () => {

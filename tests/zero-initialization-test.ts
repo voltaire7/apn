@@ -16,7 +16,7 @@ for (const [source, expected] of [
     ['f (t : Type) = 123 : t\nf Int', '123'],
     ['f (x : t) = [t,x]\nf (7 : Int32)', '[Int32,7]'],
     ['[Int]', '[Int]'],
-    ['xs = ([0] : [Int])\nxs 0 = 2\nxs', '[2]'],
+    ['xs : [Int] = [0]\nxs 0 = 2\nxs', '[2]'],
     ['to Int * [1,2,3]', '[1,2,3]'],
     ['[].[]', '[]'],
     ['take 2 (map (to Int) [1,2,missing])', '[1,2]'],

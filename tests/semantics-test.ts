@@ -579,7 +579,7 @@ for (const source of ["f (Int x) = x\nprint (f 1)", "f ((Int) x) = x\nprint 1", 
     failure(`a typed pattern writes its type after the value: ${source}`, source, "writes its type after the value");
 }
 example("types that construct, and typed patterns of any parameters", `
-m = ([["a", 1]] : HashMap _ _)
+m : HashMap _ _ = [["a", 1]]
 c = Mutable 0
 f (xs : List _) = length xs
 g { x : Int } = x + 1
@@ -826,7 +826,7 @@ for (const path of ["../examples/features.apn", "fixtures/showcase.apn"]) Deno.t
 // A record field holding a zero-argument function whose call runs statements
 // shows as one, so showing it runs nothing; any other shows its value.
 example("a record field holding a name's value shows the value",
-    'm0 = ([[0,0]] : HashMap _ _)\ninc n = n + 1\nx = inc 3\nprint [d = m0, e = x]',
+    'm0 : HashMap _ _ = [[0,0]]\ninc n = n + 1\nx = inc 3\nprint [d = m0, e = x]',
     ["[d = [[0,0]], e = 4]"]);
 example("a record field holding a block function shows as one",
     'bye = { print "bye" }\nprint [d = bye]', ['[d = () -> { print "bye" }]']);

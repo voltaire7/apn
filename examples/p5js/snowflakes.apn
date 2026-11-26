@@ -24,7 +24,7 @@ newFlake (p : Sketch) = {
     green <- p.random 200 256
     blue <- p.random 200 256
     return [
-        y = (y : Float), angle = (angle : Float), size = (size : Float)
+        y : Float = y, angle : Float = angle, size : Float = size
         radius = sqrt (spread : Number)
         color = [(red : Float), (green : Float), (blue : Float)]
     ]
