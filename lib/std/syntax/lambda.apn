@@ -110,8 +110,8 @@ binders (first :: rest) =
 binders _ = []
 isPlain (name : String) = isName name
 isPlain _ = False
-isName name = name != "" && name != "_" && contains (head (to (List Char) name)) nameStarts
-nameStarts = to (List Char) "abcdefghijklmnopqrstuvwxyz_"
+isName name = name != "" && name != "_" && contains (head name) nameStarts
+nameStarts = "abcdefghijklmnopqrstuvwxyz_"
 mentions name (leaf : String) = leaf == name
 mentions name (first :: rest) = any (mentions name) (first :: rest)
 mentions _ _ = False

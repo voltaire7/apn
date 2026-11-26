@@ -6,6 +6,8 @@ holds value = truthy value
 # A sort comparator's answer: an integer, negative, zero or positive.
 order (value : Integer) = value
 order _ = fail "sortBy comparator must return an integer"
+# Prepending into a strict left fold reverses in linear time.
+reversed xs = foldl (acc, x -> x :: acc) [] xs
 [
     prepend x xs = x :: xs
     # Producers and prefix consumers work with infinite lists.
@@ -35,7 +37,6 @@ order _ = fail "sortBy comparator must return an integer"
     unique xs = null xs ? [] : head xs :: unique (filter (x -> x != head xs) (tail xs))
     # Dictionary order, which sorts: -1, 0 or 1 (<= is inclusion: "ab" <= "b"
     # is False, compare "ab" "b" is -1).
-    compare (x : String) (y : String) = compare (to (List Char) x) (to (List Char) y)
     compare (xs : List _) (ys : List _) = {
         items as bs = null as ? (null bs ? 0 : -1) : (null bs ? 1
             : compare (head as) (head bs) ~ [0 -> items (tail as) (tail bs), c -> c])
@@ -47,10 +48,10 @@ order _ = fail "sortBy comparator must return an integer"
     minimum xs = null xs ? None : Some (foldl min (head xs) (tail xs))
     maximum xs = null xs ? None : Some (foldl max (head xs) (tail xs))
 
-    # Prepending into a strict left fold reverses in linear time. The length a
-    # fold or a merge keeps is checked as the result is made (: Dynamic).
-    reverse (xs : Vect n a) : Vect n a = (foldl (acc, x -> x :: acc) [] xs : Dynamic)
-    reverse (text : String) = from (List Char) (reverse (to (List Char) text))
+    # The length a fold or a merge keeps is checked as the result is made
+    # (: Dynamic); a String stays one.
+    reverse (text : String) = (reversed text : String)
+    reverse (xs : Vect n a) : Vect n a = (reversed xs : Dynamic)
 
     dropWhile predicate xs = head
         (filter (rest -> null rest || not (holds (predicate (head rest)))) (iterate tail xs))

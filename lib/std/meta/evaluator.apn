@@ -11,24 +11,19 @@ meEval scope expression = typeOf expression == typeOf "text"
     : (isList expression
     ? meNode scope (head expression) (tail expression)
     : expression)
-meQuote = head (to (List Char) "\"")
-meLeaf scope text = head (to (List Char) text) == meQuote
-    ? from (List Char) (meUnescape (meInner (to (List Char) text)))
+# (The meta reader has no character literals: a Char is a string's head.)
+meQuote = head "\""
+meLeaf scope text = head text == meQuote
+    ? (meUnescape (meInner text) : String)
     : lookup text scope
 meInner chars = take (length chars - 2) (tail chars)
-meBackslash = head (to (List Char) "\\")
+meBackslash = head "\\"
 meUnescape chars = null chars
     ? []
     : (head chars == meBackslash
     ? meCons (meEscape (head (tail chars))) (meUnescape (tail (tail chars)))
     : meCons (head chars) (meUnescape (tail chars)))
-meEscape c = c == head (to (List Char) "n")
-    ? head (to (List Char) "\n")
-    : (c == head (to (List Char) "t")
-    ? head (to (List Char) "\t")
-    : (c == head (to (List Char) "r")
-    ? head (to (List Char) "\r")
-    : c))
+meEscape c = c == head "n" ? head "\n" : (c == head "t" ? head "\t" : (c == head "r" ? head "\r" : c))
 meNode scope tag arguments = typeOf tag == typeOf "text"
     ? (has tag meForms
         ? lookup tag meForms scope arguments

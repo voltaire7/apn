@@ -27,7 +27,7 @@ kindOf (_ : String) = "piece"
 kindOf (_ : Bool) = "piece"
 kindOf (n : Number) = {
     text = to String n
-    head (to (List Char) text) == '-' ? "negative" : (digits n ? "piece" : "infix")
+    head text == '-' ? "negative" : (digits n ? "piece" : "infix")
 }
 kindOf (function :: args) = contains function ["[]","[:]","{}",".","..","()",":"] ? "piece"
     : (function == "->" ? "lambda"
@@ -35,9 +35,9 @@ kindOf (function :: args) = contains function ["[]","[:]","{}",".","..","()",":"
     : (contains function ["=","<-","[..]"] ? function
     : (isOperator function && length args == 2 ? "infix"
     : "call"))))
-digits (n : Number) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) (to String n))
+digits (n : Number) = all digit (to String n)
 digits [".",_,key] = digits key
-digits (text : String) = all (c -> contains c (to (List Char) "0123456789.")) (to (List Char) text)
+digits (text : String) = all digit text
 digits _ = False
 paramCount [_,params,_] = length params
 # The loosest operator a piece of syntax holds at its top, and the loosest one
@@ -117,29 +117,29 @@ isOperator (name : String) = operator name
 isOperator _ = False
 # The heads that are syntax, not functions.
 isTag head = contains head ["[]","[:]","->","?:",".","{}","..","=","<-","[..]","()","|",":"]
-operator name = contains (head (to (List Char) name)) (to (List Char) "!$%&*+-/<=>\\^|~:")
+operator name = contains (head name) "!$%&*+-/<=>\\^|~:"
 
 # A ',' takes a space only when an item it separates has one (outside string
 # and character literals) or two are literals of different kinds (["a", 1],
 # [[1], 2]; numbers are one kind), as the parser requires.
 listed xs = joinWith (any spaced xs || length (unique (filter (!= "") (map literal xs))) > 1
     ? ", " : ",") xs
-literal text = literalChars (to (List Char) text)
+literal text = literalChars text
 literalChars cs = cs ~ [
     '"' :: rest -> afterString rest == [] ? "string" : ""
     '\'' :: _ -> "char"
     '[' :: _ -> head (reverse cs) == ']' ? "list" : ""
     '-' :: c :: _ -> digit c ? "number" : ""
-    c :: _ -> digit c ? "number" : (contains (from (List Char) cs) ["True","False"] ? "Bool" : "")
+    c :: _ -> digit c ? "number" : (contains cs ["True","False"] ? "Bool" : "")
     [] -> ""
 ]
-digit c = contains c (to (List Char) "0123456789.")
-spaced text = spacedChars (to (List Char) text)
+digit c = contains c "0123456789."
+spaced text = spacedChars text
 spacedChars cs = cs ~ [
     [] -> False
     '"' :: rest -> spacedChars (afterString rest)
     '\'' :: _ :: '\'' :: rest -> spacedChars rest
-    c :: rest -> contains c (to (List Char) " \t\n") || spacedChars rest
+    c :: rest -> contains c " \t\n" || spacedChars rest
 ]
 afterString cs = cs ~ [
     [] -> []

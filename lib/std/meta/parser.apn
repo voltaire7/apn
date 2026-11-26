@@ -19,7 +19,7 @@ std <- import "std"
         kind = kind
         depth = depth
     ]
-    mpWordChars = to (List Char) "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
+    mpWordChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789"
     mpNesting c = c == "(" ? 1 : (c == "[" ? 1 : (c == ")" ? -1 : (c == "]" ? -1 : 0)))
     mpStringStep state c = c == "\\"
         ? mpState "escape" state.buffer state.tokens "" state.depth
@@ -35,12 +35,12 @@ std <- import "std"
         seq next.mode (seq next.buffer (seq next.tokens (seq next.kind (seq next.depth next))))
     }
     mpLexStepRaw state char = {
-        [c] = [from (List Char) [char]]
+        [c] = [([char] : String)]
         [flushed] = [mpFlush state]
         [newline] = [c == "\n"]
         [lineBreak] = [newline || c == "\r"]
-        [space] = [contains char (to (List Char) " \t\r\n")]
-        [punctuation] = [contains char (to (List Char) "()[]{},;.")]
+        [space] = [contains char " \t\r\n"]
+        [punctuation] = [contains char "()[]{},;."]
         [word] = [contains char mpWordChars]
         [kind] = [word ? "word" : "symbol"]
         state.mode == "comment"
@@ -63,7 +63,7 @@ std <- import "std"
             : mpState "code" c flushed.tokens kind state.depth)))))))
     }
     mpLex source = {
-        [state] = [foldl mpLexStep (mpState "code" "" [] "" 0) (to (List Char) (mpJoin source))]
+        [state] = [foldl mpLexStep (mpState "code" "" [] "" 0) (mpJoin source)]
         state.mode == "string" ? fail "meta reader: unterminated string"
             : (state.mode == "escape" ? fail "meta reader: unterminated escape"
             : reverse (mpFlush state).tokens)
@@ -76,9 +76,8 @@ std <- import "std"
         joinWith "" (reverse pieces)
     }
     mpLine [levels,pieces] line = {
-        chars = to (List Char) line
-        indent = length (takeWhile (== ' ') chars)
-        blank = all (== ' ') chars || startsWith "#" (trim line)
+        indent = length (takeWhile (== ' ') line)
+        blank = all (== ' ') line || startsWith "#" (trim line)
         open = dropWhile (> indent) levels
         break = blank || indent <= head open ? "\n" : "\r"
         piece = null pieces ? line : break ++ line
@@ -90,9 +89,9 @@ std <- import "std"
     mpRequire wanted tokens = mpText tokens == wanted
         ? tail tokens
         : fail ("meta reader: expected " ++ wanted ++ ", got " ++ mpText tokens)
-    mpDigit c = withDefault -1 $ findIndex (==c) (to (List Char) "0123456789")
+    mpDigit c = withDefault -1 $ findIndex (==c) "0123456789"
     mpDigits n c = mpDigit c < 0 ? fail "meta reader: invalid integer" : n * 10 + mpDigit c
-    mpNumber text = foldl mpDigits 0 (to (List Char) text)
+    mpNumber text = foldl mpDigits 0 text
     mpNames tokens = takeWhile (token -> head token == "word") tokens
     mpLambda names body = null names ? body : ["->",names,body]
     mpPrec op = op == "$" ? 1 : (op == "?" ? 2 : (op == "::" ? 3
@@ -170,7 +169,7 @@ std <- import "std"
             : (head token == "word" ? mpWord text tokens
             : fail ("meta reader: unexpected " ++ text))))
     }
-    mpWord text tokens = mpDigit (head (to (List Char) text)) >= 0
+    mpWord text tokens = mpDigit (head text) >= 0
         ? [mpNumber text, tail tokens]
         : mpName text tokens
     mpName text tokens = {

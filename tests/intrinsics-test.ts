@@ -71,6 +71,9 @@ for (const checked of [false, true]) {
         ['x = "abc"; x 0 = \'z\'; x', '"zbc"'], ['f (xs : List Char) = typeOf xs; f "ab"', "String"],
         ['f (s : String) = s ++ "!"; f [\'a\',\'b\']', '"ab!"'], ['([\'h\',\'i\'] : String)', '"hi"'],
         ['f (xs : List a) = a; f "abc"', "Char"], ['isType (List Char) "ab"', "True"],
+        // The check runs library code on known Strings as on lists: "" is [].
+        ['onlyOne [a] = a; onlyOne (filter (x -> x != "") [[], "a"])', '"a"'],
+        ['onlyOne [a] = a; onlyOne (map (c -> c) "a")', "'a'"],
     ]) Deno.test(`String (checked=${checked}): ${source}`, () => {
         const i = new Interpreter();
         if (checked) i.enableChecking();

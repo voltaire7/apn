@@ -6317,6 +6317,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function cellOf(k: Known | undefined): Cell {
         if (!k) return undefined;
         if (k.cell) return k.cell();
+        // (A String is its characters: String = List Char.)
+        if (k.string !== undefined) {
+            const first = k.string.codePointAt(0);
+            if (first === undefined) return null;
+            const c = String.fromCodePoint(first);
+            return { head: { char: c }, tail: { string: k.string.slice(c.length) } };
+        }
         if (k.items) return k.items.length ? { head: k.items[0], tail: known(k.items.slice(1)) } : null;
         if (k.size !== undefined) return k.size > 0n ? { head: {}, tail: { size: k.size - 1n } } : null;
         return undefined;
@@ -6329,6 +6336,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (let i = 0; ; i++) {
             if (!current) return undefined;
             if (current.items) return n - i < current.items.length ? current.items[n - i] : null;
+            if (current.string !== undefined) { const chars = [...current.string]; return n - i < chars.length ? { char: chars[n - i] } : null; }
             if (current.range) return rangeElement(current.range, BigInt(n - i));
             if (!current.cell && current.size !== undefined) return BigInt(n - i) < current.size ? {} : null;
             const cell = cellOf(current);
@@ -6341,6 +6349,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function elementsOf(k: Known | undefined): Known[] | undefined {
         if (!k) return undefined;
         if (k.items) return k.items;
+        if (k.string !== undefined) return [...k.string].map(c => ({ char: c }));
         if (k.range?.hi === null) return undefined;
         if (!k.cell && k.size === undefined) return undefined;
         // Each element walked spends from the work budget.
@@ -6838,10 +6847,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // Whether two known values are equal, as the runtime compares them.
     // The kind of value a known one is, where that is known: values of two
     // kinds are never equal (1 == "a", "" == [], [a = 1] == [1]), as at runtime.
+    // (A Char is a number, its code point, and a String a list, of its Chars.)
     function knownKind(k: Known): string | undefined {
-        if (numericOf(k) !== undefined) return "number";
-        if (k.string !== undefined) return "string";
-        if (k.char !== undefined) return "char";
+        if (numericOf(k) !== undefined || k.char !== undefined) return "number";
+        if (k.string !== undefined) return "list";
         if (k.boolean !== undefined) return "Bool";
         if (k.fields) return "record";
         if (k.tag !== undefined) return "constructor";
@@ -6866,8 +6875,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             return all;
         }
-        const x = numericOf(a), y = numericOf(b);
-        if (x !== undefined && y !== undefined) {
+        const code = (k: Known) => k.char !== undefined ? integer(BigInt(k.char.codePointAt(0)!)) : numericOf(k);
+        const x = code(a), y = code(b);
+        if (x !== undefined && y !== undefined && (a.char === undefined || b.char === undefined)) {
             try { return equalNumbers(x, y); } catch { return undefined; }
         }
         for (const key of ["string", "char", "boolean"] as const) {
@@ -6875,7 +6885,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         // Distinct nullary constructors differ; equal tags with fields may not be equal.
         if (a.tag !== undefined && b.tag !== undefined && a.tag !== b.tag) return false;
-        if (!isList(a) || !isList(b) || a.string !== undefined || b.string !== undefined) return undefined;
+        const listy = (k: Known) => isList(k) || k.string !== undefined;
+        if (!listy(a) || !listy(b)) return undefined;
         if (a.items && b.items) {
             for (let n = 0; n < Math.min(a.items.length, b.items.length); n++) {
                 const same = equalKnown(a.items[n], b.items[n]);
@@ -7375,6 +7386,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (e.ascribed && head.t === "var" && args.length === keeps[head.name] && !env.has(head.name) && scope.get(head.name)?.builtin) {
             return new Tail(args[args.length - 1], env, scope, depth);
         }
+        // (e : String) of a list of Chars is the String it is (String = List Char).
+        if (e.ascribed && head.t === "var" && head.name === "String" && args.length === 1 && !env.has("String") && scope.get("String")?.builtin) {
+            const given = demand(evaluateKnown(args[0], env, scope, depth + 1));
+            if (given?.string !== undefined) return given;
+            const items = elementsOf(given)?.map(demand);
+            return items && items.every(c => c?.char !== undefined) ? { string: textNatives.fromChars(items.map(c => c!.char!)) } : undefined;
+        }
         // An operator's intrinsic called (intrinsics.add a b) is its builtin
         // meaning, and so is any other (intrinsics.seq a b).
         const named = intrinsicName(head, scope, env);
@@ -7556,6 +7574,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // filter and iterate apply it where the runtime does (lazily for heads).
         const call = (f: Known | undefined, values: Known[]) => { const g = demand(f)?.fn; return g && lazily(() => applyKnown(g, values, depth)); };
         const now = (f: Known | undefined, values: Known[]) => { const g = demand(f)?.fn; return g && applyKnown(g, values, depth); };
+        // (A String argument is its characters, where a list is taken.)
+        const listOf = (k: Known | undefined): Known | undefined => k?.string !== undefined ? known([...k.string].map(c => ({ char: c }))) : k;
         switch (name) {
             case "head": { const item = element(args[0](), 0); return item ?? undefined; }
             case "tail": {
@@ -7623,7 +7643,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return n?.kind === "int" ? { string: String(n.v) } : undefined;
             }
             case "enumerate": {
-                const list = args[0]();
+                const list = listOf(args[0]());
                 if (!list?.items && !list?.cell) return list?.size === undefined ? undefined : { size: list.size };
                 return unfold<[Known, bigint]>([list, 0n], ([rest, n]) => {
                     const cell = cellOf(rest);
@@ -7664,7 +7684,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return list.size === undefined ? undefined : { size: list.size < count.v ? list.size : count.v };
             }
             case "map": {
-                const f = args[0](), list = args[1]();
+                const f = args[0](), list = listOf(args[1]());
                 if (!list?.items && !list?.cell) return list?.size === undefined ? undefined : { size: list.size };
                 if (list.items) return known(list.items.map(item => lazyValue(() => now(f, [item]), origin)));
                 const mapped = unfold<Known>(list, rest => {
@@ -7674,7 +7694,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return list.size === undefined ? mapped : { ...mapped, size: list.size };
             }
             case "filter": {
-                const f = args[0](), list = args[1]();
+                const f = args[0](), list = listOf(args[1]());
                 if (!list?.items && !list?.cell) return undefined;
                 // Each cell holds the next element the predicate keeps.
                 return unfold<Known>(list, rest => {

@@ -3,12 +3,12 @@ std <- import "std"
 [
     # AoC 2022 day 12: scalar cell indexes, a height map, and generic BFS.
     solveHill text = {
-        [rows] = [map (to (List Char)) (nonEmptyLines text)]
+        [rows] = [nonEmptyLines text]
         width = length (head rows)
         height = length rows
         [cells] = [(zipWithIndex (concat rows) : HashMap _ _)]
-        [alphabet] = [(zip (to (List Char) "abcdefghijklmnopqrstuvwxyz") [0..25] : HashMap _ _)]
-        elevation c = c == 'S' ? 0 : (c == 'E' ? 25 : lookup c alphabet)
+        # (A Char is its code point: a letter's height is its place after 'a'.)
+        elevation c = c == 'S' ? 0 : (c == 'E' ? 25 : to Int c - to Int 'a')
         start = withDefault (fail "missing start S") (findIndex (=='S') (concat rows))
         goal = withDefault (fail "missing goal E") (findIndex (=='E') (concat rows))
         neighbors cell = {

@@ -3943,7 +3943,7 @@ export class Interpreter {
             if (this.builtinType(pattern.tag)) arg = named.v[0];
         }
         const binding = this.env.get(pattern.tag);
-        if (binding && this.counted(this.reference(binding))) return this.isList(this.dataValue(arg)) ? 1 : -1000;
+        if (binding && this.counted(this.reference(binding))) return this.isList(this.dataValue(arg)) || this.dataValue(arg).kind === "string" ? 1 : -1000;
         if (!this.builtinType(pattern.tag)) {
             // A program's own type takes a value of it as it is; a constructor
             // pattern, a value that constructor made.
@@ -4126,7 +4126,7 @@ export class Interpreter {
     }
 
     private vectorElements(value: Value, size: bigint, name: string): Value[] {
-        if (!this.isList(value)) throw new APNError("runtime", `${name} expects a list`);
+        if (!this.isList(value) && value.kind !== "string") throw new APNError("runtime", `${name} expects a list`);
         const out: Value[] = [];
         let rest = value;
         for (let n = 0n; n < size; n++) {
@@ -5961,7 +5961,7 @@ export class Interpreter {
         else if (type.kind === "type" && this.counted(type)) { const [size, element] = this.vectorParts(type); items = Array.from({ length: Number(size) }, () => element); }
         if (items) {
             let rest = this.dataValue(value);
-            if (!this.isList(rest)) return false;
+            if (!this.isList(rest) && rest.kind !== "string") return false;
             for (const item of items) {
                 const cell = this.cell(rest);
                 if (!cell || !this.converts(item, cell.head)) return false;
@@ -6004,7 +6004,8 @@ export class Interpreter {
     private vectorTypeSources = new WeakMap<Map<string, Value>, Map<string, Value[]>>();
     private matchVectorPattern(family: Extract<Value, { kind: "type" }>, args: Pattern[], input: Value, binds: Map<string, Value>): boolean {
         const value = this.dataValue(input), counts = family.counts!;
-        if (!this.isList(value)) return false;
+        // (A String is a list of its characters, of its length.)
+        if (!this.isList(value) && value.kind !== "string") return false;
         let size: bigint, element: Value | undefined;
         const sizePattern = args[0];
         const known = sizePattern.p === "var" ? binds.get(sizePattern.name) ?? this.lengthValue(sizePattern.name) : undefined;
