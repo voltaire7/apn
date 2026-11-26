@@ -606,7 +606,7 @@ Array helpers belong in `lib/std/array.apn`. Tests: `tests/array-test.ts`.
   and owner (`ownerFamily`, its builder's parameters its type's). A
   constructor pattern matches by tag (`matchPattern`), as `untag` would. The
   checker defines a view tagging and untagging itself as the constructor it
-  spells (`viewConstructor`), and types a view over `untag C` as `C`'s pattern.
+  spells (`viewConstructor`, in blocks too), and types a view over `untag C` as `C`'s pattern.
   Tests: `tests/core-test.ts`.
 - A capitalized function is a `type` value with `alias`: its clauses as a
   `clauseFn` (`run`), so choosing among them is a function's; `construct`

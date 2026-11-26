@@ -876,6 +876,30 @@ function viewConstructor(name: string, clauses: { params: Pattern[]; body: Expr 
     while (build.t === "block" && build.stmts.length === 1) build = build.stmts[0];
     return build.t === "lambda" && untagOf(body.a) === name ? { params: build.params.map((p): Pattern => ({ p: "var", name: p })), body: build.body } : undefined;
 }
+// The program with each view of untag's written as its constructor (see
+// viewConstructor), in blocks too: a node is copied, keeping its location,
+// only on the way to one.
+function constructorViews(node: unknown): unknown {
+    if (Array.isArray(node)) {
+        const items = node.map(constructorViews);
+        return items.some((item, n) => item !== node[n]) ? items : node;
+    }
+    if (!node || typeof node !== "object" || "p" in node) return node;
+    const n = node as Record<string, unknown>;
+    let copy: Record<string, unknown> | undefined;
+    for (const [key, value] of Object.entries(n)) {
+        if (!value || typeof value !== "object") continue;
+        const next = constructorViews(value);
+        if (next !== value) (copy ??= { ...n })[key] = next;
+    }
+    const clauses = (copy ?? n).clauses as { params: Pattern[]; body: Expr }[] | undefined;
+    const own = (n.t === "def" || n.t === "stmDef") && clauses ? viewConstructor(n.name as string, clauses) : undefined;
+    if (own) copy = { ...copy ?? n, clauses: [{ ...clauses![0], ...own }] };
+    if (!copy) return node;
+    const at = sourceLocations.get(n as Expr);
+    if (at) sourceLocations.set(copy as Expr, at);
+    return copy;
+}
 // C, for a matcher written untag C (or intrinsics.untag C).
 function untagOf(match: Expr): string | undefined {
     while (match.t === "block" && match.stmts.length === 1) match = match.stmts[0];
@@ -891,10 +915,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // spells, checked as one (see viewConstructor), unless the program binds
     // view or untag itself.
     if (!program.some(s => (s.t === "def" || s.t === "patDef") && ["view", "untag"].some(name => s.t === "def" ? s.name === name : patternNames(s.pattern).includes(name)))) {
-        program = program.map(s => {
-            const clause = s.t === "def" ? viewConstructor(s.name, s.clauses) : undefined;
-            return clause && s.t === "def" ? { ...s, clauses: [{ ...s.clauses[0], ...clause }] } : s;
-        });
+        program = constructorViews(program) as TopLevel[];
     }
     const issues: TypeIssue[] = [];
     // How often each name is bound: a top-level value bound once can keep its
@@ -8441,10 +8462,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         return t.k === "variant";
     }
     function define(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope, location: Expr): void {
-        // A view making and taking apart its own values, X = view (a -> tag X X
-        // [a]) (untag X), is the constructor X a = tag X X [a]: so it runs.
-        const own = constructorView(name, clauses, scope);
-        if (own) clauses = [own];
         const owner = defining?.name;
         if (scope !== topScope && !localNames.has(name)) localNames.set(name, owner ? { owner, field: recordScopes.has(scope) } : undefined);
         try {
@@ -8463,10 +8480,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             } else views.delete(name);
         }
         finally { if (ownDefinitions.has(scope)) ownDefinitions.get(scope)!.add(name); else ownDefinitions.set(scope, new Set([name])); }
-    }
-    // A view of untag's in a block (see viewConstructor).
-    function constructorView(name: string, clauses: { params: Pattern[]; body: Expr }[], scope: Scope): { params: Pattern[]; body: Expr } | undefined {
-        return scope.get("view")?.builtin && scope.get("untag")?.denotes === "intrinsics.untag" ? viewConstructor(name, clauses) : undefined;
     }
     // C, for a matcher untag C.
     function untagged(match: Expr, scope: Scope): string | undefined {

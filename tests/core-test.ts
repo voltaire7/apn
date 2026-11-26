@@ -151,6 +151,7 @@ for (const checked of [true, false]) {
         [BOX_VIEW + "unbox (VBox x) = x\n[unbox (VBox 6), typeOf (VBox 6), VBox 1 == VBox 1]", "[6, VBox Int, True]"],
         [CTOR + "MyBox = view Box (untag Box)\nmine (MyBox x) = x\nkind (Box _) = 1\nkind _ = 0\n[mine (Box 7), kind (MyBox 1)]", "[7,1]"],
         [BOX_VIEW + "kind (VBox _) = 1\nkind _ = 0\n[kind (VBox 1), kind 2]", "[1,0]"],
+        ["f n = {\n    VB = view (a -> tag VB VB [a]) (untag VB)\n    g (VB x) = x\n    g (VB n)\n}\nf 3", "3"],
         // Into a declared type, as a constructor declared into it would be.
         ["Shape = Circle Float | Square Float\nC2 = view (r -> tag Shape C2 [r]) (untag C2)\n" +
             "area (C2 r) = r * r\narea (Circle r) = r\n[area (C2 3), area (Circle 3), typeOf (C2 3)]", "[9,3.0,Shape]"],
