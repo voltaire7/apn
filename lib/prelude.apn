@@ -188,7 +188,6 @@ foldr f z [] = z
 foldr f z (x :: xs) = f x (foldr f z xs)
 length [] = 0
 length (_ :: xs) : Int = 1 + length xs
-length (text : String) : Int = length (to (List Char) text)
 length (m : HashMap _ _) : Int = length (pairs m)
 zipWith f (x :: xs) (y :: ys) = f x y :: zipWith f xs ys
 zipWith _ _ _ = []

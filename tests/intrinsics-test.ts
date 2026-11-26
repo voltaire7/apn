@@ -74,6 +74,7 @@ for (const checked of [false, true]) {
         // The check runs library code on known Strings as on lists: "" is [].
         ['onlyOne [a] = a; onlyOne (filter (x -> x != "") [[], "a"])', '"a"'],
         ['onlyOne [a] = a; onlyOne (map (c -> c) "a")', "'a'"],
+        ['onlyOne [a] = a; [onlyOne (take 1 "ab"), onlyOne (drop 1 "ab")]', "['a','b']"],
     ]) Deno.test(`String (checked=${checked}): ${source}`, () => {
         const i = new Interpreter();
         if (checked) i.enableChecking();

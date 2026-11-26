@@ -1508,7 +1508,11 @@ class Parser {
         if (open === undefined) return;
         const close = this.closer(open);
         const text = this.source.slice(this.toks[open].pos, this.toks[close].pos + 1);
-        throw new APNError("parse", `unnecessary parentheses: ${text.includes("\n") || text.length > 40 ? "this group" : `\`${text}\``} reads the same without them`, {
+        const shown = text.includes("\n") || text.length > 40 ? "this group" : `\`${text}\``;
+        // (A definition's whole right side ascribed is its declaration: in a
+        // record entry the parentheses end the type, so it says what to write.)
+        const says = this.unnecessaryHints.has(open) ? `${shown} is a declaration, written on the left` : `${shown} reads the same without them`;
+        throw new APNError("parse", `unnecessary parentheses: ${says}`, {
             pos: this.toks[open].pos, len: 1, hint: this.unnecessaryHints.get(open) ?? "remove the ( and its )",
         });
     }

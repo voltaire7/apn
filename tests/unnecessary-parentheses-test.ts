@@ -24,6 +24,10 @@ for (const source of [
     "xs ~ [(x :: _) -> x]",
     "(Some v) = m",
     "(Some v) <- m",
+    // A definition's whole right side ascribed is its declaration, x : T = e.
+    'n = ("ab" : String)',
+    "f x = (x : Int)",
+    "r = [x = (1 : Int8), y = 2]",
 ]) Deno.test(`unnecessary parentheses: ${source}`, () => {
     try { parse(source); } catch (error) {
         if (String(error).includes("unnecessary parentheses")) return;
@@ -152,4 +156,16 @@ for (const source of [
     if (!e) throw new Error("not an expression");
     const written = exprToSource(e), [again] = parse(written);
     if (again.t !== "expr" || JSON.stringify(tree(again.value)) !== JSON.stringify(tree(e))) throw new Error(`${written} reads differently`);
+});
+
+// Ascription keeps its parentheses inside an expression and in a chain.
+for (const source of ['print ("ab" : String)', 'n = ("ab" : String) ++ "c"', 'n = ("hi" : String) : List Char', 'n : String = "ab"', 'n = "ab" : String']) {
+    Deno.test(`needed parentheses around an ascription: ${source}`, () => { parse(source); });
+}
+Deno.test("an ascribed right side says to declare it", () => {
+    try { parse("r = [x = (1 : Int8), y = 2]"); } catch (error) {
+        if (String(error).includes("is a declaration, written on the left")) return;
+        throw error;
+    }
+    throw new Error("accepted");
 });

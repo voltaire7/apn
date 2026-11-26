@@ -51,7 +51,8 @@ gives (an item's, as `toAST [e] 1`): `metaParse "fact n = n * 2; fact 5"` is
 `["{}", ["=", ["fact","n"], ["*", "n", 2]], ["fact", 5]]`, and `metaEvalSyntax`
 runs `toAST`'s output as it runs the reader's. A leaf is a number, a Bool, a
 name or a string literal's quoted source (which the evaluator unescapes); a
-list headed by `->`, `?:`, `[]`, `.`, `$`, `:` (an ascription, `(x : T)`) or
+list headed by `->`, `?:`, `[]`, `.`, `$`, `:` (an ascription, `(x : T)`; a
+declaration `x : T = e` reads as `x = e : T`) or
 `{}` is that form, and any other
 list applies its first element to the rest. `$` is a form, not a primitive, so
 it can apply an object-language closure. To run the user's program, the

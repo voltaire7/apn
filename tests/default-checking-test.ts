@@ -1773,3 +1773,13 @@ for (const source of [
     // A function converts to a function type by ascription, not through a dot.
     "(a -> a).(+ 1) 2",
 ]) Deno.test(`a lambda's function arguments reject: ${source}`, () => rejected(session(), source));
+
+// A recursive call in a clause of another type than the others' (a HashMap's
+// beside []'s and x :: xs's) waits for the whole function: the list clauses
+// keep taking any list.
+Deno.test("a recursive call through another clause's type keeps the others", () => {
+    const program = "f [] = 0\nf (_ :: xs) : Int = 1 + f xs\nf (m : HashMap _ _) : Int = f (pairs m)\n" +
+        'm : HashMap _ _ = [["a", 1], ["b", 2]]\n[f [1,2], f [[1,2]], f m]';
+    const shown = run(session(), program);
+    if (shown !== "[2,1,2]") throw new Error(shown);
+});

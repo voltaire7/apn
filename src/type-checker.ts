@@ -7665,7 +7665,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 return acc;
             }
             case "take": case "drop": {
-                const count = numericOf(readMutable(args[0]())), list = args[1]();
+                const count = numericOf(readMutable(args[0]())), list = listOf(args[1]());
                 if (count?.kind !== "int" || count.v < 0n || !list) return undefined;
                 if (list.range) {
                     const { lo, step, hi } = list.range, n = count.v;
@@ -7712,7 +7712,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                 }, origin);
             }
             case "zipWith": {
-                const f = args[0](), xs = args[1](), ys = args[2]();
+                const f = args[0](), xs = listOf(args[1]()), ys = listOf(args[2]());
                 if (!xs?.items && !xs?.cell || !ys?.items && !ys?.cell) {
                     // A list of unknown length decides nothing; skip walking the other.
                     if (!isList(xs) || !isList(ys)) return undefined;
@@ -8698,6 +8698,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             : fallback ? { k: "overload", choices: [pending, fallback], name } : pending, mono: true, recursive: true });
         // (A typed pattern's type, (s : String) or (xs : List _), by its head.)
         const typeTag = (p: Pattern | undefined): string | undefined => {
+            // (A list pattern takes a List: [] and x :: xs beside (m : HashMap _ _).)
+            if (p?.p === "cons" || p?.p === "list" && !p.v.every(q => q.p === "var")) return "List";
             if (p?.p === "constr") return TYPE_NAMES.includes(p.tag) ? p.tag : undefined;
             if (p?.p !== "schema") return undefined;
             let head = p.type;

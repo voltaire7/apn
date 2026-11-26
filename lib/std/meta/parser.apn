@@ -202,12 +202,19 @@ std <- import "std"
     }
     mpDefinition tokens = {
         [names] = [mpNames tokens]
-        null names ? False : mpText (drop (length names) tokens) == "="
+        null names ? False : contains (mpText (drop (length names) tokens)) ["=",":"]
     }
+    # x : T = e is x = e : T, its body ascribed.
     mpReadDefinition tokens = {
         [names] = [mpNames tokens]
-        [body] = [mpAscribed (mpExpr 1 ":" (tail (drop (length names) tokens)))]
+        [rest] = [drop (length names) tokens]
+        [body] = [mpText rest == ":" ? mpDeclared (mpExpr 1 "=" (tail rest))
+            : mpAscribed (mpExpr 1 ":" (tail rest))]
         [["=", null (tail names) ? snd (head names) : map snd names, fst body], snd body]
+    }
+    mpDeclared type = {
+        body = mpExpr 1 ":" (mpRequire "=" (snd type))
+        [[":", fst body, fst type], snd body]
     }
     # A definition's right side ascribed outermost, x = e : T, is [":", e, T].
     mpAscribed read = mpText (snd read) == ":" ? {
