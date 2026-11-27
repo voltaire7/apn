@@ -25,7 +25,7 @@ std <- import "std"
         ? mpState "escape" state.buffer state.tokens "" state.depth
         : (c == "\""
         ? mpState "code" "" (prepend (mpToken "literal" state.buffer) state.tokens) "" state.depth
-        : mpState "string" (state.buffer ++ c) state.tokens "" state.depth)
+        : mpState "string" (state.buffer ++ c : String) state.tokens "" state.depth)
     # A newline outside ( ) and [ ] ends a statement.
     mpLineEnd state flushed = state.depth == 0
         ? mpState "code" "" (prepend (mpToken "symbol" ";") flushed.tokens) "" 0
@@ -46,7 +46,7 @@ std <- import "std"
         state.mode == "comment"
             ? (lineBreak ? mpLexStep (mpState "code" "" state.tokens "" state.depth) char : state)
             : (state.mode == "escape"
-            ? mpState "string" (state.buffer ++ "\\" ++ c) state.tokens "" state.depth
+            ? mpState "string" (state.buffer ++ "\\" ++ c : String) state.tokens "" state.depth
             : (state.mode == "string"
             ? mpStringStep state c
             : (c == "#"
@@ -59,7 +59,7 @@ std <- import "std"
             ? mpState "code" "" (prepend (mpToken "symbol" c) flushed.tokens) ""
                 (state.depth + mpNesting c)
             : (state.kind == kind
-            ? mpState "code" (state.buffer ++ c) state.tokens kind state.depth
+            ? mpState "code" (state.buffer ++ c : String) state.tokens kind state.depth
             : mpState "code" c flushed.tokens kind state.depth)))))))
     }
     mpLex source = {
@@ -80,7 +80,7 @@ std <- import "std"
         blank = all (== ' ') line || startsWith "#" (trim line)
         open = dropWhile (> indent) levels
         break = blank || indent <= head open ? "\n" : "\r"
-        piece = null pieces ? line : break ++ line
+        piece = null pieces ? line : (break ++ line : String)
         blank ? [levels, piece :: pieces]
             : [endsWith "{" (trim line) ? indent + 4 :: open : open, piece :: pieces]
     }
@@ -163,7 +163,7 @@ std <- import "std"
     mpValue tokens = {
         [token] = [head tokens]
         [text] = [snd token]
-        head token == "literal" ? ["\"" ++ text ++ "\"", tail tokens]
+        head token == "literal" ? [("\"" ++ text ++ "\"" : String), tail tokens]
             : (text == "True" ? [True, tail tokens]
             : (text == "False" ? [False, tail tokens]
             : (head token == "word" ? mpWord text tokens

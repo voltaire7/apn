@@ -29,12 +29,19 @@ alongside the code, and don't restate the user-facing rules here.
   (`keepNames`), a native the prelude models by its definition's record; a
   chain of tail calls keeps its first such call (`TailCall.keep`). A String
   not stored as text is a `cons` whose cells carry `named: "String"`
-  (`lazyString`); display and `typeOf` take it as a String while its items
-  are Chars (`fitsText`), and places that need text read it (`textOf`,
-  `asText`). `++` makes one when its left side is text and its right side is
-  not evaluated (`known`), recording the parts (`lazyJoins`) so a later join
-  on its left finishes it into text (`finishedJoin`): a String built in a loop
-  stays one string. A list given a name, or converted to a list type
+  (`lazyString`), which display and `typeOf` take as a String, and places
+  that need text read (`textOf`, `asText`). The checker records String and
+  Dynamic types too (`recordValueType`), and `TypeBridge.textual` says what a
+  recorded type says of the name (`TextKind`); the run asks it (`textAt`) for
+  a written `++` or `::` (`joinAt`, `operate`'s `join`) and for a call, whose
+  result a chain of tail calls names, or unnames, after it ends (`namedText`,
+  `unnamedText`). A place recorded only while typing one call's body
+  (`callTyped`) holds that call's types, not every run's, so it says nothing,
+  as an unrecorded place does unless its form says String (`writtenText`). A
+  kept place marked `item` takes its argument's first item's name (`concat`). A String `++` whose right side is not
+  evaluated (`known`) records its parts (`lazyJoins`) so a later join on its
+  left finishes it into text (`finishedJoin`): a String built in a loop stays
+  one string. A list given a name, or converted to a list type
   (`listType`), keeps a tail that already is one (`namedCells`,
   `declaredTypes`) instead of wrapping it again, so a list a typed function
   builds by recursion is read through one layer, not one per call.

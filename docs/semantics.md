@@ -338,15 +338,23 @@ wherever that type is in the result, by the function's type alone, so in any
 code, typed or not: `take`, `filter` and `reverse` are `List a -> List a`, so
 `take 2 "abc"` is the String `"ab"` and `take 2 n` a `Name`, and `splitOn` gives
 a `List (List a)`, a list of Strings; `map` is `List a -> List b`, so `map f "ab"`
-is a list. The name is the first named argument's, left to right, of those
+is a list. A parameter that is no list gives its name to the result only where
+it is the whole of it (`a -> a`: the other items of a `List a` are other values),
+and a result of a list parameter's items' type gives back its first item's
+name (`concat` is `List (List a) -> List a`, so `concat ["ab","c"]` is a String). The name is the first named argument's, left to right, of those
 evaluated by the time the result is read: no argument is read to find it, so
-`f c xs = c ? [] : xs` given `True` takes none from an `xs` not yet read. `++` and `::` are such
-functions: `"ab" ++ rest` is a String without reading `rest`, so `cycle "ab"` is an
-endless String (`print $ cycle "THE END IS NEVER "` shows it as it goes), and
-`['a'] ++ "bc"` and `'x' :: "yz"` are Strings. A result whose items do not fit
-the name's base keeps no name: `"ab" ++ [1]` and `[1] ++ "ab"` are lists (an
-endless one is taken to fit past its first 4096 items). Two different names do
-not join. A constructor (`UserId (id : Int) =
+`f c xs = c ? [] : xs` given `True` takes none from an `xs` not yet read.
+Whether the name fits is the type's to say, never the items': a call, `++` or
+`::` whose type is `String` gives the name; one whose type is a list of Chars
+keeps the name a side has, read or not (`"ab" ++ ['c']`, `['a'] ++ "bc"` and
+`'x' :: "yz"` are Strings, `['h'] ++ ['i']` a list); one of another list type
+has none (`"ab" ++ [1]`, `[1] ++ "ab"`). Where the type says nothing (generic
+code, `Dynamic`, or no check), two Strings made already join into one and
+anything else is a list until a function's type, a call's or an ascription
+names it: `"ab" ++ (d : Dynamic)` is a list, and `cycle "ab"` an endless String
+by `cycle`'s type (`print $ cycle "THE END IS NEVER "` shows it as it goes). An
+item of a String that is no `Char` is an error where the String is read as
+text. Two different names do not join. A constructor (`UserId (id : Int) =
 _`) makes a distinct type: `UserId 1` has none of an Int's operations, builtins
 and `(x : Int)` patterns reject it, its clauses give it what it needs
 (`UserId a + UserId b = UserId (a + b)`), and `(UserId x)` takes it apart.

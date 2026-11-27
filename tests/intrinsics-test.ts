@@ -106,8 +106,8 @@ for (const checked of [false, true]) {
         ['Name = String; n : Name = "abc"; typeOf (filter (c -> c != \'b\') n)', 'Name'],
         ['[take 2 "abc", typeOf (take 2 "abc"), \'x\' :: "yz"]', '["ab",String,"xyz"]'],
         ['map (c -> c) "ab"', "['a','b']"],
-        // A value carries its name; ++ takes the first a side carries, left to
-        // right, reading no side to find it, so cycle of a String is one.
+        // A value carries its name; ++ keeps one a side has where its type, a
+        // list of Chars, fits it, reading no side to find it: cycle of a String is one.
         ["['h','i']", "['h','i']"],
         ['std <- import "std"; [..] = std.sequence; [take 5 (cycle "ab"), typeOf (take 5 (cycle "ab")), head (cycle "xy")]', '["ababa", String, \'x\']'],
         ['std <- import "std"; [..] = std.sequence; take 20 (cycle "THE END IS NEVER ")', '"THE END IS NEVER THE"'],
@@ -138,3 +138,20 @@ for (const checked of [false, true]) {
         throw new Error("accepted");
     });
 }
+// Whether a value is a String is its type's to say, never its items': a
+// list of Chars keeps the name a side has, another list has none, Dynamic
+// says nothing, and a call's or function's type gives it.
+for (const [source, expected] of [
+    ['"ab" ++ [1]', "['a', 'b', 1]"],
+    ['["ab" ++ [(99 : Char)], [(97 : Char)] ++ "bc", (120 : Char) :: "yz"]', '["abc","abc","xyz"]'],
+    ['[(104 : Char)] ++ [(105 : Char)]', "['h','i']"],
+    ['std <- import "std"; [..] = std.sequence; [concat ["ab","c"], take 5 (cycle "ab")]', '["abc","ababa"]'],
+    ['d : Dynamic = [1]; "ab" ++ d', "['a', 'b', 1]"],
+    ['map (x -> "#" ++ to String x) [1,2]', '["#1","#2"]'],
+    ['f (xs : List (List a)) : List a = head xs; [f [[1,2]], f ["ab"]]', '[[1,2], "ab"]'],
+] as const) Deno.test(`a String by its type: ${source}`, () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    const shown = i.renderString(i.run(parseDocument(source)));
+    if (shown !== expected) throw new Error(`expected ${expected}, got ${shown}`);
+});

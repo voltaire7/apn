@@ -8,7 +8,9 @@ std <- import "std"
     metaPrimitives : HashMap _ _ = [
         ["^",(^)], ["+",(+)], ["-", (x, y -> x - y)], ["*",(*)], ["/",(/)], ["%",(%)]
         ["==",(==)],["!=",(!=)],["<",(<)],[">",(>)],["<=",(<=)],[">=",(>=)]
-        ["++",(++)], ["::", (x, xs -> x :: xs)]
+        # (Two Strings join into one: the object language has no types to say so.)
+        ["++", (xs, ys -> isType String xs && isType String ys ? (xs ++ ys : String) : xs ++ ys)]
+        ["::", (x, xs -> x :: xs)]
         ["not",not],["negate",negate],["head",head],["tail",tail],["null",null]
         ["isNumber",isNumber],["isList",isList],["length",length],["take",take],["drop",drop]
         ["HashMap",HashMap],["_",Dynamic],["isType",isType],["typeOf",typeOf],["has",has]
