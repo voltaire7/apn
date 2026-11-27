@@ -81,7 +81,7 @@ A type is written as the values it holds (see
 | One way | The other |
 | --- | --- |
 | `toAST [f x + 1]` gives data | `fromAST` writes it back as source |
-| `to (List Char) "ab"` | `from (List Char) ['a','b']` |
+| `to String 12` | `from String "12"` |
 | Printing a value | shows it as it was written |
 
 ## Where the symmetry breaks

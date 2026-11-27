@@ -1045,7 +1045,7 @@ return = Some                      # return in Option
 ```
 
 `to` and `from` are methods the same way: `to T x` writes `x` as a `T`
-(`to String`, `to JSON`, `to (List Char)`, `to Record`; another type, a
+(`to String`, `to JSON`, `to Record`; another type, a
 record type too, converts as applying it: `to Quote x` is `Quote x`),
 `from T x` reads one back. A type name in a pattern, bare or applied to types
 alone, matches each type within the one it names, as `<=` compares types

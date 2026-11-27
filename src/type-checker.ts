@@ -1066,7 +1066,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A String where a list is asked: its Chars, that many when its text is
     // known ("ab" for [a,b]), else a List Char of a length the run finds.
     const asCharacters = (argument: Entry): Entry => {
-        if (!isString(resolve(argument.type))) return argument;
+        // (A named String, Name = String, is its characters too.)
+        const r = resolve(argument.type), base = r.k === "variant" && r.base ? resolve(r.base) : undefined;
+        if (!isString(r) && !(base && isString(base))) return argument;
         if (typeof argument.string !== "string") return { ...argument, type: characters() };
         const items = [...argument.string].map(() => atom("Char"));
         return { ...argument, type: { k: "list", element: atom("Char"), items, length: constant(BigInt(items.length)) } };
@@ -1469,7 +1471,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // A list template ([Char], [Int,String]) converts position by position.
             if (a.k === "list" && a.items?.length && a.items.every(item => resolve(item).k === "type")) {
                 if (t.op === "to") return template(a, b, activeExpression ?? { t: "placeholder" }, true);
-                return problem("no from instance for a list template", undefined, "join characters with `from (List Char) cs`; convert with `to`, as in `to [Char,Char] \"hi\"`");
+                return problem("no from instance for a list template", undefined, "join characters with `(cs : String)`; convert with `to`, as in `to [Char,Char] \"hi\"`");
             }
             // So does a record schema ([quote : String, year : Int]), a type too.
             if (a.k === "record" && describing(a)) {
@@ -1483,18 +1485,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const target = a.k === "type" ? resolve(a.value) : a.k === "variant" && !a.args.length ? a : a.k === "fn" && made(a).k === "variant" ? made(a) : undefined;
             if (!target) return problem(`${t.op} expects a type, as in ${t.op} String x`);
             const named = (name: string) => target.k === "variant" && target.name === name && (!!target.base || !!scope.get(name)?.builtin);
-            const chars = target.k === "list" && !target.items && resolve(target.element).k === "atom" && (resolve(target.element) as { name: string }).name === "Char";
             const string = target.k === "atom" && target.name === "String";
             if (t.op === "to") {
                 if (string || named("JSON")) return atom("String");
-                if (chars) { unify(atom("String"), b); return list(atom("Char")); }
                 // An association list's pairs as a record's (its fields known at runtime).
                 if (target.k === "atom" && target.name === "Record") { if (resolve(b).k !== "dynamic") unify(list(pair(atom("String"), variable())), b); else runtimeChecks++; return explicitDynamic; }
                 // Any other type converts as ascription does (to Int 1.0 is 1.0 : Int).
                 return application(a, { type: b }, { t: "placeholder" }, false, true);
             }
             if (string || named("JSON")) { unify(atom("String"), b); return explicitDynamic; }
-            if (chars) { unify(list(atom("Char")), b); return atom("String"); }
             return problem(`no from instance for ${text(target)}`, undefined, `define one, such as \`from ${text(target)} x = ...\``);
         }
         if (t.op === "match") {
@@ -2547,7 +2546,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function unboundHint(name: string, scope?: Scope): string | undefined {
         const module = standardModule(name), now = RETIRED_NATIVES[name];
         const holder = scope && [...scope].find(([, entry]) => moduleOf(entry.type)?.has(name))?.[0];
-        return now ? `write \`${now} x\`` : holder ? `write \`${holder}.${name}\`, or \`[..] = ${holder}\` to open its names`
+        return now ? `write \`${now}\`` : holder ? `write \`${holder}.${name}\`, or \`[..] = ${holder}\` to open its names`
             : module ? `${openHint(module)} to use \`${name}\`` : undefined;
     }
 
@@ -3683,7 +3682,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // a -> a) gives a named subtype's argument its name back (take 2 "abc" is
     // a String): a String is a List Char, and the function keeps it one.
     function application(f: Ty, argument: Entry, e: Expr, builtin = false, ascribed = false): Ty {
-        const fun = resolve(f), name = namedOf(argument.type);
+        const fun = resolve(f), name = namedOf(argument.type) ?? keptName(e);
         const parameter = name && fun.k === "fn" ? resolve(fun.input) : undefined;
         const keeps = parameter && parameter.k !== "var" && parameter.k !== "dynamic" && fun.k === "fn" && recurs(resolve(fun.output), parameter, 0);
         const out = applied(f, argument, e, builtin, ascribed);
@@ -3695,6 +3694,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // argument it came from; the check keeps what it knows of the list (its
     // items, its length), which String unifies with.
     const keptNames = new WeakMap<Expr, Ty>();
+    // The name a call written as e gives back (take 2 (reverse "abc"): reverse's
+    // String), which the check's own type, a list, does not carry.
+    function keptName(e: Expr): Ty | undefined {
+        while (e.t === "block" && e.stmts.length === 1) e = e.stmts[0];
+        const kept = e.t === "app" ? keptNames.get(e.a) : e.t === "binop" ? keptNames.get(e) ?? keptNames.get(e.r) : undefined;
+        return kept && namedOf(kept);
+    }
     // Whether the parameter's type is the result, or an item of it (a List
     // (List a) of splitOn's), the places the name comes back to.
     function recurs(t: Ty, p: Ty, depth: number): boolean {
@@ -4193,6 +4199,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
                     return t;
                 }
             }
+            // (A String ascribed a list type is its Chars, that many when known.)
+            if (t.k === "list") argument = asCharacters(argument);
             const measured = measuredList(t, argument);
             if (measured) return application(f, measured, e, false, ascribed);
             // An indexed family takes a value for an index (Vec 2 Int): it fills
@@ -7627,16 +7635,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const inner = value(args[0]);
             return { action: () => inner };
         }
-        // to T x and from T x with a builtin T: the native the runtime runs
-        // (to (List Char) is chars), unless a program defines its own instances.
+        // to T x and from T x with a builtin T: the native the runtime runs,
+        // unless a program defines its own instances.
         if ((head.name === "to" || head.name === "from") && builtin && args.length === 2) {
             const target = value(args[0])?.type, t = target && resolve(target);
             // A program's own instance for this type runs instead.
             if (t && instanceFor(head.name, [t])) return undefined;
             const inner = t?.k === "type" ? resolve(t.value) : undefined;
-            const kind = inner?.k === "atom" && inner.name === "String" ? "String"
-                : inner?.k === "list" && !inner.items && resolve(inner.element).k === "atom" && (resolve(inner.element) as { name: string }).name === "Char" ? "List Char" : undefined;
-            const native = kind && ({ to: { String: "toString", "List Char": "chars" }, from: { String: "parse", "List Char": "fromChars" } } as const)[head.name][kind];
+            const kind = inner?.k === "atom" && inner.name === "String" ? "String" : undefined;
+            const native = kind && ({ to: { String: "toString" }, from: { String: "parse" } } as const)[head.name][kind];
             if (native) return evaluateNative(native, [() => readMutable(value(args[1]))], depth);
             // to of another type applies it, as at runtime; anything else
             // (an unknown target, JSON, from) is left to the run.
@@ -7647,7 +7654,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if ((head.name === "not" || head.name === "negate") && builtin && args.length === 1) {
             return value({ t: "unop", op: head.name === "not" ? "not" : "neg", e: args[0] });
         }
-        // List T: the type of lists of T (to (List Char) names it).
+        // List T: the type of lists of T (List Char names a String's characters).
         if (head.name === "List" && builtin && args.length === 1) {
             const element = value(args[0])?.type, t = element && resolve(element);
             return t?.k === "type" ? { type: { k: "type", value: list(t.value) } } : undefined;
@@ -9045,8 +9052,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             scope.set(name, { type, nonGeneric, clauses });
         }
         // A recursive call the finished function decides is an instance of it,
-        // as any later call is: len (text : String) = len (to (List Char) text)
-        // leaves len's list clauses taking lists of any element.
+        // as any later call is: len (m : HashMap _ _) = len (pairs m) leaves
+        // len's list clauses taking lists of any element.
         for (const target of self.targets) unify(target, instantiate({ type, nonGeneric }), location);
         // Checks already decided (such a recursive call's) ask nothing more of
         // a call: the function's type drops them, so its copies stay small.
@@ -9172,7 +9179,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     scope.set("intrinsics.get", { type: { k: "intrinsic", name: "get", arity: 2 } });
     scope.set("intrinsics.with", { type: { k: "intrinsic", name: "with", arity: 3 } });
     scope.set("intrinsics.import", { type: { k: "intrinsic", name: "import" } });
-    // to T x writes x as a T, from T x reads it back (to String, to JSON, to (List Char)).
+    // to T x writes x as a T, from T x reads it back (to String, to JSON).
     for (const name of ["to", "from"]) scope.set(name, { type: { k: "intrinsic", name, arity: 2 } });
     if (options.library) {
         const a = variable(), b = variable(), c = variable();

@@ -22,8 +22,9 @@ for (const [source, expected] of [
     ["(from String \"42\" : Int) + 1", "43"],
     ["to JSON [a = 1, b = [True]]", '"{\\"a\\":1,\\"b\\":[true]}"'],
     ["from JSON \"[1,2]\"", "[1,2]"],
-    ["to (List Char) \"a😀\"", "['a','😀']"],
-    ["from (List Char) ['h','i']", '"hi"'],
+    // A String is its characters: to (List Char) is ascription, which keeps it.
+    ["to (List Char) \"a😀\"", '"a😀"'],
+    ["(['h','i'] : String)", '"hi"'],
     // Any other type converts as applying it does.
     ["Money (x : Float) = _\nto Float (Money m) = m\nto Float (Money 1.2)", "1.2"],
     // A bare type name in a pattern matches that type, as a value.
@@ -36,7 +37,7 @@ for (const [source, expected] of [
     ["to [Float] [1]", "[1.0]"],
     ["to [Int,String] [x = 1, y = \"a\"]", '[x = 1, y = "a"]'],
     // The checker evaluates to and from as the run does, beside a program's own instances.
-    [TEMPERATURE + "(to (List Char) \"a😀\" : Vect 2 Char)", "['a','😀']"],
+    [TEMPERATURE + "(\"a😀\" : Vect 2 Char)", "['a','😀']"],
     ["Money (x : Float) = _\nto Float (Money m) = m\n([to Float (Money 1.2)] : Vect 1 Float)", "[1.2]"],
 ] as const) {
     Deno.test(`conversions: ${source}`, () => {
@@ -46,14 +47,15 @@ for (const [source, expected] of [
 }
 
 for (const [source, kind, message] of [
-    ["to (List Char) 5", "type", "cannot use Int where String is required"],
+    ["to (List Char) 5", "type", "cannot use Int where List Char is required"],
     ["Celsius = | C Float\nfrom Celsius 1", "type", "no from instance for Celsius"],
     ["to 5 1", "type", "to expects a type"],
     ["to [Char] \"hello\"", "runtime", "list template and input must have the same length"],
     ["from [Char] \"h\"", "type", "no from instance for a list template"],
-    [TEMPERATURE + "(to (List Char) \"a😀\" : Vect 3 Char)", "type", "length mismatch: expected 3, got 2"],
+    [TEMPERATURE + "(\"a😀\" : Vect 3 Char)", "type", "length mismatch: expected 3, got 2"],
+    ["from (List Char) ['h','i']", "type", "no from instance for List Char"],
     // The old names are gone, with a hint to the new spelling.
-    ["chars \"hi\"", "type", "to (List Char)"],
+    ["fromChars ['h']", "type", "(x : String)"],
     ["toString 1", "type", "to String"],
 ] as const) {
     Deno.test(`conversions reject: ${source}`, () => {

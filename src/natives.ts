@@ -110,8 +110,9 @@ export const NATIVE_EXPORTS: Record<string, string[]> = {
 // Natives that to and from spell now (to String x for toString x): internal,
 // not bound for programs; each with what to write instead.
 export const RETIRED_NATIVES: Record<string, string> = {
-    toString: "to String", intToString: "to String",
-    chars: "to (List Char)", fromChars: "from (List Char)", toJson: "to JSON", fromJson: "from JSON",
+    toString: "to String x", intToString: "to String x",
+    // (A String is its characters, and a list of Chars is a String where one is asked.)
+    chars: "x", fromChars: "(x : String)", toJson: "to JSON x", fromJson: "from JSON x",
 };
 // The module exporting a standard native, for "add import" hints.
 export function nativeModule(name: string): string | undefined {

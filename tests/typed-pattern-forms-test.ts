@@ -104,7 +104,7 @@ for (const checked of [false, true]) for (const [source, expected] of [
     ['f (xs : List Int) = "ints"\nf _ = "other"\n[f [1,2], f 5]', '["ints","other"]'],
     ["f (xs : List Float) = xs\nf [1,2]", "[1.0,2.0]"],
     ["f (xs : List Int) = take 2 xs\nf [1..]", "[1,2]"],
-    ['[length "é", length "a😀b", length (to (List Char) "a😀b")]', "[1,3,3]"],
+    ['[length "é", length "a😀b", length ("a😀b" : List Char)]', "[1,3,3]"],
     ['([1] : Vect (length "😀") Int)', "[1]"],
 ] as const) Deno.test(`list types and string lengths (checked=${checked}): ${source}`, () => {
     const actual = run(source, checked);

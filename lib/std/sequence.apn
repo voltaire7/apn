@@ -26,13 +26,17 @@ reversed xs = foldl (acc, x -> x :: acc) [] xs
     lastOption xs = foldl (_, x -> Some x) None xs
     atOption n xs = n < 0 ? None : headOption (drop n xs)
     takeUntil predicate xs = takeWhile (x -> not (predicate x)) xs
-    splitAt n xs = [take n xs, drop n xs]
-    splitWhile predicate xs = [takeWhile predicate xs, dropWhile predicate xs]
-    chunksOf n xs = n <= 0 ? fail "chunksOf expects a positive size"
+    # Their parts are lists of the input's type, as their types say (a String's
+    # parts are Strings).
+    splitAt n (xs : List a) : [List a, List a] = [take n xs, drop n xs]
+    splitWhile predicate (xs : List a) : [List a, List a] =
+        [takeWhile predicate xs, dropWhile predicate xs]
+    chunksOf n (xs : List a) : List (List a) = n <= 0 ? fail "chunksOf expects a positive size"
         : (null xs ? [] : take n xs :: chunksOf n (drop n xs))
     intersperse separator xs = null xs ? []
         : head xs :: foldr (x, rest -> separator :: x :: rest) [] (tail xs)
-    partition predicate xs = [filter predicate xs, filter (x -> not (predicate x)) xs]
+    partition predicate (xs : List a) : [List a, List a] =
+        [filter predicate xs, filter (x -> not (predicate x)) xs]
     unique xs = null xs ? [] : head xs :: unique (filter (x -> x != head xs) (tail xs))
     # Dictionary order, which sorts: -1, 0 or 1 (<= is inclusion: "ab" <= "b"
     # is False, compare "ab" "b" is -1).

@@ -62,8 +62,8 @@ for (const [source, expected] of [
     // (m : HashMap _ _) binds a map, of any keys and values.
     ['ks (m : HashMap _ _) = keys m; ks ([["a", 1]] : HashMap _ _)', '["a"]'],
     // Clauses typed by different types recurse through the finished function:
-    // ln (keys m) is a List String, ln (to (List Char) s) a List Char.
-    ['ln (s : String) = ln (to (List Char) s); ln (m : HashMap _ _) = ln (keys m); ln (xs : List _) = 7\n' +
+    // ln (keys m) is a List String; a String is a List Char, which the last takes.
+    ['ln (m : HashMap _ _) = ln (keys m); ln (xs : List _) = 7\n' +
         '[ln ([["a", 1]] : HashMap _ _), ln "ab", ln [1]]', '[7,7,7]'],
     // Typed clauses recursing at different types (ln [1] beside ln ["a"]):
     // each call takes the clause the run takes, not the first call's type.
@@ -1216,7 +1216,7 @@ Deno.test("a pair accumulator and a changing state", () => {
         [fold + "step fr = snd (myFoldl visit [0, [9]] fr)\nstep [1,7,2]", "[2,1,9]"],
         ["h zs = [0] :: [tail zs]\nh [1]", "[[0],[]]"],
         // (A recursive call on another type is an instance of the function.)
-        ["len [] = 0\nlen (_ :: xs) = 1 + len xs\nlen (text : String) = len (to (List Char) text)\n"
+        ["len [] = 0\nlen (_ :: xs) = 1 + len xs\n"
             + "len (m : HashMap _ _) = len (pairs m)\n[len [1,2,3], len \"ab\"]", "[3,2]"],
         // (Clauses' results of other lengths keep their items' shapes: pairs.)
         ["pr a b = [a,b]\nzw f (x :: xs) (y :: ys) = f x y :: zw f xs ys\nzw _ _ _ = []\n"
@@ -1389,7 +1389,7 @@ const inputPrelude = `std <- import "std"; [..] = std.io; ${effectPrelude}`;
 // splitOn's state is [fields, current] at every step.
 Deno.test("a fold keeps a length its step keeps, over unknown input", () => {
     const source = `std <- import "std"; [..] = std.io\n${FL}fst [a,b] = a; step [a,b] x = [x :: a, b]\n` +
-        'input <- readInput\nprint (fst (fl step [[],[]] (to (List Char) input)))';
+        'input <- readInput\nprint (fst (fl step [[],[]] input))';
     // Checked as an example is, without the input it will read.
     new CheckingSession().prepare(parse(source, "fold.apn"), Deno.cwd(), Deno.cwd());
 });

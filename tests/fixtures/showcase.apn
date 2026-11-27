@@ -1085,7 +1085,7 @@ print ({ return 9 } : Label Int)           # => MkLabel 9
 print (to String 1.5 ++ "!")               # => 1.5!
 print ((from String "41" : Int) + 1)       # => 42
 print (to JSON [n = 1])                    # => {"n":1}
-print (from (List Char) (to (List Char) "abc"))        # => abc
+print (['a','b','c'] : String)        # => abc
 # A list template converts position by position ([Char] is one Char).
 print (to [Char,Char] "hi")             # => ['h','i']
 describeType Int = "integer"               # a bare type name matches that type
@@ -1356,14 +1356,14 @@ print decoded                                 # => [1, 2.5, []]
 # "std/option" reads one module alone. Using a standard export before its module
 # is opened (fail, upper, okOr) is a static error at the name naming the module.
 [..] = std.[function,option,sequence,array,number,text,map,combinator,io,system,search]
-print (to (List Char) "hello" : String) # => "hello"
+print (("hello" : List Char) : String) # => "hello"
 # reverse is implemented in APN with a linear-time accumulator fold.
 print (head (reverse [1..10000]))   # 10000
 print (reverse [1,2,3])           # [3,2,1]
 print (reverse "a😀b")              # b😀a
-# The checker runs the same text functions: to (List Char) counts code points here too,
-# so Vect 3 Char (to (List Char) "a😀") would be a static length error.
-print (to (List Char) "a😀" : Vect 2 Char)  # => ['a','😀']
+# The checker counts a String's code points as the run does, so ("a😀" : Vect 3
+# Char) would be a static length error.
+print ("a😀" : Vect 2 Char)  # => ['a','😀']
 print (take 6 primes)                 # [2,3,5,7,11,13]
 print (mean [1,2])                   # Some 3/2
 print (frequencies $ words $ "one two one")

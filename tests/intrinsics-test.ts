@@ -105,6 +105,7 @@ for (const checked of [false, true]) {
         ['Name = String; n : Name = "abc"; typeOf (filter (c -> c != \'b\') n)', 'Name'],
         ['[take 2 "abc", typeOf (take 2 "abc"), \'x\' :: "yz"]', '["ab",String,"xyz"]'],
         ['map (c -> c) "ab"', "['a','b']"],
+        ['Name = String; n : Name = "abc"; f (xs : Vect k a) = k; f n', '3'],
         ['keep (xs : List a) : List a = xs; [keep "ab", typeOf (keep "ab")]', '["ab",String]'],
     ]) Deno.test(`named String (checked=${checked}): ${source}`, () => {
         const i = new Interpreter();

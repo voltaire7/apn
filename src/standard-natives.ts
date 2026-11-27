@@ -49,7 +49,7 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
         const out: string[] = [];
         for (const item of i.elements(args[0])) {
             const v = i.dataValue(item);
-            if (v.kind !== "char") throw new APNError("runtime", "from (List Char) expects a list of Char values");
+            if (v.kind !== "char") throw new APNError("runtime", "a String is a list of Char values");
             out.push(v.v);
         }
         return mkStr(textNatives.fromChars(out));

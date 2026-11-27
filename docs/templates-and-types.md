@@ -71,15 +71,14 @@ Strings supply Unicode code-point characters using the same positional rules:
 ```apn
 ("hi" : [Char,Char])    # ['h','i']
 ("h" : [Char])          # ['h']
-to (List Char) "hello"  # arbitrary-length character conversion
+("hello" : List Char)   # "hello": a String is its characters
 ```
 
 On records, `record.values` looks up the field `values`, while
 `record.(expression)` evaluates with the record's fields in scope.
-`String` converts a finite character list back to text, as `from (List Char)` does:
+`String` takes a finite character list as the text it is:
 
 ```apn
-(to (List Char) "hello" : String)    # "hello"
 (to [Char,Char] "hi" : String)       # "hi"
 (['h','i'] : String)               # "hi"
 ([] : String)                        # ""

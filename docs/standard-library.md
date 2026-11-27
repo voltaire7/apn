@@ -90,7 +90,6 @@ one (`readFile` reads from the working directory).
 | --- | --- |
 | `to String x`, `from String text` | Display text; read a `Bool` or number literal back (`Dynamic`) |
 | `to JSON x`, `from JSON text` | JSON text; decode it (`Dynamic`) |
-| `to (List Char) text`, `from (List Char) chars` | A string's characters (code points); join them |
 | `to T x` for another type | Applies `T`, as a conversion: `to Float 3`, `to Quote [year = 1]` |
 | `to [T1,T2] x` | A list template converts position by position: `to [Char,Char] "hi"`; `[Char]` is exactly one `Char` |
 
@@ -348,8 +347,8 @@ as `Dynamic` data, and `metaEvalSyntax` runs such data, `toAST`'s included. `met
 it evaluates the evaluator's source, then runs the program with that evaluator.
 See [the proof, supported subset and primitive boundary](metacircular-evaluator.md).
 
-The standard-library native boundary is `to (List Char)`,
-`from (List Char)`, `upper`, `lower`, and the I/O primitives `readFile`, `readStdin`, `getArgs`. Sequence search, scans, merge sort, and text splitting,
+The standard-library native boundary is the conversion between a String's
+text and its characters, `upper`, `lower`, and the I/O primitives `readFile`, `readStdin`, `getArgs`. Sequence search, scans, merge sort, and text splitting,
 joining, replacement and trimming are implemented in APN.
 
 

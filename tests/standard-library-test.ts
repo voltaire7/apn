@@ -25,7 +25,7 @@ const cases: [string, string][] = [
     ['std <- import "std"; [..] = std.parser\nparse (some digit) ""', 'Err "expected one of 0123456789, got the end"'],
     ['std <- import "std"; [..] = std.parser\nparse (many (token (some letter))) "ab cd"', "Ok [['a','b'],['c','d']]"],
     // many reads in a loop: long input parses in constant stack.
-    ['std <- import "std"; [..] = std.parser\nvalue (Ok x) = x\nlength (value (parse (many digit) (replicate 20000 (head (to (List Char) "7")))))', "20000"],
+    ['std <- import "std"; [..] = std.parser\nvalue (Ok x) = x\nlength (value (parse (many digit) (replicate 20000 (head "7"))))', "20000"],
     // Any list parses, code included.
     ['std <- import "std"; [..] = std.parser\nparse (some (satisfy "an even number" (n -> n % 2 == 0))) [2,4,5]', 'Err "unexpected 5"'],
     ["takeWhile (x -> 1) [1]", "[1]"],
@@ -98,6 +98,12 @@ const cases: [string, string][] = [
     ['filter (c -> c != \'b\') "abc"', '"ac"'],
     ["'x' :: \"yz\"", '"xyz"'],
     ['splitOn "," "a,b"', '["a","b"]'],
+    // Their declared types say their parts are the input's: Strings for a String.
+    ['chunksOf 2 "abcde"', '["ab","cd","e"]'],
+    ['splitAt 2 "abcd"', '["ab","cd"]'],
+    ['partition (c -> c > \'b\') "abcd"', '["cd","ab"]'],
+    ['splitAt 1 [1,2]', '[[1],[2]]'],
+    ['Name = String\nn : Name = "abc"\n[reverse n, typeOf (reverse n)]', '["cba",Name]'],
     ['map (c -> c + 1) "ab"', "['b','c']"],
     ['withDefault 0 (Ok 3)', '3'],
     ['withDefault 0 (Err "no")', '0'],
@@ -125,7 +131,7 @@ for (const [source, expected] of cases) Deno.test(`std: ${source}`, () => {
 for (const [source, message] of [
     ['chunksOf 0 [1]', 'positive size'],
     ['sortBy (x, y -> True) [2,1]', 'integer'],
-    ['from (List Char) [1]', 'Char'],
+    ['([1] : String)', 'a String is a list of Char'],
     ['factorial -1', 'non-negative'],
     ['import "missing"', 'unknown module'],
     ['import 123', 'string'],

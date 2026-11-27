@@ -654,7 +654,7 @@ too (literals, integer ranges such as `[1..n]` with `n` known, and lists built
 from them), the pure builtins run on them as at runtime: `filter`, `map`,
 `take`, `drop`, `zipWith` (and `zip`, which stops at the shorter list), `head`,
 `tail`, `null`, `foldl`, `foldr`, `iterate`, `enumerate`, `upper`, `lower`,
-`to String`, `to (List Char)`, `from (List Char)` and `from String` (booleans
+`to String` and `from String` (booleans
 and number literals); `to T x` for another type is `T x`. So do standard-library functions
 written in APN, such as `takeWhile`, `dropWhile`, `words`, `splitOn`, `trim`,
 `contains`, `all`, `any`, `find`, `sum`, `sort` and `isPrime`, including their

@@ -108,8 +108,8 @@ The object language checks nothing before it runs, so its any type `_` is
 `lib/std/meta/primitives.apn` is the complete list.
 
 The non-I/O standard-library native layer contains six functions: `seq`,
-`fail`, `upper`, `lower`, and the character conversions behind
-`to (List Char)` and `from (List Char)`. Prefix consumers, predicates,
+`fail`, `upper`, `lower`, and the character conversions a String's storage as
+text needs (`chars`, `fromChars`). Prefix consumers, predicates,
 scans, stable merge sort, splitting/joining, replacement, words, and trimming
 are APN definitions. Three additional script-input natives (`readFile`, `readStdin`, `getArgs`)
 are outside the metacircular primitive environment. Core interpreter natives (including folds, primitive

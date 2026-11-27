@@ -1397,7 +1397,7 @@ export class Interpreter {
     // as [field, value] lists), or an int n (0..n-1; a negative n counts 0, -1, ... n+1).
     iterate(seq: Value, f: Value): Value {
         seq = this.dataValue(seq);
-        // A string supplies its characters, as to (List Char) gives them.
+        // A string supplies its characters (a String is its characters).
         if (seq.kind === "string") seq = this.dataValue(standardNative(this, "chars", [seq]));
         const out: Value[] = [];
         if (this.isList(seq)) {
@@ -3374,9 +3374,9 @@ export class Interpreter {
 
     // The builtin each method starts from (its IO and list instances).
     // to T x and from T x: a program's instances first (newest first), then
-    // the builtin ones: String (its text, read back as parse does), JSON
-    // (JSON text) and List Char (a string's characters). to of any other type
-    // converts as ascription does: to Float (Money 1.2) is (Money 1.2 : Float).
+    // the builtin ones: String (its text, read back as parse does) and JSON
+    // (JSON text). to of any other type converts as ascription does: to Float
+    // (Money 1.2) is (Money 1.2 : Float), and to (List Char) s is s.
     private convertTo(method: "to" | "from", target: Value, value: Value): Value {
         const own = this.instance(method, [target, value]);
         if (own) return own;
@@ -3386,12 +3386,9 @@ export class Interpreter {
             return name === "String" || name === "Record" ? type.kind === "type" && type.name === name && !type.family && !type.alias
                 : !!builtin && this.isTypeValue(type) && this.sameType(this.reference(builtin), type);
         };
-        const element = this.isListType(type) && type.kind === "type" && type.arguments?.length === 1 ? this.reference(type.arguments[0]) : undefined;
-        const chars = element?.kind === "type" && element.name === "Char" && !element.family && !element.alias;
         if (method === "to") {
             if (is("String")) return this.callNative("toString", [value]);
             if (is("JSON")) return standardNative(this, "toJson", [value]);
-            if (chars) return standardNative(this, "chars", [value]);
             // An association list with String keys is a record's pairs, a
             // repeated key keeping its first place and last value, as in code.
             if (is("Record")) {
@@ -3412,7 +3409,6 @@ export class Interpreter {
         } else {
             if (is("String")) return this.callNative("parse", [this.demand(value)]);
             if (is("JSON")) return standardNative(this, "fromJson", [value]);
-            if (chars) return standardNative(this, "fromChars", [value]);
         }
         throw new APNError("runtime", `no ${method} instance for ${this.renderString(type)}`, { hint: `define one, such as \`${method} ${this.renderString(type)} x = ...\`` });
     }
@@ -4030,7 +4026,7 @@ export class Interpreter {
             if (this.builtinType(pattern.tag)) arg = named.v[0];
         }
         const binding = this.env.get(pattern.tag);
-        if (binding && this.counted(this.reference(binding))) return this.isList(this.dataValue(arg)) || this.dataValue(arg).kind === "string" ? 1 : -1000;
+        if (binding && this.counted(this.reference(binding))) return this.sequence(this.dataValue(arg)) ? 1 : -1000;
         if (!this.builtinType(pattern.tag)) {
             // A program's own type takes a value of it as it is; a constructor
             // pattern, a value that constructor made.
@@ -4213,7 +4209,7 @@ export class Interpreter {
     }
 
     private vectorElements(value: Value, size: bigint, name: string): Value[] {
-        if (!this.isList(value) && value.kind !== "string") throw new APNError("runtime", `${name} expects a list`);
+        if (!this.sequence(value)) throw new APNError("runtime", `${name} expects a list`);
         const out: Value[] = [];
         let rest = value;
         for (let n = 0n; n < size; n++) {
@@ -6094,8 +6090,8 @@ export class Interpreter {
     private vectorTypeSources = new WeakMap<Map<string, Value>, Map<string, Value[]>>();
     private matchVectorPattern(family: Extract<Value, { kind: "type" }>, args: Pattern[], input: Value, binds: Map<string, Value>): boolean {
         const value = this.dataValue(input), counts = family.counts!;
-        // (A String is a list of its characters, of its length.)
-        if (!this.isList(value) && value.kind !== "string") return false;
+        // (A String is a list of its characters, of its length; a Name = String too.)
+        if (!this.sequence(value)) return false;
         let size: bigint, element: Value | undefined;
         const sizePattern = args[0];
         const known = sizePattern.p === "var" ? binds.get(sizePattern.name) ?? this.lengthValue(sizePattern.name) : undefined;

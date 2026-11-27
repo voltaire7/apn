@@ -355,7 +355,7 @@ function helpText(): string {
         `  f (Takes t k) = ...; f (Gives v) = ... (a function: t what it takes; any other value)`,
         `  Nat = view (k -> k + 1) (n | n > 0 -> [n - 1]) (a pattern defined by a function)`,
         `  Vec n a = Nil -> Vec Z a | Cons a (Vec k a) -> Vec (S k) a (indexed family)`,
-        `  to String x; from String "42"; to JSON x; from JSON text; to (List Char) s; from (List Char) cs`,
+        `  to String x; from String "42"; to JSON x; from JSON text; (cs : String) joins Chars`,
         `  describe Int = ...  (a bare type name in a pattern matches that type)`,
         `  do [print "hi", return 42] — the block { print "hi"; return 42 }`,
         `  123 : Int32; to Int (truncate 3.7); typeOf value; ([x : Float] : Type)`,
