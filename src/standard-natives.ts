@@ -1,6 +1,6 @@
 import { bracket, withFile } from "./resource-scope.ts";
 import { ffiNative } from "./ffi.ts";
-import { FFI_NATIVES } from "./natives.ts";
+import { FFI_NAMES } from "./natives.ts";
 import type { Interpreter } from "./interp.ts";
 import { type Value, mkBool, mkInt, mkList, mkStr } from "./types.ts";
 import { APNError } from "./errors.ts";
@@ -12,7 +12,7 @@ import { p5Object, p5SketchType } from "./p5.ts";
 export function standardNative(i: Interpreter, name: string, args: Value[]): Value {
     if (name === "bracket") return bracket(i, args[0], args[1], args[2]);
     if (name === "withFile") return withFile(i, args[0], args[1]);
-    if (FFI_NATIVES.some(([n]) => n === name)) return ffiNative(i, name, args);
+    if (FFI_NAMES.has(name)) return ffiNative(i, name, args);
     const str = (v: Value): string => {
         // (A list of Chars is the String it is: String = List Char.)
         const text = i.textOf(i.dataValue(v));

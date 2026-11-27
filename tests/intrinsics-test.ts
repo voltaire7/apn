@@ -118,6 +118,10 @@ for (const checked of [false, true]) {
         ['std <- import "std"; [..] = std.sequence; pick c xs = c ? [] : xs; pick True (reverse "ab")', "[]"],
         ['Name = String; n : Name = "abc"; f (xs : Vect k a) = k; f n', '3'],
         ['keep (xs : List a) : List a = xs; [keep "ab", typeOf (keep "ab")]', '["ab",String]'],
+        // A list a typed function builds by recursion is converted, and named,
+        // once: each call's result is a tail already done, kept as it is.
+        ['f (xs : List Int) : List Int = null xs ? [] : head xs :: f (tail xs); length (f [1..5000])', '5000'],
+        ['g (xs : List a) : List a = null xs ? [] : head xs :: g (tail xs); [length (g [1..5000]), typeOf (g "ab")]', '[5000,String]'],
     ]) Deno.test(`named String (checked=${checked}): ${source}`, () => {
         const i = new Interpreter();
         if (checked) i.enableChecking();

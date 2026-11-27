@@ -111,6 +111,9 @@ const cases: [string, string][] = [
     ['lines "a\\n\\nb"', '["a","","b"]'],
     ["[isDigit '7', isDigit 'x', isSpace ' ']", '[True,False,True]'],
     ['words " a\t b\r\n c "', '["a","b","c"]'],
+    // Lazy: an endless String has words; a long one's are found in constant stack.
+    ['take 3 (words (cycle " ab  c\n"))', '["ab","c","ab"]'],
+    ['length (words (concat (replicate 3000 "ab ")))', '3000'],
     ['joinWith "/" ["a","b"]', '"a/b"'],
     ['startsWith "ab" "abc"', 'True'],
     ['endsWith "😀" "a😀"', 'True'],

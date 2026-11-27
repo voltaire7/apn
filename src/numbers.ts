@@ -262,6 +262,7 @@ export const NUMBER_NATIVES: Array<[string, number]> = [
     ...["isNumber", "isComplex", "isReal", "isRational", "isInteger", "isExact", "isInexact", "isZero", "isPositive", "isNegative", "isOdd", "isEven", "isFinite", "isInfinite", "isNaN", "exact", "inexact", "numerator", "denominator", "floor", "ceiling", "truncate", "round", "sqrt", "abs", "realPart", "imagPart", "magnitude", "angle", "conjugate", "exp", "log", "sin", "cos", "tan", "asin", "acos", "atan"].map((name): [string, number] => [name, 1]),
     ...["quotient", "remainder", "modulo", "gcd", "lcm", "min", "max", "expt", "makeRectangular", "makePolar", "atan2", "rationalize"].map((name): [string, number] => [name, 2]),
 ];
+export const NUMBER_ARITIES = new Map(NUMBER_NATIVES);
 export function numericNative(name: string, args: Array<{ kind: string }>): Numeric | boolean {
     const a = args[0];
     if (["isNumber", "isComplex", "isReal", "isRational", "isInteger"].includes(name)) {

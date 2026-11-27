@@ -34,7 +34,11 @@ alongside the code, and don't restate the user-facing rules here.
   `asText`). `++` makes one when its left side is text and its right side is
   not evaluated (`known`), recording the parts (`lazyJoins`) so a later join
   on its left finishes it into text (`finishedJoin`): a String built in a loop
-  stays one string. Tests: `tests/intrinsics-test.ts`, `tests/standard-library-test.ts`.
+  stays one string. A list given a name, or converted to a list type
+  (`listType`), keeps a tail that already is one (`namedCells`,
+  `declaredTypes`) instead of wrapping it again, so a list a typed function
+  builds by recursion is read through one layer, not one per call.
+  Tests: `tests/intrinsics-test.ts`, `tests/standard-library-test.ts`.
   Parser expression spans keep source/file for assertions and match diagnostics.
 - The unnecessary-parentheses rule is decided where a group stands (`judge`,
   by the `(` token's index) and reported after the parse, since speculative
@@ -808,7 +812,9 @@ Behavior: `docs/gradual-and-dependent-types.md`.
   continuing in `evaluateKnown`'s loop does not add to) and work
   (`EVALUATION_BUDGET`, per root via `budgeted`) are bounded, and a
   JavaScript stack overflow (`RangeError`) in static evaluation leaves the
-  value unknown, as running out does. `needed` and `resolveKnown` mark such a
+  value unknown, as running out does. A known list or String is walked in
+  place (`itemsFrom`, `charAt`, a long String's cells in `listOf`), never
+  copied per step, so a step over program input costs the same at any length. `needed` and `resolveKnown` mark such a
   value `cut`; only the checks a type makes of it (`budgetCut`: a factory's
   length, `refinementFails`, a chosen type in `construct` or a ternary) turn
   that into an error, and a name's waiting `expr` goes with its value. So recursion reaches the runtime's own depth with room to

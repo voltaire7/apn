@@ -12,11 +12,11 @@ import preludeSource from "../lib/prelude.apn" with { type: "text" };
 import { captureSnapshot } from "./snapshot.ts";
 import { buildExecutable } from "./compile.ts";
 import { standardNative } from "./standard-natives.ts";
-import { ACTIONS, MODELED, NATIVE_EXPORTS, NATIVES, RETIRED_NATIVES, STANDARD_NATIVES, TAKES_UNDECIDED } from "./natives.ts";
+import { ACTIONS, MODELED, NATIVE_EXPORTS, NATIVES, RETIRED_NATIVES, STANDARD_NAMES, STANDARD_NATIVES, TAKES_UNDECIDED } from "./natives.ts";
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { bundledText, IMPORT_ONE, loadPath, type ModuleFile, readLoad, resolveModule, sourcePath, unknownModule } from "./modules.ts";
 import { CONSTRUCTING_TYPES, TYPE_NAMES, NUMERIC_CLASSES, NUMERIC_TYPES, OWN_SCALAR_TYPES, SCALAR_TYPES, numericWithin, numericType, numericPayload, matchesType, castNumeric, implicitOperands, typedArithmetic, typedPower, numericHash } from "./type-system.ts";
-import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_NATIVES, integer, type Numeric, type Real } from "./numbers.ts";
+import { isNumeric, numberText, arithmetic, negate, equalNumbers, compareNumbers, numericNative, NUMBER_ARITIES, NUMBER_NATIVES, integer, type Numeric, type Real } from "./numbers.ts";
 import { ACTION_SHOWN, APNError, LIST_FIELDS, didYouMean, missingTypeParameters, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import type { Expr, Pattern, TopLevel } from "./ast.ts";
 import { type Alternative, type Binding, clausePlaces, listRole, readPatterns, listExpansion, listPatternExpansion, rangeExpansion, rangeName, extendedDeclaration, headError, declaresNames, TYPE_RANGE, clauseKey, type DataDef, type Counting, countingOf, flatTypedPattern, mentions, mergeClauses, constructorPattern, listAlternatives, listClauses, listUnion, isUnionBody, unionClause, unionKind } from "./ast.ts";
@@ -1084,7 +1084,10 @@ export class Interpreter {
         if (list.kind === "string" || list.kind === "cons" && list.named) return list;
         if ((list.kind === "thunk" || list.kind === "deferred") && list.value && (list.value.kind === "string" || list.value.kind === "cons" && list.value.named)) return list.value;
         return this.defer(() => {
-            const cell = this.cell(list);
+            // (One that turns out to be a String already is itself.)
+            const v = this.force(list);
+            if (v.kind === "string" || v.kind === "cons" && v.named) return v;
+            const cell = this.cell(v);
             return cell ? { kind: "cons", head: cell.head, tail: this.lazyString(cell.tail), named: "String" } : mkStr("");
         });
     }
@@ -1739,15 +1742,21 @@ export class Interpreter {
         if (v.kind === "cons" && v.named === "String") return "String";
         return v.kind === "variant" && v.family?.base ? v.family : undefined;
     }
+    private namedCells = new WeakMap<Value, { place: KeptPlace; name: "String" | VariantFamily }>();
     // v with name at the places its function's result has it (see Keep).
     private named(v: Value, place: KeptPlace, name: "String" | VariantFamily): Value {
         if (place.k === "atom" && place.name === "$name") return this.withName(v, name);
         if (place.k !== "list" || !this.isList(v)) return v;
+        // (A tail named so already, a recursive call's result, is kept as it is.)
         const items = (list: Value, n: number): Value => this.defer(() => {
-            const cell = this.cell(list);
+            const given = this.force(list), done = this.namedCells.get(given);
+            if (!place.items && done?.place === place && done.name === name) return given;
+            const cell = this.cell(given);
             if (!cell) return mkList([]);
             const item = place.items?.[n] ?? place.element;
-            return { kind: "cons", head: item ? this.defer(() => this.named(this.reference(cell.head), item, name)) : cell.head, tail: items(cell.tail, n + 1) };
+            const out: Value = { kind: "cons", head: item ? this.defer(() => this.named(this.reference(cell.head), item, name)) : cell.head, tail: items(cell.tail, n + 1) };
+            this.namedCells.set(out, { place, name });
+            return out;
         });
         return this.force(items(v, 0));
     }
@@ -2320,6 +2329,13 @@ export class Interpreter {
             case "<": case ">": case "<=": case ">=": {
                 // Values compare as sets (see setOf): a <= b when a's set is
                 // within b's, a < b when b's also has more.
+                const ordered = (v: Value) => isNumeric(v) || v.kind === "char" || v.kind === "bool";
+                if (ordered(l) && ordered(r)) {
+                    // (Two ordered values: their places, compared at once.)
+                    const within = (a: Value, b: Value) => this.compare(this.rank(a), this.rank(b)) <= 0;
+                    const [low, high] = op[0] === "<" ? [l, r] : [r, l];
+                    return mkBool(within(low, high) && (op.length === 2 || !within(high, low)));
+                }
                 const read = (v: Value) => this.setOf(v) === "type" ? this.asType(v) ?? v : v;
                 // A list and one value, as the checker reports it: what is meant is its items.
                 const single = (v: Value) => ["ordered", "sequence"].includes(this.setOf(v) ?? "") && !this.isList(v);
@@ -2723,7 +2739,15 @@ export class Interpreter {
         const caller = this.env;
         this.env = scope;
         try {
-            const order = ranked ?? this.ranked(clauses, c => c.params.reduce((score, p, i) => score + this.patternScore(p, args[i]), 0), clausePlaces(clauses, this.containsPattern));
+            // (Only a constructor pattern's score depends on its argument: clauses
+            // without one rank the same for every call, once.)
+            let fixed = ranked ?? this.fixedRanks.get(clauses) as C[] | null | undefined;
+            if (fixed === undefined) {
+                fixed = clauses.some(c => c.params.some(p => p.p === "constr")) ? null
+                    : this.ranked(clauses, c => c.params.reduce((score, p) => score + (LITERAL_PATTERNS.has(p.p) ? 1 : 0), 0), clausePlaces(clauses, this.containsPattern));
+                this.fixedRanks.set(clauses, fixed);
+            }
+            const order = fixed ?? this.ranked(clauses, c => c.params.reduce((score, p, i) => score + this.patternScore(p, args[i]), 0), clausePlaces(clauses, this.containsPattern));
             for (const clause of order) {
                 this.env = scope;
                 const binds = new Map<string, Value>(self ? [self] : []);
@@ -2740,6 +2764,7 @@ export class Interpreter {
         } finally { this.env = caller; }
     }
 
+    private fixedRanks = new WeakMap<object, unknown[] | null>();
     // Items by score, highest first; among equals, in their places (clauses:
     // the most specific first, see clausePlaces), else in their order.
     private ranked<T>(items: T[], score: (item: T) => number, places?: number[]): T[] {
@@ -2877,6 +2902,11 @@ export class Interpreter {
     // Weak-head evaluation: cache every thunk in an alias chain, never force
     // a cons head/tail or a container field just to reveal its outer shape.
     force(v: Value): Value {
+        // (A value, or a thunk already evaluated to one, is itself at once.)
+        if ((v.kind === "thunk" || v.kind === "deferred") && v.value !== undefined) {
+            const known = v.value;
+            if (known.kind !== "thunk" && known.kind !== "deferred" && known.kind !== "lazyList") return known;
+        } else if (v.kind !== "thunk" && v.kind !== "deferred" && v.kind !== "lazyList") return v;
         const pending: Array<Extract<Value, { kind: "thunk" | "deferred" }>> = [];
         try {
             for (;;) {
@@ -2915,7 +2945,8 @@ export class Interpreter {
             // Inner thunks first: a definition's (names) names what it gives
             // (its value already set, so naming one that holds itself, x =
             // x :: 1, meets it), and those forced through it see the name.
-            for (const thunk of [...pending].reverse()) {
+            for (let n = pending.length - 1; n >= 0; n--) {
+                const thunk = pending[n];
                 if (thunk.kind === "thunk" && thunk.names) v = this.namedValue(thunk.names, this.reference(v), thunk.body);
                 thunk.value = v;
             }
@@ -3403,7 +3434,19 @@ export class Interpreter {
         // (A String is a List Char as it is: it keeps its name.)
         if (given.kind === "string" && (!read || read.kind === "type" && (read.name === "Char" || read.variable) && !read.family)) return given;
         if (!element) return list;
-        const mapped = this.mapList({ kind: "native", name: "<List>", arity: 1, applied: [], invoke: ([x]) => this.conform(element, x) }, list);
+        // Each item converted as it is used; a tail already converted to this
+        // type (a recursive call's result: f xs : List a = x :: f rest) is
+        // kept as it is, so a list made by recursion is converted once.
+        const converted = (xs: Value): Value => this.defer(() => {
+            const v = this.force(xs), done = this.declaredTypes.get(v);
+            if (done && this.sameType(done, type)) return v;
+            const cell = this.cell(v);
+            if (!cell) return mkList([]);
+            const out: Value = { kind: "cons", head: this.defer(() => this.conform(element, cell.head)), tail: converted(cell.tail) };
+            this.declaredTypes.set(out, type);
+            return out;
+        });
+        const mapped = converted(list);
         // Marked once forced too (its outer cell is what a Mutable is given).
         const result = this.defer(() => {
             const outer = this.force(mapped);
@@ -5513,7 +5556,7 @@ export class Interpreter {
             return { kind: "list", v: [] };
         }
         if (name === "intrinsics.seq") { this.demand(argsIn[0]); return argsIn[1]; }
-        if (STANDARD_NATIVES.some(([n]) => n === name)) return standardNative(this, name, argsIn);
+        if (STANDARD_NAMES.has(name)) return standardNative(this, name, argsIn);
         if (name === "typeOf") {
             const ref = this.reference(argsIn[0]);
             // A native the prelude models has its definition's type (the
@@ -5599,7 +5642,7 @@ export class Interpreter {
             if (map.kind !== "hashmap") throw new APNError("runtime", `${name} expects a HashMap`);
             return mkList([...map.entries.values()].map((entry) => entry[name === "keys" ? 0 : 1]));
         }
-        if (NUMBER_NATIVES.some(([n]) => n === name)) {
+        if (NUMBER_ARITIES.has(name)) {
             let args = argsIn.map((x) => this.baseValue(this.dataValue(x)));
             if (name === "expt" && isNumeric(args[0]) && isNumeric(args[1])) return typedPower(args[0], args[1]);
             if (args.length === 2 && isNumeric(args[0]) && isNumeric(args[1]) &&
@@ -6721,6 +6764,8 @@ export class Interpreter {
             ? mergeClauses(name, last.fn.clauses, clauses, c => this.clauseHead(c, scope)) : undefined;
         const fn = make(merged ?? clauses);
         this.attachments.set(key, [...merged ? joined.slice(0, -1) : joined, { fn, scope, name }]);
+        if (root.kind === "native") this.joinedNatives.add(root.name);
+        this.joining = new WeakMap();
         return fn;
     }
     // The function a binding is, through aliases ((+) = intrinsics.add) and
@@ -6748,12 +6793,21 @@ export class Interpreter {
     // Whether clauses for a type declared elsewhere joined this function.
     private joins(f: Value): boolean {
         if (!this.attachments.size) return false;
+        // (A function's answer holds until clauses join one: see travelling.)
+        const settled = f.kind === "clauseFn" || f.kind === "native";
+        const kept = settled ? this.joining.get(f) : undefined;
+        if (kept !== undefined) return kept;
         const root = this.functionRoot(f);
-        return !!root && this.attachments.has(this.functionKey(root));
+        const result = !!root && this.attachments.has(this.functionKey(root));
+        if (settled) this.joining.set(f, result);
+        return result;
     }
+    private joining = new WeakMap<Value, boolean>();
+    // The natives clauses joined (a native's key names it).
+    private joinedNatives = new Set<string>();
     // The first joined clauses taking these arguments, newest first.
     private joinedCall(f: Value, args: Value[]): Value | undefined {
-        if (!this.attachments.size) return undefined;
+        if (!this.attachments.size || f.kind === "native" && !this.joinedNatives.has(f.name)) return undefined;
         const joined = this.attachments.get(this.functionKey(f));
         if (!joined) return undefined;
         next: for (let n = joined.length - 1; n >= 0; n--) {

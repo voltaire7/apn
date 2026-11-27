@@ -7,7 +7,7 @@ import { IMPORT_ONE, standardModule } from "./modules.ts";
 // The natives that show a value, which no action has.
 import { parseLiteral, textNatives } from "./text-natives.ts";
 import { builtinContains, castNumeric, CONSTRUCTING_TYPES, matchesType, NUMERIC_CLASSES, NUMERIC_TYPES, OWN_SCALAR_TYPES, numericWithin, mixedWidths, numericType, SCALAR_TYPES, sizedInteger, TYPE_NAMES, typedArithmetic, typedPower } from "./type-system.ts";
-import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
+import { compareNumbers, equalNumbers, floating, integer, negate, NUMBER_ARITIES, NUMBER_NATIVES, numberText, numericNative, type Numeric, type Real } from "./numbers.ts";
 import { ACTION_SHOWN, APNError, LIST_FIELDS, didYouMean, formatFileReadError, missingTypeParameters, placeholderError, typeApplied, withArticle } from "./errors.ts";
 import { bindingItem, DEFAULT_FIXITY, exprToSource, itemComparisonHint, getPreludeUsed, type Fixity, fixitiesOf, parse, parseDocument, patternSource, preludeFixity, PRIMITIVE_OPERATORS, regroup } from "./parser.ts";
 import { mkStr, rangeValue, type Value, valueToString } from "./types.ts";
@@ -6463,9 +6463,22 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             const c = String.fromCodePoint(first);
             return { head: { char: c }, tail: { string: k.string.slice(c.length) } };
         }
-        if (k.items) return k.items.length ? { head: k.items[0], tail: known(k.items.slice(1)) } : null;
+        if (k.items) return k.items.length ? { head: k.items[0], tail: itemsFrom(k.items, 1) } : null;
         if (k.size !== undefined) return k.size > 0n ? { head: {}, tail: { size: k.size - 1n } } : null;
         return undefined;
+    }
+    // The nth character of a text, found without copying it.
+    function charAt(text: string, n: number): Known | null {
+        let at = 0;
+        for (let k = 0; k < n && at < text.length; k++) at += text.codePointAt(at)! > 0xffff ? 2 : 1;
+        const code = text.codePointAt(at);
+        return code === undefined ? null : { char: String.fromCodePoint(code) };
+    }
+    // A known list's items from n on; a long one's read in place, so walking
+    // it copies nothing.
+    function itemsFrom(items: Known[], n: number): Known {
+        if (items.length - n <= 64) return known(items.slice(n));
+        return { size: BigInt(items.length - n), cell: () => ({ head: items[n], tail: itemsFrom(items, n + 1) }) };
     }
     // Element n of a known list: null past its end, {} when it exists but its
     // value is unknown, undefined when even that is unknown. Walks cells
@@ -6475,7 +6488,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         for (let i = 0; ; i++) {
             if (!current) return undefined;
             if (current.items) return n - i < current.items.length ? current.items[n - i] : null;
-            if (current.string !== undefined) { const chars = [...current.string]; return n - i < chars.length ? { char: chars[n - i] } : null; }
+            if (current.string !== undefined) return charAt(current.string, n - i);
             if (current.range) return rangeElement(current.range, BigInt(n - i));
             if (!current.cell && current.size !== undefined) return BigInt(n - i) < current.size ? {} : null;
             const cell = cellOf(current);
@@ -7674,8 +7687,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return t.k === "variant" ? { tag: constructorNames.get(head.name) ?? head.name, ...args.length ? { payload: args.map(a => value(a) ?? {}) } : {} } : undefined;
         }
         // The runtime's numeric natives, when the name is the builtin itself.
-        const native = NUMBER_NATIVES.find(([name]) => name === head.name);
-        if (native && builtin && native[1] === args.length) {
+        if (builtin && NUMBER_ARITIES.get(head.name) === args.length) {
             const values = args.map(a => numericOf(readMutable(value(a))));
             if (values.some(v => v === undefined)) return undefined;
             const numbers = values as Numeric[];
@@ -7712,8 +7724,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // filter and iterate apply it where the runtime does (lazily for heads).
         const call = (f: Known | undefined, values: Known[]) => { const g = demand(f)?.fn; return g && lazily(() => applyKnown(g, values, depth)); };
         const now = (f: Known | undefined, values: Known[]) => { const g = demand(f)?.fn; return g && applyKnown(g, values, depth); };
-        // (A String argument is its characters, where a list is taken.)
-        const listOf = (k: Known | undefined): Known | undefined => k?.string !== undefined ? known([...k.string].map(c => ({ char: c }))) : k;
+        // (A String argument is its characters, where a list is taken; a long
+        // one's read cell by cell.)
+        const listOf = (k: Known | undefined): Known | undefined => k?.string === undefined ? k
+            : k.string.length > 64 ? { cell: () => cellOf(k) } : known([...k.string].map(c => ({ char: c })));
         switch (name) {
             case "head": { const item = element(args[0](), 0); return item ?? undefined; }
             case "tail": {

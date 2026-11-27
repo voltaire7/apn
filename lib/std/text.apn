@@ -6,8 +6,9 @@ std <- import "std"
 reversed xs = foldl (acc, x -> x :: acc) [] xs
 
 [
-    # Unicode WhiteSpace plus line terminators (the same set as ECMAScript \s).
-    isSpace c = contains c " \t\n\r\v\f                 　﻿"
+    # Unicode WhiteSpace plus line terminators (the same set as ECMAScript \s);
+    # the characters from '!' to U+009F, most text, are none of them.
+    isSpace c = c > ' ' && c < 160 ? False : contains c " \t\n\r\v\f                 　﻿"
     # A Char is its code point, so its digits are a range of them.
     isDigit c = c >= '0' && c <= '9'
     upper = upper
@@ -51,8 +52,12 @@ reversed xs = foldl (acc, x -> x :: acc) [] xs
     } : String
     replaceAll search replacement text = joinWith replacement (splitOn search text)
 
-    words text = filter (x -> x != "")
-        (splitOn " " (map (c -> isSpace c ? ' ' : c) text : String))
+    # Lazy, so an endless String has words too.
+    words text = {
+        inWord c = not (isSpace c)
+        rest = dropWhile isSpace text
+        null rest ? [] : takeWhile inWord rest :: words (dropWhile inWord rest)
+    }
     trim text : String = reverse (dropWhile isSpace (reverse (dropWhile isSpace text)))
 
     # Common puzzle-input shapes; CRLF and trailing blank lines are accepted.

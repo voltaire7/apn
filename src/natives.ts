@@ -61,6 +61,8 @@ export const STANDARD_NATIVES: Array<[string, number]> = [
     ["entropy", 0], ["currentTime", 0], ["zoneOffset", 0], ["p5Object", 2], ["p5SketchType", 0],
 ];
 const ARITIES = new Map([...NATIVES, ...STANDARD_NATIVES]);
+export const STANDARD_NAMES = new Set(STANDARD_NATIVES.map(([name]) => name));
+export const FFI_NAMES = new Set(FFI_NATIVES.map(([name]) => name));
 export const nativeArity = (name: string): number | undefined => ARITIES.get(name);
 
 // The natives with effects: applying one builds an IO action, which running

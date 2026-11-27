@@ -418,8 +418,12 @@ function rewriteInfixConstructor(n: Record<string, unknown>, tagOf: (op: string)
 // scope, as it runs (see withinScope).
 export function declaresNames(e: unknown): boolean {
     const b = e as { t?: string; stmts?: Expr[] };
-    return b.t === "block" && !!b.stmts?.some(s => s.t === "stmDef" || s.t === "typeDef" || s.t === "patDef");
+    if (b.t !== "block") return false;
+    let known = declaring.get(b);
+    if (known === undefined) declaring.set(b, known = !!b.stmts?.some(s => s.t === "stmDef" || s.t === "typeDef" || s.t === "patDef"));
+    return known;
 }
+const declaring = new WeakMap<object, boolean>();
 // Runs passes over a statement's patterns, but not into the blocks within it
 // that declare names: each reads its own when it runs, in its scope.
 export function withinScope(node: unknown, passes: () => void): void {
@@ -849,6 +853,14 @@ export function patternNames(p: Pattern): string[] {
 // Clauses with equivalent patterns (and guards): parameter names do not
 // matter (f (Int x) and f (Int y) are the same), and _ is a name nothing uses.
 export function clauseKey(name: string, clause: { params: Pattern[]; guard?: Expr }): string {
+    let keys = clauseKeys.get(clause);
+    if (!keys) clauseKeys.set(clause, keys = new Map());
+    let key = keys.get(name);
+    if (key === undefined) keys.set(name, key = writtenClauseKey(name, clause));
+    return key;
+}
+const clauseKeys = new WeakMap<object, Map<string, string>>();
+function writtenClauseKey(name: string, clause: { params: Pattern[]; guard?: Expr }): string {
     const names = new Map<string, number>([[name, -1]]);
     let unused = 0;
     // A name a pattern binds is renamed in order; a name a type in it reads
