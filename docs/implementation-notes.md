@@ -21,6 +21,20 @@ alongside the code, and don't restate the user-facing rules here.
 - `ReplEditor` (`src/repl.ts`) is the raw-mode line editor, with a plain loop
   for piped stdin; see `docs/repl.md`.
 - AST `sourceLocations` is a WeakMap kept outside the serialized AST shapes.
+- Names given back (semantics: named subtypes): the checker records, per
+  definition (`keptPlaces`, by source text and its body's first position,
+  `keptAt`, in one table, `KEPT_PLACES`, the prelude's and library's too),
+  the parameters whose type its result has and that result with the type
+  marked `$name`. The run applies it when a call's result is read
+  (`keepNames`), a native the prelude models by its definition's record; a
+  chain of tail calls keeps its first such call (`TailCall.keep`). A String
+  not stored as text is a `cons` whose cells carry `named: "String"`
+  (`lazyString`); display and `typeOf` take it as a String while its items
+  are Chars (`fitsText`), and places that need text read it (`textOf`,
+  `asText`). `++` makes one when its left side is text and its right side is
+  not evaluated (`known`), recording the parts (`lazyJoins`) so a later join
+  on its left finishes it into text (`finishedJoin`): a String built in a loop
+  stays one string. Tests: `tests/intrinsics-test.ts`, `tests/standard-library-test.ts`.
   Parser expression spans keep source/file for assertions and match diagnostics.
 - The unnecessary-parentheses rule is decided where a group stands (`judge`,
   by the `(` token's index) and reported after the parse, since speculative

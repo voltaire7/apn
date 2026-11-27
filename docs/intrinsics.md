@@ -157,13 +157,14 @@ So a `String` is its characters, printed as text (`"hi"`): what takes a list
 takes it (`head "hi"` is `'h'`, `"hi" 1` is `'i'`, `c :: cs` and `[a,b]` take
 it apart, `map`, `filter` and `length`), `"hi" == ['h','i']`, and `"" == []`.
 `typeOf "hi"` is `String`, and the name stays through an item update (`s 0 =
-'H'`) and `++` of two Strings and any function whose result has its parameter's type ([named
-subtypes](semantics.md#bindings-and-output)); `++` with another list and `map`
-give a list.
+'H'`) and any function whose result has its parameter's type, `++` and `::`
+among them ([named subtypes](semantics.md#bindings-and-output)); `map`, and a
+join whose items are not all Chars, give a list.
 A list of Chars is a `String` where one is asked (`(['h','i'] : String)` and a
 typed `(s : String)` take it), as `(x : Int8)` takes `5`. Its arithmetic is a
 list's, item by item (`"ab" + 1` is `['b','c']`); `++` joins text. The run
-stores a `String` as its text and a `Char` as its character.
+stores a `String` as its text, or, for one made from a list not read yet (an
+endless one), as that list carrying the name, and a `Char` as its character.
 
 ## Records, functions and types
 

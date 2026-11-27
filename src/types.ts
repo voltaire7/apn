@@ -47,7 +47,9 @@ export type Value =
     | { kind: "char"; v: string }
     | { kind: "list"; v: Value[]; schema?: Value }
     | { kind: "lazyList"; exprs: Expr[]; env: Env; value?: Value }
-    | { kind: "cons"; head: Value; tail: Value }
+    // named: the name a list carries, a String's for one not stored as text
+    // (cycle "ab", "ab" ++ rest), each cell carrying it.
+    | { kind: "cons"; head: Value; tail: Value; named?: string }
     // describes: an unevaluated value it will be (a cons tail's thunk), for typeOf.
     // A deferred value or thunk drops what computes it once it has its value,
     // so a value never keeps the scope that made it alive.

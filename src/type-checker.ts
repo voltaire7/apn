@@ -289,9 +289,6 @@ export interface CheckOptions {
      * position (null where inferences disagree), and of each typed pattern's
      * type, so a run decides (List Int xs) by a value's type as this does. */
     valueTypes?: Map<string, unknown>;
-    /** The type a call gives a named subtype's name back with (a String, a
-     * List String; see application), by source position, for the run. */
-    keptTypes?: Map<string, unknown>;
     /** By the pattern's type expression itself (a flat (List Int xs) has no source position). */
     patternTypes?: WeakMap<Expr, unknown>;
     /** Receives this check's own test of whether a type is accepted where a
@@ -912,6 +909,24 @@ function untagNamed(match: Expr): boolean {
     while (match.t === "block" && match.stmts.length === 1) match = match.stmts[0];
     const f = match.t === "app" ? match.f : undefined;
     return f?.t === "recordAccess" && f.field === "untag" && f.rec.t === "var" && f.rec.name === "intrinsics";
+}
+// By a definition's source text and the position of its body (keptAt), the
+// parameters whose type its result has, each with that result, the type
+// marked $name (see keptPlaces): where the run gives an argument's name back.
+// One table for every check, the prelude's and the library's too.
+export const KEPT_PLACES = new Map<string, Map<number, unknown[]>>();
+// Where a clause's body is in its source: its first part that has a place
+// (a declared result wraps it in an ascription that has none).
+export function keptAt(body: Expr): { source: string; start: number } | undefined {
+    const pending: unknown[] = [body];
+    while (pending.length) {
+        const x = pending.shift();
+        if (!x || typeof x !== "object") continue;
+        const at = sourceLocations.get(x as Expr);
+        if (at) return { source: at.source, start: at.start };
+        if (Array.isArray(x)) pending.push(...x); else if (!("p" in x)) pending.push(...Object.values(x));
+    }
+    return undefined;
 }
 export function checkTypes(program: TopLevel[], options: CheckOptions = {}): CheckResult {
     // A view making and taking apart its own values is the constructor it
@@ -3279,13 +3294,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return atom("Bool");
         }
         if (op === "::") {
-            // A Char onto a String (or a Name = String) is one: :: is a -> List a
-            // -> List a, which keeps a named list's name (see application).
-            const named = namedOf(b);
-            if (named && fits(list(a), characters())) {
-                keptNames.set(e, named);
-                return list(a);
-            }
             // ':' adds one element. One that does not fit the tail's
             // elements makes a mixed list, as in a literal
             // ([1,2]:[3,4] is [[1,2],3,4]; [1]:[[3,4]] is [[1],[3,4]]).
@@ -3678,28 +3686,29 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (a.items?.length === 0 && !p.items && !p.length && !p.endless) { a.items = undefined; a.length = undefined; return; }
         if (p.items && a.items && p.items.length === a.items.length) p.items.forEach((t, n) => widenEmpty(t, a.items![n], seen));
     }
-    // A function whose result has its parameter's type (List a -> List a,
-    // a -> a) gives a named subtype's argument its name back (take 2 "abc" is
-    // a String): a String is a List Char, and the function keeps it one.
-    function application(f: Ty, argument: Entry, e: Expr, builtin = false, ascribed = false): Ty {
-        const fun = resolve(f), name = namedOf(argument.type) ?? keptName(e);
-        const parameter = name && fun.k === "fn" ? resolve(fun.input) : undefined;
-        const keeps = parameter && parameter.k !== "var" && parameter.k !== "dynamic" && fun.k === "fn" && recurs(resolve(fun.output), parameter, 0);
-        const out = applied(f, argument, e, builtin, ascribed);
-        // (The function's result, as its type says: the same at each inference.)
-        if (keeps) keptNames.set(e, renamed(fun.k === "fn" ? fun.output : fun, parameter!, name!, 0));
-        return out;
-    }
-    // The run gives a call's value the name back (recordValueType), by the
-    // argument it came from; the check keeps what it knows of the list (its
-    // items, its length), which String unifies with.
-    const keptNames = new WeakMap<Expr, Ty>();
-    // The name a call written as e gives back (take 2 (reverse "abc"): reverse's
-    // String), which the check's own type, a list, does not carry.
-    function keptName(e: Expr): Ty | undefined {
-        while (e.t === "block" && e.stmts.length === 1) e = e.stmts[0];
-        const kept = e.t === "app" ? keptNames.get(e.a) : e.t === "binop" ? keptNames.get(e) ?? keptNames.get(e.r) : undefined;
-        return kept && namedOf(kept);
+    // A function whose result has a parameter's type (List a -> List a, a -> a,
+    // List a -> List (List a)) gives a named subtype's value its name back
+    // there: its definition's places, for the run (CheckOptions.keeps).
+    function keptPlaces(t: Ty, clauses: { params: Pattern[]; body: Expr }[]): void {
+        const at = clauses[0] && keptAt(clauses[0].body);
+        if (!at) return;
+        // (Clauses of different types are a union of them: a parameter is kept
+        // where a clause keeps it.)
+        const whole = resolve(t), types = whole.k === "union" || whole.k === "overload" ? whole.choices : [whole];
+        const marker = atom("$name"), kept: { index: number; result: Ty }[] = [];
+        for (const type of types) {
+            const inputs: Ty[] = [];
+            let result = resolve(type);
+            while (result.k === "fn" && inputs.length < clauses[0].params.length) { inputs.push(resolve(result.input)); result = resolve(result.output); }
+            if (inputs.length !== clauses[0].params.length) continue;
+            inputs.forEach((p, index) => {
+                if (p.k !== "dynamic" && p.k !== "fn" && !kept.some(k => k.index === index) && recurs(result, p, 0)) kept.push({ index, result: renamed(result, p, marker, 0) });
+            });
+        }
+        kept.sort((x, y) => x.index - y.index);
+        const places = KEPT_PLACES.get(at.source) ?? new Map<number, unknown[]>();
+        KEPT_PLACES.set(at.source, places);
+        if (kept.length) places.set(at.start, kept); else places.delete(at.start);
     }
     // Whether the parameter's type is the result, or an item of it (a List
     // (List a) of splitOn's), the places the name comes back to.
@@ -3708,13 +3717,14 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (depth > 8) return false;
         if (sameType(t, p)) return true;
         if (t.k === "list") return recurs(t.element, p, depth + 1) || !!t.items?.some(item => recurs(item, p, depth + 1));
+        if (t.k === "union") return t.choices.some(choice => recurs(choice, p, depth + 1));
         return false;
     }
-    // The result's type for the run: the name where the parameter's type is.
+    // The result with the parameter's type, where it is, written as marker.
     function renamed(t: Ty, p: Ty, name: Ty, depth: number): Ty {
         const r = resolve(t);
         if (depth > 8) return t;
-        if (sameType(r, p) || namedOf(r) && depth === 0) return name;
+        if (sameType(r, p)) return name;
         if (r.k === "list") {
             const element = renamed(r.element, p, name, depth + 1), items = r.items?.map(item => renamed(item, p, name, depth + 1));
             return element === r.element && (!items || items.every((item, n) => item === r.items![n])) ? t : { ...r, element, ...items ? { items } : {} };
@@ -3726,19 +3736,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         return t;
     }
-    // A named subtype's type (a String, a Name = String), if t is one: one
-    // or the empty list, which is a value of it too ([] | Name is a Name).
-    function namedOf(t: Ty): Ty | undefined {
-        const r = resolve(t);
-        if (r.k === "union") {
-            const rest = r.choices.filter(choice => { const c = resolve(choice); return !(c.k === "list" && (c.items?.length === 0 || c.length && !c.length.terms.size && c.length.constant === 0n)); });
-            return rest.length === 1 && rest.length < r.choices.length ? namedOf(rest[0]) : undefined;
-        }
-        if (isString(r)) return r;
-        // (A named list: a named number keeps its name through arithmetic.)
-        const base = r.k === "variant" && r.base ? resolve(r.base) : undefined;
-        return base && (isString(base) || base.k === "list" || namedOf(base)) ? r : undefined;
-    }
     // Whether two types are one type written twice (List a and List a, one a).
     function sameType(x: Ty, y: Ty): boolean {
         x = resolve(x); y = resolve(y);
@@ -3748,7 +3745,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (x.k === "list" && y.k === "list") return sameType(x.element, y.element);
         return x.k === "atom" && y.k === "atom" && x.name === y.name;
     }
-    function applied(f: Ty, argument: Entry, e: Expr, builtin = false, ascribed = false): Ty {
+    function application(f: Ty, argument: Entry, e: Expr, builtin = false, ascribed = false): Ty {
         spend(e);
         f = resolve(f);
         // A value that is not a function applies as get gives it: clauses for
@@ -8547,6 +8544,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (scope !== topScope && !localNames.has(name)) localNames.set(name, owner ? { owner, field: recordScopes.has(scope) } : undefined);
         try {
             defineIn(name, clauses, scope, location);
+            const defined = scope.get(name);
+            if (defined) keptPlaces(defined.type, clauses);
             // A view's definition (X = view build match) keeps its matcher's
             // type for its pattern.
             const [clause] = clauses;
@@ -8686,10 +8685,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function recordValueType(e: Expr, t: Ty): void {
         if (!options.valueTypes) return;
         const r = resolve(t);
-        // A call a named subtype's name comes back from (see application):
-        // the type its value is given for the run.
-        const kept = e.t === "app" ? keptNames.get(e.a) : e.t === "binop" ? keptNames.get(e) ?? keptNames.get(e.r) : undefined;
-        if (kept && options.keptTypes) recordType(options.keptTypes, e, kept);
         if (r.k === "list" || r.k === "record" && !(r.fields instanceof ModuleFields) || r.k === "variant" && r.args.length && (e.t === "block" || !isIO(r)) && !isPending(r)) recordType(options.valueTypes, e, r);
     }
     // Recorded once per source position; a position inferred as two types

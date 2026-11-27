@@ -13,7 +13,7 @@ reversed xs = foldl (acc, x -> x :: acc) [] xs
     # Producers and prefix consumers work with infinite lists.
     repeat x = x :: repeat x
     replicate n x = take n (repeat x)
-    cycle xs = null xs ? [] : xs ++ cycle xs
+    cycle (xs : List a) : List a = null xs ? [] : xs ++ cycle xs
     zip xs ys = zipWith pair xs ys
     zipWithIndex (xs : Vect n a) : Vect n [Int,a] = zipWith pair [0..] xs : Dynamic
     concat xss = foldr (++) [] xss

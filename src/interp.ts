@@ -1,5 +1,6 @@
 import { CheckingSession } from "./checking-session.ts";
 import type { TypeScope } from "./type-checker.ts";
+import { KEPT_PLACES, keptAt } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeElementType, describeType } from "./type-description.ts";
@@ -56,7 +57,9 @@ const LITERAL_PATTERNS = new Set(["int", "bool", "string", "char", "float"]);
 // on the value (null when it does).
 const rankedAlternatives = new WeakMap<object, PatternLambda[] | null>();
 class TailCall {
-    constructor(readonly body: Expr, readonly env: Env) {}
+    // keep: the call's function and arguments when it gives a name back (see
+    // keepNames): the loop running the tail call names the value it ends with.
+    constructor(readonly body: Expr, readonly env: Env, readonly keep?: { clauses: DefClause[]; args: Value[] }) {}
 }
 // The record r ++ [...] joins, as the written record's items see it.
 const JOINED = "[..]joined";
@@ -1028,6 +1031,12 @@ export class Interpreter {
     }
     // A list of Chars as the String it is (String = List Char); undefined for
     // any other list.
+    // A list carrying String's name as the String it is (stored as its text),
+    // where a String and a list differ: a field name, a key, a String asked for.
+    asText(v: Value): Value {
+        const text = v.kind === "cons" && v.named === "String" ? this.textOf(v) : undefined;
+        return text === undefined ? v : mkStr(text);
+    }
     // A String where one is asked: v, or the String a list of Chars is.
     stringValue(v: Value): Value {
         const text = v.kind === "string" ? undefined : this.textOf(v);
@@ -1039,6 +1048,45 @@ export class Interpreter {
         if (v.kind === "string") return v.v;
         const text = this.isList(v) ? this.asString(v) : undefined;
         return text?.kind === "string" ? text.v : undefined;
+    }
+    // Whether a String's cells are Chars, read as far as 4096 of them: past
+    // that (an endless String) they are taken to be, and one that is not is an
+    // error where it is read.
+    private fitsText(cells: Value): boolean {
+        let rest = cells;
+        for (let n = 0; n < 4096; n++) {
+            const cell = this.cell(rest);
+            if (!cell) return true;
+            if (this.charOf(this.dataValue(cell.head)).kind !== "char") return false;
+            rest = cell.tail;
+        }
+        return true;
+    }
+    // A String's text and the side joined to it, by the lazy join made of
+    // them (see ++), and that join as text when its side is a String (read a
+    // few levels deep, as a String's ++ always read it before).
+    private lazyJoins = new WeakMap<Value, { text: string; right: Value }>();
+    private finishedJoin(v: Value, depth: number): Value | undefined {
+        const join = this.lazyJoins.get(v);
+        if (!join || depth > 32) return undefined;
+        const right = this.dataValue(join.right), text = right.kind === "string" ? right : this.finishedJoin(right, depth + 1);
+        return text?.kind === "string" ? mkStr(join.text + text.v) : undefined;
+    }
+    // Whether a value is evaluated already (reading it runs nothing).
+    // (A literal, written in place, is made without reading anything.)
+    private known(v: Value): boolean {
+        if (v.kind === "thunk" && !v.value) return ["list", "record", "string", "int", "float", "char", "bool"].includes(v.body.t);
+        return v.kind !== "thunk" && v.kind !== "deferred" || !!v.value && this.known(v.value);
+    }
+    // A list carrying the String name, its cells read as they are needed: a
+    // String not stored as text. "" when it is empty.
+    lazyString(list: Value): Value {
+        if (list.kind === "string" || list.kind === "cons" && list.named) return list;
+        if ((list.kind === "thunk" || list.kind === "deferred") && list.value && (list.value.kind === "string" || list.value.kind === "cons" && list.value.named)) return list.value;
+        return this.defer(() => {
+            const cell = this.cell(list);
+            return cell ? { kind: "cons", head: cell.head, tail: this.lazyString(cell.tail), named: "String" } : mkStr("");
+        });
     }
     asString(v: Value): Value | undefined {
         try { return this.constructType("String", v); }
@@ -1076,6 +1124,8 @@ export class Interpreter {
     // The builtin with: a copy of a list or record with key set to the value
     // (written code, as a list's items are, or one already made).
     private assignItem(collection: Value, key: Value, given: Expr | Value): Value {
+        // (A field's name may be a list carrying String's name.)
+        key = this.asText(this.dataValue(key));
         // A String's item update is its characters', and it stays a String
         // while they all are Chars (each slot keeps its type, as a list's does).
         const text = collection.kind === "string" ? collection.v : undefined;
@@ -1649,58 +1699,74 @@ export class Interpreter {
             const type = this.recordedType(e, this.types.valueTypes);
             if (type && !this.staticTypes.has(value)) this.staticTypes.set(value, type);
         }
-        // A call keeping a named subtype's name (take 2 "abc", a String), in
-        // parentheses too.
-        let call = e;
-        while (call.t === "block" && call.stmts.length === 1) call = call.stmts[0];
-        const type = call.t === "app" || call.t === "pipe" || call.t === "binop" ? this.keptType(call) : null;
-        return type && this.namesItems(type) ? this.renamed(value, type) : value;
+        return value;
     }
-    private keptTypes = new WeakMap<Expr, KeptType | null>();
-    private keptType(e: Expr): KeptType | null {
-        if (this.keptTypes.has(e)) return this.keptTypes.get(e)!;
-        const at = sourceLocations.get(e), type = at ? this.types?.keptTypes.get(`${at.file}:${at.start}`) as KeptType | null ?? null : null;
-        this.keptTypes.set(e, type);
-        return type;
+    // A function whose result has a parameter's type gives that argument's
+    // name back (take 2 "abc" is a String, take 2 n a Name; see keptPlaces):
+    // the first such argument, left to right, that is evaluated by the time the
+    // result is read and is named. No argument is read to find it.
+    private keepsFor = new WeakMap<object, Keep[] | null>();
+    private keepsOf(clauses: DefClause[]): Keep[] | null {
+        let keeps = this.keepsFor.get(clauses);
+        if (keeps === undefined) {
+            const at = clauses[0] && keptAt(clauses[0].body);
+            keeps = at ? KEPT_PLACES.get(at.source)?.get(at.start) as Keep[] | undefined ?? null : null;
+            this.keepsFor.set(clauses, keeps);
+        }
+        return keeps;
     }
-    // Whether a call's recorded type gives a named subtype's name back: a
-    // String, a program's Name = String, or a list of them (see application
-    // in the checker).
-    private namesItems(type: KeptType): boolean {
-        if (type.k === "atom") return type.name === "String";
-        if (type.k === "variant") return !!type.base;
-        return type.k === "list" && [type.element, ...type.items ?? []].some(t => !!t && this.namesItems(t));
-    }
-    // A call's value with the names its type gives back: take 2 "abc" a
-    // String, splitOn "," "a,b" a list of them (each item renamed as read).
-    private renamed(value: Value, type: KeptType): Value {
+    private keepNames(clauses: DefClause[], args: Value[], result: Value): Value {
+        const kept = this.keepsOf(clauses);
+        if (!kept) return result;
+        // (A value already made that is no list, an undecided one too, is left
+        // as it is: a list is what a name is given back to.)
+        const made = this.known(result) ? this.force(result) : undefined;
+        if (made && !this.isList(made) && made.kind !== "string") return result;
         return this.defer(() => {
-            // (Only a list is renamed: take 2, which starts where take 2 "abc"
-            // does, is a function.)
-            // (A block's value is read as any value is: run, if an action's.)
-            const given = this.reference(value);
-            if (!this.isList(given) && given.kind !== "string") return given;
-            if (type.k === "list") return this.force(this.renamedItems(given, type, 0));
-            const v = given.kind === "string" ? given : this.asString(given) ?? given;
-            if (type.k === "atom") return v;
-            // (As ++ keeps it: ("ab" : Name) ++ "c" is a Name.)
-            const named = this.env.get(type.name!), read = named && this.reference(named);
-            return read?.kind === "type" && read.family?.base ? this.conform({ kind: "type", name: type.name!, family: read.family }, v) : v;
+            const v = this.reference(result);
+            for (const { index, result: place } of kept) {
+                const arg = args[index];
+                if (!arg || !this.known(arg)) continue;
+                const name = this.nameOf(this.reference(arg));
+                if (name) return this.named(v, place, name);
+            }
+            return v;
         });
     }
-    private renamedItems(list: Value, type: KeptType, n: number): Value {
-        return this.defer(() => {
+    // A named subtype's name a value carries: a String's, or a Name's family.
+    private nameOf(v: Value): "String" | VariantFamily | undefined {
+        if (v.kind === "string") return "String";
+        if (v.kind === "cons" && v.named === "String") return "String";
+        return v.kind === "variant" && v.family?.base ? v.family : undefined;
+    }
+    // v with name at the places its function's result has it (see Keep).
+    private named(v: Value, place: KeptPlace, name: "String" | VariantFamily): Value {
+        if (place.k === "atom" && place.name === "$name") return this.withName(v, name);
+        if (place.k !== "list" || !this.isList(v)) return v;
+        const items = (list: Value, n: number): Value => this.defer(() => {
             const cell = this.cell(list);
             if (!cell) return mkList([]);
-            const item = type.items?.[n] ?? type.element;
-            return { kind: "cons", head: item && this.namesItems(item) ? this.renamed(cell.head, item) : cell.head, tail: this.renamedItems(cell.tail, type, n + 1) };
+            const item = place.items?.[n] ?? place.element;
+            return { kind: "cons", head: item ? this.defer(() => this.named(this.reference(cell.head), item, name)) : cell.head, tail: items(cell.tail, n + 1) };
         });
+        return this.force(items(v, 0));
+    }
+    // A value given a name: a list of Chars a String (read as needed), a value
+    // of a Name's base a Name; one that does not fit keeps none.
+    private withName(v: Value, name: "String" | VariantFamily): Value {
+        if (name === "String") return v.kind === "string" || !this.isList(v) ? v : this.lazyString(v);
+        if (v.kind === "variant" && v.family === name) return v;
+        const base = this.reference(name.base!), text = base.kind === "type" && base.name === "String" && this.isList(v) && v.kind !== "string";
+        try { return this.conform({ kind: "type", name: name.name, family: name }, text ? this.lazyString(v) : v); }
+        catch (error) { if (error instanceof APNError) return v; throw error; }
     }
     private evaluate(e: Expr, tailLoad = false): Value {
         const caller = this.env;
         let forceResult = false;
         // The monad the checker found for an expression a tail call left.
         let decided: Value | undefined;
+        // The first tail call in the chain that gives a name back (see TailCall).
+        let keep: TailCall["keep"];
         this.stack++;
         try {
             if (this.stack > STACK_LIMIT) throw stackOverflow();
@@ -2045,6 +2111,7 @@ export class Interpreter {
                     // A tail call leaves this expression: keep the monad the
                     // checker found for it (the outermost), as below.
                     if (this.types?.resultHeads.size) decided ??= this.checkedMonad(e);
+                    keep ??= next.keep;
                     e = next.body;
                     this.env = next.env;
                     continue;
@@ -2056,6 +2123,7 @@ export class Interpreter {
                     const target = decided ?? this.checkedMonad(e);
                     if (target) r = this.realize(shown, target);
                 }
+                if (keep) r = this.keepNames(keep.clauses, keep.args, r);
                 return forceResult ? this.force(r) : r;
             }
         } catch (error) {
@@ -2115,7 +2183,10 @@ export class Interpreter {
         if (op === "$") return this.apply(this.demand(lThunk), rThunk);
         if (op === "::") {
             const tail = rThunk;
-            return {
+            // (:: is a -> List a -> List a: onto a known named tail it takes the
+            // tail's name, if it fits: 'x' :: "yz" is a String, 1 :: "ab" a list.)
+            const name = this.known(tail) ? this.nameOf(this.dataValue(tail)) : undefined;
+            const cons: Value = {
                 kind: "cons", head: lThunk,
                 tail: {
                     kind: "deferred", describes: tail,
@@ -2126,13 +2197,15 @@ export class Interpreter {
                     },
                 },
             };
+            return name ? this.withName(cons, name) : cons;
         }
         if (op === "++") {
             const record = this.dataValue(lThunk);
             // A named subtype joins as its base does and keeps its name when the
             // result fits ("ab" : Name) ++ "c" is a Name), as in arithmetic.
             const family = (v: Value) => v.kind === "variant" && v.family?.base ? v.family : undefined;
-            const given = family(record) || record.kind === "string" ? this.dataValue(rThunk) : undefined;
+            // (A side not read yet is not read to find a name; see below.)
+            const given = family(record) || record.kind === "string" && this.known(rThunk) ? this.dataValue(rThunk) : undefined;
             const ln = family(record), rn = given && family(given);
             if (ln || rn) {
                 if (ln && rn && ln !== rn) throw new APNError("runtime", `cannot combine ${ln.name} and ${rn.name}`, { hint: `convert one explicitly, as in \`(x : ${rn.name})\`` });
@@ -2144,10 +2217,34 @@ export class Interpreter {
             if (joined) return joined;
             const l = this.code(record);
             const r = rThunk;
+            // ("" is [], and [] ++ ys is ys.)
+            if (l.kind === "string" && l.v === "") return this.force(r);
+            // (An earlier join on the left whose right is text by now is that
+            // text: a String built in a loop, s ++ x ++ y, stays one string.)
+            const finished = this.finishedJoin(l, 0);
+            if (finished) return this.operate("++", finished, r);
+            // ++ is List a -> List a -> List a: the join takes the first name
+            // its sides carry, left to right, without reading a side not read
+            // yet (cycle "ab" never reads its rest); one whose items are not
+            // the name's (Chars) keeps none where it is read.
+            const leftName = this.nameOf(l);
+            if (leftName === "String" && l.kind === "string" && !this.known(r)) {
+                // (Its first cell made now, so a later join can find it.)
+                const first = this.cell(l)!;
+                const joined: Value = { kind: "cons", head: first.head, tail: this.lazyString(this.appendCode(first.tail, r)), named: "String" };
+                this.lazyJoins.set(joined, { text: l.v, right: r });
+                return joined;
+            }
+            if (leftName === "String" && l.kind === "cons") return this.lazyString(this.appendCode(l, r));
+            const rightName = !leftName && this.isList(l) && this.known(r) ? this.nameOf(this.dataValue(r)) : undefined;
+            if (rightName) return this.withName(this.force(this.appendCode(l, r)), rightName);
             if (this.isList(l)) return this.appendCode(l, r);
             const right = this.dataValue(r);
-            // (Two Strings join as their text; a String and another list as lists.)
+            // (Two Strings join as their text.)
             if (l.kind === "string" && right.kind === "string") return mkStr(l.v + right.v);
+            // (A String and Chars are a String: "ab" ++ ['c','d'] is "abcd".)
+            const text = l.kind === "string" && right.kind === "list" ? this.textOf(right) : undefined;
+            if (l.kind === "string" && text !== undefined) return mkStr(l.v + text);
             if (l.kind === "string" && this.listy(right)) return this.appendCode(l, r);
             throw new APNError("runtime", `cannot apply '++' to ${l.kind} and ${right.kind}`);
         }
@@ -2531,7 +2628,9 @@ export class Interpreter {
                     const code = this.dataValue(args[0]);
                     if (this.isList(code) && this.codeItems(code)) throw new TailLoad(code, this.env);
                 }
-                const result = this.callNative(f.name, args, f.tag);
+                // (A native the prelude defines keeps names as its definition does.)
+                const modeled = this.modeledDefinitions.get(f.name);
+                const result = modeled?.kind === "clauseFn" ? this.keepNames(modeled.clauses, args, this.callNative(f.name, args, f.tag)) : this.callNative(f.name, args, f.tag);
                 // (untag's no match is a pattern's; called, it is a clause that does not fit.)
                 if (result.kind === "nomatch" && !probe) throw new APNError("runtime", `no clause of '${f.name}' matches the given arguments`, { hint: "untag c v takes apart only a value c made" });
                 return result;
@@ -2553,15 +2652,15 @@ export class Interpreter {
                     // the result chooses (Int (read "3")).
                     const choices = this.resultOverloads(f).get(clause);
                     if (choices) return { kind: "pending", step: { op: "call", fn: f, args: raw, choices } };
-                    if (tail) return new TailCall(clause.body, child);
-                    if (probe) return this.defer(() => {
+                    if (tail) return new TailCall(clause.body, child, this.keepsOf(f.clauses) ? { clauses: f.clauses, args: raw } : undefined);
+                    if (probe) return this.keepNames(f.clauses, raw, this.defer(() => {
                         const caller = this.env;
                         this.env = child;
                         try { return this.eval(clause.body); } finally { this.env = caller; }
-                    });
+                    }));
                     const caller = this.env;
                     this.env = child;
-                    try { return this.eval(clause.body); } finally { this.env = caller; }
+                    try { return this.keepNames(f.clauses, raw, this.eval(clause.body)); } finally { this.env = caller; }
                 }
                 if (f.fallback) return raw.reduce((g: Value, x) => this.apply(g, x), f.fallback);
                 if (probe) return { kind: "nomatch" };
@@ -2704,18 +2803,20 @@ export class Interpreter {
                 const value = this.dataValue(arg);
                 const index = this.listIndex(value);
                 if (index !== undefined) return this.index(f, index);
+                // (A String key, a list carrying the name too, looks one up.)
+                const key = value.kind === "cons" && value.named ? this.textOf(value) : value.kind === "string" ? value.v : undefined;
+                if (key !== undefined) return this.associationValue(f, key);
                 if (this.isList(value)) return this.selectList(f, value);
                 if (value.kind === "record") return { kind: "record", v: value.v.map(([key, selected]) => [key, this.defer(() => {
                     const index = this.listIndex(this.dataValue(selected));
                     if (index === undefined) throw new APNError("runtime", "named list indices must be integers or enumeration values");
                     return this.index(f, index);
                 })]) };
-                if (value.kind === "string") return this.associationValue(f, value.v);
                 throw new APNError("runtime", "indexing a list needs an integer, enumeration value, list or record of indices, or association string key; use .[...] for list templates");
             }
             case "record": {
                 // Strings select named fields; lists/records clone, ints select entries.
-                const value = this.dataValue(arg);
+                const value = this.asText(this.dataValue(arg));
                 const carg = this.isList(value) ? mkList(this.items(value)) : value;
                 if (carg.kind === "string") {
                     // Application uses the exact string, including any quote characters.
@@ -3646,7 +3747,7 @@ export class Interpreter {
         const value = step.value, method = step.op;
         if (this.isIOType(target)) {
             return method === "throw"
-                ? { kind: "io", result: "a", run: () => { throw new APNError("runtime", rawString(this.dataValue(value))); } }
+                ? { kind: "io", result: "a", run: () => { const v = this.dataValue(value); throw new APNError("runtime", this.textOf(v) ?? rawString(v)); } }
                 : { kind: "io", result: () => this.typeText(value), run: () => value };
         }
         if (this.isListType(target)) return mkList(method === "throw" ? [] : [value]);
@@ -3853,7 +3954,7 @@ export class Interpreter {
         // shows as that text, wherever it is: print, the REPL, inside a list.
         const own = this.makes("String") ? this.instance("to", [{ kind: "type", name: "String" }, v]) : undefined;
         if (own) {
-            const text = this.demand(own);
+            const text = this.asText(this.demand(own));
             if (text.kind !== "string") throw new APNError("runtime", `to String gave ${this.typeText(text)}, not a String`);
             emit(text.v, v.kind);
             return;
@@ -3881,6 +3982,17 @@ export class Interpreter {
                 emit("[");
                 this.render(this.repeatedType(v)!, emit, false, ancestors);
                 emit("..]");
+            } else if (v.kind === "cons" && v.named === "String" && this.fitsText(v)) {
+                // A list carrying String's name is a String while its items are
+                // Chars, shown as it is read (it may not end); one that is not
+                // keeps no name, and shows as the list it is.
+                if (!raw) emit('"', "string");
+                for (const item of this.elements(v)) {
+                    const c = this.charOf(this.dataValue(item));
+                    if (c.kind !== "char") throw new APNError("runtime", `a String's items are Chars, not ${this.typeText(c)}`);
+                    emit(raw ? c.v : valueToString(mkStr(c.v)).slice(1, -1), "string");
+                }
+                if (!raw) emit('"', "string");
             } else if (this.isList(v)) {
                 // Its ',' takes a space when an item has one or two are literals
                 // of different kinds (itemsText), so the items are held until
@@ -5180,6 +5292,8 @@ export class Interpreter {
         value = this.dataValue(value);
         if (isNumeric(value) || value.kind === "char") return "number:" + numericHash(this.numberOf(value) as Numeric);
         if (value.kind === "string" || value.kind === "bool") return value.kind + ":" + String(value.v);
+        const text = value.kind === "cons" && value.named === "String" ? this.textOf(value) : undefined;
+        if (text !== undefined) return "string:" + text;
         if (this.listy(value)) return `list:[${[...this.elements(value)].map(item => this.hashKey(item)).join(",")}]`;
         if (value.kind === "variant") return `variant:${value.tag}(${value.v.map(item => this.hashKey(item)).join(",")})`;
         if (value.kind === "type") return "type:" + this.renderString(value);
@@ -5419,6 +5533,8 @@ export class Interpreter {
             if (ref.kind === "mutable") return { kind: "type", inspect: true, name: "Mutable" };
             if (ref.kind === "functionType") return { kind: "type", inspect: true, name: "Type" };
             if (ref.kind === "contract") return { kind: "functionType", from: ref.from, to: ref.to };
+            // A list carrying String's name is a String while its items are Chars.
+            if (ref.kind === "cons" && ref.named === "String" && this.fitsText(ref)) return { kind: "type", name: "String" };
             const value = this.demand(ref);
             const declared = this.declaredTypes.get(value);
             if (declared && this.asWritten.has(declared)) return declared;
@@ -7308,8 +7424,10 @@ export class Interpreter {
 }
 
 // Directory part of a path (no external deps).
-// A checker type the run reads for a call (see Interpreter.namesItems).
-type KeptType = { k: string; name?: string; base?: unknown; element?: KeptType; items?: KeptType[] };
+// Where a definition gives an argument's name back: the parameter, and its
+// result with that parameter's type marked $name (see keptPlaces).
+type KeptPlace = { k: string; name?: string; element?: KeptPlace; items?: KeptPlace[] };
+type Keep = { index: number; result: KeptPlace };
 
 export function dirname(p: string): string {
     const i = p.lastIndexOf("/");

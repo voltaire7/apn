@@ -331,12 +331,22 @@ type (`Count = Int`) makes a named subtype: a `Count` is an `Int` wherever one i
 a result fits (`(5 : Count) + 1` is `6`, a `Count`); one of a list is that
 list where a list is taken (`n : Name = "ab"` for `Name = String`: `head n`,
 `n 1`, `c :: cs`), and `++` keeps its name as arithmetic does (`n ++ "c"` is a
-`Name`). A function whose result has a parameter's type gives a named list
-its name back wherever that type is in the result: `take`, `filter`,
-`reverse` and `::` are `List a -> List a`, so `take 2 "abc"` is the String
-`"ab"` and `take 2 n` a `Name`, and `splitOn` gives a `List (List a)`, a list of
-Strings; `map` is `List a -> List b`, so `map f "ab"` is a list. String is a
-`List Char` throughout, which no clause of a String's restates. A constructor (`UserId (id : Int) =
+`Name`). A value carries its name, `String` one of them: `['h','i']` is a list
+and shows as one, `(['h','i'] : String)` a String and shows as `"hi"`. A
+function whose result has a parameter's type gives that argument's name back
+wherever that type is in the result, by the function's type alone, so in any
+code, typed or not: `take`, `filter` and `reverse` are `List a -> List a`, so
+`take 2 "abc"` is the String `"ab"` and `take 2 n` a `Name`, and `splitOn` gives
+a `List (List a)`, a list of Strings; `map` is `List a -> List b`, so `map f "ab"`
+is a list. The name is the first named argument's, left to right, of those
+evaluated by the time the result is read: no argument is read to find it, so
+`f c xs = c ? [] : xs` given `True` takes none from an `xs` not yet read. `++` and `::` are such
+functions: `"ab" ++ rest` is a String without reading `rest`, so `cycle "ab"` is an
+endless String (`print $ cycle "THE END IS NEVER "` shows it as it goes), and
+`['a'] ++ "bc"` and `'x' :: "yz"` are Strings. A result whose items do not fit
+the name's base keeps no name: `"ab" ++ [1]` and `[1] ++ "ab"` are lists (an
+endless one is taken to fit past its first 4096 items). Two different names do
+not join. A constructor (`UserId (id : Int) =
 _`) makes a distinct type: `UserId 1` has none of an Int's operations, builtins
 and `(x : Int)` patterns reject it, its clauses give it what it needs
 (`UserId a + UserId b = UserId (a + b)`), and `(UserId x)` takes it apart.

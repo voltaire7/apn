@@ -67,7 +67,8 @@ for (const checked of [false, true]) {
         ['"hi" == [\'h\',\'i\']', "True"], ['"" == []', "True"], ["typeOf \"hi\"", "String"],
         ['f (c :: cs) = cs; f "abc"', '"bc"'], ['f [a,b] = b; f "ab"', "'b'"], ['f [] = 0; f _ = 1; [f "", f "a"]', "[0,1]"],
         ['map (c -> c + 1) "abc"', "['b','c','d']"], ['length "abc"', "3"], ['"ab" ++ "cd"', '"abcd"'],
-        ['"ab" ++ [\'c\']', "['a','b','c']"], ['"ab" + 1', "['b','c']"],
+        // A String joined with Chars is a String; with other items, a list.
+        ['"ab" ++ [\'c\']', '"abc"'], ['"ab" ++ [1]', "['a', 'b', 1]"], ['"ab" + 1', "['b','c']"],
         ['x = "abc"; x 0 = \'z\'; x', '"zbc"'], ['f (xs : List Char) = typeOf xs; f "ab"', "String"],
         ['f (s : String) = s ++ "!"; f [\'a\',\'b\']', '"ab!"'], ['([\'h\',\'i\'] : String)', '"hi"'],
         ['f (xs : List a) = a; f "abc"', "Char"], ['isType (List Char) "ab"', "True"],
@@ -105,6 +106,16 @@ for (const checked of [false, true]) {
         ['Name = String; n : Name = "abc"; typeOf (filter (c -> c != \'b\') n)', 'Name'],
         ['[take 2 "abc", typeOf (take 2 "abc"), \'x\' :: "yz"]', '["ab",String,"xyz"]'],
         ['map (c -> c) "ab"', "['a','b']"],
+        // A value carries its name; ++ takes the first a side carries, left to
+        // right, reading no side to find it, so cycle of a String is one.
+        ["['h','i']", "['h','i']"],
+        ['std <- import "std"; [..] = std.sequence; [take 5 (cycle "ab"), typeOf (take 5 (cycle "ab")), head (cycle "xy")]', '["ababa", String, \'x\']'],
+        ['std <- import "std"; [..] = std.sequence; take 20 (cycle "THE END IS NEVER ")', '"THE END IS NEVER THE"'],
+        ['[[1] ++ "ab", [\'a\'] ++ "bc"]', "[[1, 'a', 'b'], \"abc\"]"],
+        // Any function, written without a type too, gives its argument's name back.
+        ['firstTwo s = take 2 s; [firstTwo "abc", typeOf (firstTwo "abc")]', '["ab",String]'],
+        // (An argument the call never read gives no name: reverse "ab" is not run.)
+        ['std <- import "std"; [..] = std.sequence; pick c xs = c ? [] : xs; pick True (reverse "ab")', "[]"],
         ['Name = String; n : Name = "abc"; f (xs : Vect k a) = k; f n', '3'],
         ['keep (xs : List a) : List a = xs; [keep "ab", typeOf (keep "ab")]', '["ab",String]'],
     ]) Deno.test(`named String (checked=${checked}): ${source}`, () => {
