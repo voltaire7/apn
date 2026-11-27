@@ -1028,6 +1028,18 @@ export class Interpreter {
     }
     // A list of Chars as the String it is (String = List Char); undefined for
     // any other list.
+    // A String where one is asked: v, or the String a list of Chars is.
+    stringValue(v: Value): Value {
+        const text = v.kind === "string" ? undefined : this.textOf(v);
+        return text === undefined ? v : mkStr(text);
+    }
+    // A value's text where a String is asked: a String's, or a list of
+    // Chars' (a String is its characters; a list function may give one).
+    textOf(v: Value): string | undefined {
+        if (v.kind === "string") return v.v;
+        const text = this.isList(v) ? this.asString(v) : undefined;
+        return text?.kind === "string" ? text.v : undefined;
+    }
     asString(v: Value): Value | undefined {
         try { return this.constructType("String", v); }
         catch (error) { if (error instanceof APNError) return undefined; throw error; }
@@ -1091,9 +1103,9 @@ export class Interpreter {
                     if (!this.isList(pair)) throw new APNError("runtime", "association assignment expects [string,value] pairs");
                     const first = this.cell(pair), second = first && this.cell(first.tail);
                     if (!first || !second || this.cell(second.tail)) throw new APNError("runtime", "association lookup expects [string,value] pairs");
-                    const name = this.dataValue(first.head);
-                    if (name.kind !== "string") throw new APNError("runtime", "association lookup expects string keys");
-                    if (name.v === key.v) last = { position, key: first.head, value: second.head };
+                    const name = this.textOf(this.dataValue(first.head));
+                    if (name === undefined) throw new APNError("runtime", "association lookup expects string keys");
+                    if (name === key.v) last = { position, key: first.head, value: second.head };
                 }
                 if (!last) return this.append(collection, mkList([mkList([key, this.demand(evaluate())])]));
                 return this.setIndex(collection, last.position, mkList([last.key, this.assignSlot(last.value, this.demand(evaluate()))]));
@@ -1632,11 +1644,57 @@ export class Interpreter {
         const value = this.evaluate(e, tailLoad);
         // A list or variant an expression makes keeps the type the checker
         // gave it, for typed patterns (see staticTypeOf).
-        if ((e.t === "list" || e.t === "app") && this.types?.bridge) {
+        if (!this.types?.bridge) return value;
+        if (e.t === "list" || e.t === "app") {
             const type = this.recordedType(e, this.types.valueTypes);
             if (type && !this.staticTypes.has(value)) this.staticTypes.set(value, type);
         }
-        return value;
+        // A call keeping a named subtype's name (take 2 "abc", a String), in
+        // parentheses too.
+        let call = e;
+        while (call.t === "block" && call.stmts.length === 1) call = call.stmts[0];
+        const type = call.t === "app" || call.t === "pipe" || call.t === "binop" ? this.keptType(call) : null;
+        return type && this.namesItems(type) ? this.renamed(value, type) : value;
+    }
+    private keptTypes = new WeakMap<Expr, KeptType | null>();
+    private keptType(e: Expr): KeptType | null {
+        if (this.keptTypes.has(e)) return this.keptTypes.get(e)!;
+        const at = sourceLocations.get(e), type = at ? this.types?.keptTypes.get(`${at.file}:${at.start}`) as KeptType | null ?? null : null;
+        this.keptTypes.set(e, type);
+        return type;
+    }
+    // Whether a call's recorded type gives a named subtype's name back: a
+    // String, a program's Name = String, or a list of them (see application
+    // in the checker).
+    private namesItems(type: KeptType): boolean {
+        if (type.k === "atom") return type.name === "String";
+        if (type.k === "variant") return !!type.base;
+        return type.k === "list" && [type.element, ...type.items ?? []].some(t => !!t && this.namesItems(t));
+    }
+    // A call's value with the names its type gives back: take 2 "abc" a
+    // String, splitOn "," "a,b" a list of them (each item renamed as read).
+    private renamed(value: Value, type: KeptType): Value {
+        return this.defer(() => {
+            // (Only a list is renamed: take 2, which starts where take 2 "abc"
+            // does, is a function.)
+            // (A block's value is read as any value is: run, if an action's.)
+            const given = this.reference(value);
+            if (!this.isList(given) && given.kind !== "string") return given;
+            if (type.k === "list") return this.force(this.renamedItems(given, type, 0));
+            const v = given.kind === "string" ? given : this.asString(given) ?? given;
+            if (type.k === "atom") return v;
+            // (As ++ keeps it: ("ab" : Name) ++ "c" is a Name.)
+            const named = this.env.get(type.name!), read = named && this.reference(named);
+            return read?.kind === "type" && read.family?.base ? this.conform({ kind: "type", name: type.name!, family: read.family }, v) : v;
+        });
+    }
+    private renamedItems(list: Value, type: KeptType, n: number): Value {
+        return this.defer(() => {
+            const cell = this.cell(list);
+            if (!cell) return mkList([]);
+            const item = type.items?.[n] ?? type.element;
+            return { kind: "cons", head: item && this.namesItems(item) ? this.renamed(cell.head, item) : cell.head, tail: this.renamedItems(cell.tail, type, n + 1) };
+        });
     }
     private evaluate(e: Expr, tailLoad = false): Value {
         const caller = this.env;
@@ -2012,7 +2070,8 @@ export class Interpreter {
     }
 
     evalBinop(e: Extract<Expr, { t: "binop" }>): Value {
-        if (e.op === "::" && ["int", "float", "bool", "string", "char", "record", "lambda"].includes(e.r.t)) {
+        // (A String is a list: 'x' :: "yz" is "xyz".)
+        if (e.op === "::" && ["int", "float", "bool", "char", "record", "lambda"].includes(e.r.t)) {
             // Reject a definitely non-list tail without evaluating either side.
             // Unknown tails stay lazy, so head (1:missing) remains productive.
             const cons = this.env.get("::");
@@ -2062,7 +2121,7 @@ export class Interpreter {
                     kind: "deferred", describes: tail,
                     compute: () => {
                         const value = this.dataValue(tail);
-                        if (!this.isList(value) && !this.ofLists(value)) throw new APNError("runtime", `cons tail expected a list, got ${value.kind}`);
+                        if (!this.listy(value) && !this.ofLists(value)) throw new APNError("runtime", `cons tail expected a list, got ${value.kind}`);
                         return value;
                     },
                 },
@@ -5186,7 +5245,7 @@ export class Interpreter {
                     this.dynamicDepth = depth;
                     try {
                         if (name !== "intrinsics.runFile") return this.callNative(name, argsIn.map(fresh), tag, true);
-                        const path = this.force(argsIn[0]);
+                        const path = this.stringValue(this.force(argsIn[0]));
                         if (path.kind !== "string") throw new APNError("runtime", "load runs one file, named by a path string");
                         return this.runFile(path.v, directory);
                     } finally { this.dynamicDepth = outer; }
@@ -5553,7 +5612,7 @@ export class Interpreter {
                 return { kind: "type", name: "", choices: [base], refine: this.reference(args[1]) };
             }
             case "intrinsics.readFileFrom": {
-                const path = this.force(args[0]);
+                const path = this.stringValue(this.force(args[0]));
                 if (path.kind !== "string") throw new APNError("runtime", "readFileFrom expects a file path string");
                 const full = sourcePath(path.v, this.runningDir(), this.moduleSources);
                 const text = this.moduleSources ? readLoad(full, this.moduleSources) : (() => { try { return Deno.readTextFileSync(full); } catch { return undefined; } })();
@@ -5566,7 +5625,7 @@ export class Interpreter {
                 return read;
             }
             case "intrinsics.parse": {
-                const source = this.force(args[0]);
+                const source = this.stringValue(this.force(args[0]));
                 if (source.kind !== "string") throw new APNError("runtime", "parse expects source text");
                 return this.parseCode(source);
             }
@@ -5581,21 +5640,22 @@ export class Interpreter {
                 return mkList([]);
             }
             case "intrinsics.import": {
-                const path = this.force(args[0]);
+                const path = this.stringValue(this.force(args[0]));
                 if (path.kind !== "string") throw new APNError("runtime", IMPORT_ONE.message, { hint: IMPORT_ONE.hint });
                 return this.importStandard(path.v);
             }
             case "intrinsics.runFile": {
-                const path = this.force(args[0]);
+                const path = this.stringValue(this.force(args[0]));
                 if (path.kind !== "string") throw new APNError("runtime", "load runs one file, named by a path string");
                 return this.runFile(path.v);
             }
             case "toString":
                 return mkStr(this.renderString(a));
             case "parse": {
-                if (a.kind !== "string") throw new Error("Runtime: parse expects a string");
-                const parsed = parseLiteral(a.v);
-                if (parsed === null) throw new APNError("runtime", `from String: '${a.v.trim()}' is not a Bool or number literal`);
+                const text = this.textOf(a);
+                if (text === undefined) throw new Error("Runtime: parse expects a string");
+                const parsed = parseLiteral(text);
+                if (parsed === null) throw new APNError("runtime", `from String: '${text.trim()}' is not a Bool or number literal`);
                 return typeof parsed === "boolean" ? mkBool(parsed) : parsed;
             }
             case "head": {
@@ -5659,7 +5719,7 @@ export class Interpreter {
                 if (a.kind !== "record") throw new APNError("runtime", "pairs expects a record");
                 return mkList(a.v.map(([k, v]) => mkList([mkStr(k), v])));
             case "format": {
-                const fmt = this.dataValue(args[0]);
+                const fmt = this.stringValue(this.dataValue(args[0]));
                 if (fmt.kind !== "string") throw new Error("Runtime: format expects a string");
                 if (!this.isList(args[1])) throw new APNError("runtime", "format expects a list of arguments");
                 let expected = 0;
@@ -5800,9 +5860,9 @@ export class Interpreter {
             if (!first || !second || this.cell(second.tail) !== null) {
                 throw new APNError("runtime", "association lookup expects [string,value] pairs");
             }
-            const candidate = this.dataValue(first.head);
-            if (candidate.kind !== "string") throw new APNError("runtime", "association lookup expects string keys");
-            if (candidate.v === key) found = second.head;
+            const candidate = this.textOf(this.dataValue(first.head));
+            if (candidate === undefined) throw new APNError("runtime", "association lookup expects string keys");
+            if (candidate === key) found = second.head;
             rest = entry.tail;
         }
     }
@@ -7252,6 +7312,9 @@ export class Interpreter {
 }
 
 // Directory part of a path (no external deps).
+// A checker type the run reads for a call (see Interpreter.namesItems).
+type KeptType = { k: string; name?: string; base?: unknown; element?: KeptType; items?: KeptType[] };
+
 export function dirname(p: string): string {
     const i = p.lastIndexOf("/");
     if (i < 0) return ".";

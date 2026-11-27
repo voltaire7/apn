@@ -21,10 +21,10 @@
     isNone value = not (isSome value)
     withDefault _ (Some x) = x
     withDefault fallback None = fallback
+    withDefault _ (Ok x) = x
+    withDefault fallback (Err _) = fallback
     mapError _ (Ok x) = Ok x
     mapError f (Err error) = Err (f error)
-    resultDefault _ (Ok x) = x
-    resultDefault fallback (Err _) = fallback
     # An Option as a Result: Some x is Ok x; None becomes Err error, naming
     # what was missing.
     okOr _ (Some x) = Ok x

@@ -25,6 +25,8 @@ export class CheckingSession {
     // Types of values and typed patterns by source position, and the newest
     // check's acceptance test (see CheckOptions.valueTypes).
     valueTypes = new Map<string, unknown>();
+    // Calls that give a named subtype's name back (CheckOptions.keptTypes).
+    keptTypes = new Map<string, unknown>();
     patternTypes = new WeakMap<Expr, unknown>();
     bridge?: TypeBridge;
     // Names defined in local scopes so far (see CheckOptions.localNames).
@@ -118,6 +120,7 @@ export class CheckingSession {
             invariance: this.invariance,
             resultHeads: this.resultHeads,
             valueTypes: this.valueTypes,
+            keptTypes: this.keptTypes,
             patternTypes: this.patternTypes,
             bridge: bridge => { this.bridge = bridge; },
             imports: module => this.module(module, directory),

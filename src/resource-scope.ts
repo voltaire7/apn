@@ -37,7 +37,7 @@ export function bracket(i: Interpreter, acquire: Value, release: Value, use: Val
 
 export function withFile(i: Interpreter, path: Value, use: Value): Value {
     use = unary(i, use, "withFile callback");
-    path = i.demand(path);
+    path = i.stringValue(i.demand(path));
     if (path.kind !== "string") throw new APNError("runtime", "withFile expects a path string");
     let file: Deno.FsFile;
     try { file = Deno.openSync(path.v, { read: true }); }

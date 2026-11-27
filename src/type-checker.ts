@@ -289,6 +289,9 @@ export interface CheckOptions {
      * position (null where inferences disagree), and of each typed pattern's
      * type, so a run decides (List Int xs) by a value's type as this does. */
     valueTypes?: Map<string, unknown>;
+    /** The type a call gives a named subtype's name back with (a String, a
+     * List String; see application), by source position, for the run. */
+    keptTypes?: Map<string, unknown>;
     /** By the pattern's type expression itself (a flat (List Int xs) has no source position). */
     patternTypes?: WeakMap<Expr, unknown>;
     /** Receives this check's own test of whether a type is accepted where a
@@ -1060,10 +1063,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // A String where a list is asked: its characters (String = List Char).
     const isString = (t: Ty) => t.k === "atom" && t.name === "String";
     const characters = (): Ty => list(atom("Char"));
-    // A String whose text is known, where a list is asked: that many Chars
-    // ("ab" for [a,b]); the entry as it is otherwise.
+    // A String where a list is asked: its Chars, that many when its text is
+    // known ("ab" for [a,b]), else a List Char of a length the run finds.
     const asCharacters = (argument: Entry): Entry => {
-        if (!isString(resolve(argument.type)) || typeof argument.string !== "string") return argument;
+        if (!isString(resolve(argument.type))) return argument;
+        if (typeof argument.string !== "string") return { ...argument, type: characters() };
         const items = [...argument.string].map(() => atom("Char"));
         return { ...argument, type: { k: "list", element: atom("Char"), items, length: constant(BigInt(items.length)) } };
     };
@@ -3276,6 +3280,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return atom("Bool");
         }
         if (op === "::") {
+            // A Char onto a String (or a Name = String) is one: :: is a -> List a
+            // -> List a, which keeps a named list's name (see application).
+            const named = namedOf(b);
+            if (named && fits(list(a), characters())) {
+                keptNames.set(e, named);
+                return list(a);
+            }
             // ':' adds one element. One that does not fit the tail's
             // elements makes a mixed list, as in a literal
             // ([1,2]:[3,4] is [[1,2],3,4]; [1]:[[3,4]] is [[1],[3,4]]).
@@ -3668,7 +3679,70 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (a.items?.length === 0 && !p.items && !p.length && !p.endless) { a.items = undefined; a.length = undefined; return; }
         if (p.items && a.items && p.items.length === a.items.length) p.items.forEach((t, n) => widenEmpty(t, a.items![n], seen));
     }
+    // A function whose result has its parameter's type (List a -> List a,
+    // a -> a) gives a named subtype's argument its name back (take 2 "abc" is
+    // a String): a String is a List Char, and the function keeps it one.
     function application(f: Ty, argument: Entry, e: Expr, builtin = false, ascribed = false): Ty {
+        const fun = resolve(f), name = namedOf(argument.type);
+        const parameter = name && fun.k === "fn" ? resolve(fun.input) : undefined;
+        const keeps = parameter && parameter.k !== "var" && parameter.k !== "dynamic" && fun.k === "fn" && recurs(resolve(fun.output), parameter, 0);
+        const out = applied(f, argument, e, builtin, ascribed);
+        // (The function's result, as its type says: the same at each inference.)
+        if (keeps) keptNames.set(e, renamed(fun.k === "fn" ? fun.output : fun, parameter!, name!, 0));
+        return out;
+    }
+    // The run gives a call's value the name back (recordValueType), by the
+    // argument it came from; the check keeps what it knows of the list (its
+    // items, its length), which String unifies with.
+    const keptNames = new WeakMap<Expr, Ty>();
+    // Whether the parameter's type is the result, or an item of it (a List
+    // (List a) of splitOn's), the places the name comes back to.
+    function recurs(t: Ty, p: Ty, depth: number): boolean {
+        t = resolve(t);
+        if (depth > 8) return false;
+        if (sameType(t, p)) return true;
+        if (t.k === "list") return recurs(t.element, p, depth + 1) || !!t.items?.some(item => recurs(item, p, depth + 1));
+        return false;
+    }
+    // The result's type for the run: the name where the parameter's type is.
+    function renamed(t: Ty, p: Ty, name: Ty, depth: number): Ty {
+        const r = resolve(t);
+        if (depth > 8) return t;
+        if (sameType(r, p) || namedOf(r) && depth === 0) return name;
+        if (r.k === "list") {
+            const element = renamed(r.element, p, name, depth + 1), items = r.items?.map(item => renamed(item, p, name, depth + 1));
+            return element === r.element && (!items || items.every((item, n) => item === r.items![n])) ? t : { ...r, element, ...items ? { items } : {} };
+        }
+        if (r.k === "union") {
+            // ([] | List Char, the clauses' results: the empty list is of any.)
+            const rest = r.choices.filter(choice => { const c = resolve(choice); return !(c.k === "list" && (c.items?.length === 0 || c.length && !c.length.terms.size && c.length.constant === 0n)); });
+            return rest.length === 1 ? renamed(rest[0], p, name, depth) : t;
+        }
+        return t;
+    }
+    // A named subtype's type (a String, a Name = String), if t is one: one
+    // or the empty list, which is a value of it too ([] | Name is a Name).
+    function namedOf(t: Ty): Ty | undefined {
+        const r = resolve(t);
+        if (r.k === "union") {
+            const rest = r.choices.filter(choice => { const c = resolve(choice); return !(c.k === "list" && (c.items?.length === 0 || c.length && !c.length.terms.size && c.length.constant === 0n)); });
+            return rest.length === 1 && rest.length < r.choices.length ? namedOf(rest[0]) : undefined;
+        }
+        if (isString(r)) return r;
+        // (A named list: a named number keeps its name through arithmetic.)
+        const base = r.k === "variant" && r.base ? resolve(r.base) : undefined;
+        return base && (isString(base) || base.k === "list" || namedOf(base)) ? r : undefined;
+    }
+    // Whether two types are one type written twice (List a and List a, one a).
+    function sameType(x: Ty, y: Ty): boolean {
+        x = resolve(x); y = resolve(y);
+        if (x === y) return true;
+        // (A String is a List Char.)
+        if (isString(x) || isString(y)) return isString(x) && isString(y) || sameType(isString(x) ? characters() : x, isString(y) ? characters() : y);
+        if (x.k === "list" && y.k === "list") return sameType(x.element, y.element);
+        return x.k === "atom" && y.k === "atom" && x.name === y.name;
+    }
+    function applied(f: Ty, argument: Entry, e: Expr, builtin = false, ascribed = false): Ty {
         spend(e);
         f = resolve(f);
         // A value that is not a function applies as get gives it: clauses for
@@ -8605,6 +8679,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     function recordValueType(e: Expr, t: Ty): void {
         if (!options.valueTypes) return;
         const r = resolve(t);
+        // A call a named subtype's name comes back from (see application):
+        // the type its value is given for the run.
+        const kept = e.t === "app" ? keptNames.get(e.a) : e.t === "binop" ? keptNames.get(e) ?? keptNames.get(e.r) : undefined;
+        if (kept && options.keptTypes) recordType(options.keptTypes, e, kept);
         if (r.k === "list" || r.k === "record" && !(r.fields instanceof ModuleFields) || r.k === "variant" && r.args.length && (e.t === "block" || !isIO(r)) && !isPending(r)) recordType(options.valueTypes, e, r);
     }
     // Recorded once per source position; a position inferred as two types

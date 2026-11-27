@@ -1,20 +1,26 @@
 std <- import "std"
 [..] = std.[sequence,function,option]
 
-# Unicode WhiteSpace plus line terminators (the same set as ECMAScript \s).
-isSpace c = contains c " \t\n\r\v\f                 　﻿"
+# A list backwards, as std/sequence's reverse makes it but with no length to
+# keep: a field's length is not known while it is read.
+reversed xs = foldl (acc, x -> x :: acc) [] xs
+
 [
+    # Unicode WhiteSpace plus line terminators (the same set as ECMAScript \s).
+    isSpace c = contains c " \t\n\r\v\f                 　﻿"
+    # A Char is its code point, so its digits are a range of them.
+    isDigit c = c >= '0' && c <= '9'
     upper = upper
     lower = lower
     # Strings reverse as lists do (sequence's reverse, by code point).
     reverse = reverse
 
-    # Unicode code-point operations: a String is its characters, astral ones too.
-    textLength text = length text
-    textTake n text : String = take n text
-    textDrop n text : String = drop n text
     isBlank text = trim text == ""
-    lines text = splitOn "\n" text
+    # A final newline ends the last line, as a file's does: "a\n" is ["a"].
+    lines text = {
+        all = splitOn "\n" text
+        endsWith "\n" text ? take (length all - 1) all : all
+    }
     unlines xs = joinWith "\n" xs
     unwords xs = joinWith " " xs
     startsWith prefix text = take (length prefix) text == prefix
@@ -25,17 +31,16 @@ isSpace c = contains c " \t\n\r\v\f               �
     splitOn delimiter text = delimiter == ""
         ? map (c -> ([c] : String)) text
         : {
-            # (Its characters as a plain list: reversed as one, its length known.)
-            marker = reverse (to (List Char) delimiter)
+            marker = reversed delimiter
             width = 0 + length marker
             step state c = {
                 current = c :: snd state
                 take width current == marker
-                    ? [prepend (reverse (drop width current) : String) (fst state), []]
+                    ? [prepend (reversed (drop width current) : String) (fst state), []]
                     : [fst state, current]
             }
             state = foldl step [[],[]] text
-            reverse ((reverse (snd state) : String) :: fst state)
+            reversed ((reversed (snd state) : String) :: fst state)
         }
     # Joined as strings, not characters: a string's ++ is one step.
     joinWith delimiter xs = {
@@ -47,7 +52,7 @@ isSpace c = contains c " \t\n\r\v\f               �
     replaceAll search replacement text = joinWith replacement (splitOn search text)
 
     words text = filter (x -> x != "")
-        (splitOn " " (map (c -> isSpace c ? ' ' : c) text))
+        (splitOn " " (map (c -> isSpace c ? ' ' : c) text : String))
     trim text : String = reverse (dropWhile isSpace (reverse (dropWhile isSpace text)))
 
     # Common puzzle-input shapes; CRLF and trailing blank lines are accepted.

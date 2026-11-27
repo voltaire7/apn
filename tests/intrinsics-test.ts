@@ -99,6 +99,13 @@ for (const checked of [false, true]) {
         ['Name = String; n : Name = "ab"; "x" ++ n', '"xab"'],
         ['Name = String; n : Name = "ab"; [head n, length n, n 1]', "['a', 2, 'b']"],
         ['Name = String; f (c :: cs) = cs; n : Name = "ab"; f n', '"b"'],
+        // A function whose result has its parameter's type gives the name back;
+        // map, whose result is another list type, does not.
+        ['Name = String; n : Name = "abc"; [take 2 n, typeOf (take 2 n)]', '["ab",Name]'],
+        ['Name = String; n : Name = "abc"; typeOf (filter (c -> c != \'b\') n)', 'Name'],
+        ['[take 2 "abc", typeOf (take 2 "abc"), \'x\' :: "yz"]', '["ab",String,"xyz"]'],
+        ['map (c -> c) "ab"', "['a','b']"],
+        ['keep (xs : List a) : List a = xs; [keep "ab", typeOf (keep "ab")]', '["ab",String]'],
     ]) Deno.test(`named String (checked=${checked}): ${source}`, () => {
         const i = new Interpreter();
         if (checked) i.enableChecking();

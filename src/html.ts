@@ -37,8 +37,7 @@ export interface Platform {
 
 const fail = (message: string): never => { throw new APNError("runtime", `HTML: ${message}`); };
 function string(i: Interpreter, value: Value): string {
-    const v = i.dataValue(value);
-    return v.kind === "string" ? v.v : fail("expected String; use to String for numbers");
+    return i.textOf(i.dataValue(value)) ?? fail("expected String; use to String for numbers");
 }
 function variant(i: Interpreter, value: Value): Extract<Value, { kind: "variant" }> {
     const v = i.demand(value);

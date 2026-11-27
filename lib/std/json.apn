@@ -1,7 +1,7 @@
-# JSON text. toJson value encodes a value: a non-empty list of [String,value]
+# JSON text. to JSON value encodes a value: a non-empty list of [String,value]
 # pairs, a record and a HashMap with string keys become objects keyed by each
 # key's text, other lists arrays, Bool True/False, integers exact numbers,
-# Floats numbers; prettyJson encodes it indented by two spaces. fromJson text
+# Floats numbers; prettyJson encodes it indented by two spaces. from JSON text
 # decodes one: objects become their [key,value] pairs (o "status" looks one
 # up), arrays lists, numbers Int or Float, null [].
 [

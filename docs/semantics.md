@@ -331,7 +331,12 @@ type (`Count = Int`) makes a named subtype: a `Count` is an `Int` wherever one i
 a result fits (`(5 : Count) + 1` is `6`, a `Count`); one of a list is that
 list where a list is taken (`n : Name = "ab"` for `Name = String`: `head n`,
 `n 1`, `c :: cs`), and `++` keeps its name as arithmetic does (`n ++ "c"` is a
-`Name`). A constructor (`UserId (id : Int) =
+`Name`). A function whose result has a parameter's type gives a named list
+its name back wherever that type is in the result: `take`, `filter`,
+`reverse` and `::` are `List a -> List a`, so `take 2 "abc"` is the String
+`"ab"` and `take 2 n` a `Name`, and `splitOn` gives a `List (List a)`, a list of
+Strings; `map` is `List a -> List b`, so `map f "ab"` is a list. String is a
+`List Char` throughout, which no clause of a String's restates. A constructor (`UserId (id : Int) =
 _`) makes a distinct type: `UserId 1` has none of an Int's operations, builtins
 and `(x : Int)` patterns reject it, its clauses give it what it needs
 (`UserId a + UserId b = UserId (a + b)`), and `(UserId x)` takes it apart.

@@ -125,11 +125,10 @@ Importing `option` also brings the Functor and Monad instances of both types
 | API | Behavior |
 | --- | --- |
 | `isSome option`, `isNone option` | Inspect presence |
-| `withDefault fallback option` | Unwrap `Some`; only demand fallback for `None` |
+| `withDefault fallback option`, `withDefault fallback result` | Unwrap `Some`/`Ok`; only demand fallback for `None`/`Err` |
 | `map f option`, `map f result` | Transform `Some`/`Ok`, preserve `None`/`Err` (the `map` instances) |
 | `option >>= f`, `f =<< option` (and for Result) | Chain a function returning an Option or Result (the `>>=` instances) |
 | `mapError f result` | Transform `Err`, preserve `Ok` |
-| `resultDefault fallback result` | Unwrap `Ok`, use fallback for `Err` |
 | `okOr error option` | `Some x` as `Ok x`; `None` as `Err error` |
 | `to Option result` | `Ok x` as `Some x`; `Err e` as `None` (Elm's `Result.toMaybe`) |
 | `expect message m` | The value in `Some`/`Ok`; for `None` a runtime error with the message, for `Err e` the message and `e` |
@@ -157,7 +156,7 @@ Existing `map`, `filter`, `take`, `drop`, `zipWith`, `iterate`, `foldl`, and
 | --- | --- |
 | `repeat x`, `replicate n x`, `cycle xs` | Infinite repetition, bounded repetition, repeated list (`cycle []` is empty) |
 | `zip xs ys`, `zipWithIndex xs` | Pair corresponding values; zero-based `[index,value]` pairs |
-| `concat xss`, `flatten xss`, `concatMap f xs` | Flatten one level, optionally mapping first |
+| `concat xss`, `concatMap f xs` | Flatten one level, optionally mapping first |
 | `scanl f seed xs` | Lazy running accumulators, including the seed |
 | `sum xs`, `product xs` | Strict left folds with identities 0 and 1 |
 | `all predicate xs`, `any predicate xs`, `contains x xs` | Short-circuiting queries |
@@ -204,14 +203,14 @@ operations retain APN's existing overflow checks and lossless conversion rules.
 
 | API | Behavior |
 | --- | --- |
-| `textLength text`, `reverse text` | Count/reverse Unicode code points |
-| `textTake n text`, `textDrop n text` | Code-point prefixes and suffixes |
+| `length text`, `reverse text`, `take n text`, `drop n text` | The list functions, by Unicode code point; a String stays one |
+| `isSpace c`, `isDigit c` | Unicode whitespace; an ASCII digit |
 | `splitOn delimiter text`, `joinWith delimiter xs` | Literal splitting/joining; splitting preserves empty fields |
 | `replaceAll search replacement text` | Literal replacement |
 | `trim text`, `upper text`, `lower text` | Whitespace trimming; Unicode case conversion |
 | `isBlank text` | Empty after trimming |
 | `words text`, `unwords xs` | Split whitespace/discard empties; join with spaces |
-| `lines text`, `unlines xs` | Split/join literal LF; no implicit trailing newline |
+| `lines text`, `unlines xs` | Split/join literal LF; a final newline ends the last line (`lines "a\n"` is `["a"]`) |
 | `startsWith prefix text`, `endsWith suffix text` | Prefix/suffix tests |
 
 Code points preserve emoji outside the BMP but are not grapheme clusters:

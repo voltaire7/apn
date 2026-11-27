@@ -18,7 +18,6 @@ reversed xs = foldl (acc, x -> x :: acc) [] xs
     zipWithIndex (xs : Vect n a) : Vect n [Int,a] = zipWith pair [0..] xs : Dynamic
     concat xss = foldr (++) [] xss
     concatMap f xs = concat (map f xs)
-    flatten xss = concat xss
     sum xs = foldl (+) (0 : Number) xs
     product xs = foldl (*) (1 : Number) xs
     contains x xs = any (y -> x == y) xs
@@ -48,9 +47,8 @@ reversed xs = foldl (acc, x -> x :: acc) [] xs
     minimum xs = null xs ? None : Some (foldl min (head xs) (tail xs))
     maximum xs = null xs ? None : Some (foldl max (head xs) (tail xs))
 
-    # The length a fold or a merge keeps is checked as the result is made
-    # (: Dynamic); a String stays one.
-    reverse (text : String) : String = reversed text
+    # The length a fold keeps is checked as the result is made (: Dynamic); a
+    # String stays one, as its type is its parameter's.
     reverse (xs : Vect n a) : Vect n a = reversed xs : Dynamic
 
     dropWhile predicate xs = head

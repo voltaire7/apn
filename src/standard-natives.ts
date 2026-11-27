@@ -14,11 +14,10 @@ export function standardNative(i: Interpreter, name: string, args: Value[]): Val
     if (name === "withFile") return withFile(i, args[0], args[1]);
     if (FFI_NATIVES.some(([n]) => n === name)) return ffiNative(i, name, args);
     const str = (v: Value): string => {
-        v = i.dataValue(v);
         // (A list of Chars is the String it is: String = List Char.)
-        if (v.kind !== "string" && i.isList(v)) v = i.asString(v) ?? v;
-        if (v.kind !== "string") throw new APNError("runtime", `${name} expects strings`);
-        return v.v;
+        const text = i.textOf(i.dataValue(v));
+        if (text === undefined) throw new APNError("runtime", `${name} expects strings`);
+        return text;
     };
     if (name === "getArgs") return mkList(i.programArgs.map(mkStr));
     if (name === "p5Object") return p5Object(str(args[0]), i.items(args[1]));
