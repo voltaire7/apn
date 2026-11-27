@@ -2126,8 +2126,8 @@ arithmetic, each result tested against the condition (with
 is an error, never a wrapped number), and `isType Positive 3` is `False` for
 the plain `3`, as `isType Int32 3` is. A typed pattern of it takes one of its
 values or a plain value its refinement holds (converted as the base's pattern
-converts it: `(c : Scalar)` takes `65` as `(c : UInt)` does), binding the plain
-value, as `(x : Int32)` takes `5`. Like any named type it is no subset of its
+converts it: `(c : Scalar)` takes `65` as `(c : UInt)` does), binding what
+ascription makes, a value of its type, as `(x : Int32)` binds the `Int32` `5`. Like any named type it is no subset of its
 base (`Positive <= Int` is `False`, as `Int32 <= Int` is); a refinement of it,
 `Small`, is a subtype of its own, taking a `Positive` or a plain value.
 

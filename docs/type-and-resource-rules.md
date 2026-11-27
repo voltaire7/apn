@@ -26,8 +26,8 @@ sqrt (4 : Count)            # 2: builtins and (x : Int) patterns see the Int
 
 Applying `Count` or a list type (`([1,2] : List Count)`) makes one. Its typed
 pattern, `(c : Count)`, takes a `Count` or a plain value it converts, as
-`(x : Int32)` takes `5` and `(x : Float)` takes `1`, binding the plain value;
-never another name's (`(2 : Age)`). Given a plain `5`, an `Int`'s own clause,
+`(x : Int32)` takes `5` and `(x : Float)` takes `1`, binding a `Count` (what
+ascription makes); never another name's (`(2 : Age)`). Given a plain `5`, an `Int`'s own clause,
 an exact match, is chosen first: with `k (c : Count) = "count"` and
 `k (n : Int) = "int"`, `k 5` is `"int"` and `k (5 : Count)` is `"count"`. A
 refinement of a scalar named so (`Positive = (n : Int) | n > 0`) is a named

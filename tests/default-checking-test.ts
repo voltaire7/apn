@@ -1690,9 +1690,9 @@ for (const [source, output] of [
     [POSITIVE + 'PosOrText = (Positive | String)\n[isType PosOrText "a", isType PosOrText (4 : Positive), isType PosOrText 4]', '[True,True,False]'],
     // A refinement of a scalar named by a capitalized name keeps its name, as
     // Int32 does: through arithmetic, its condition checked on each result,
-    // while a typed pattern takes a plain value it holds, binding that value.
+    // while a typed pattern takes a plain value it holds, binding an I32.
     [I32 + 'a = 100 : I32\n[typeOf a, typeOf (a + 1), (a : Int) + 1, a == 100]', '[I32, I32, 101, True]'],
-    [I32 + 'h (x : I32) = typeOf x\nh x = "other"\n[h 5, h (5 : I32), h 1.5, h 3000000000]', '[Int,Int,"other","other"]'],
+    [I32 + 'h (x : I32) = typeOf x\nh x = "other"\n[h 5, h (5 : I32), h 1.5, h 3000000000]', '[I32,I32,"other","other"]'],
     [POSITIVE + 'Box (x : Positive) = _\nBox 2', 'Box 2'],
     ['Scalar = (n : UInt) | n <= 1114111 && (n < 55296 || n > 57343)\nc (x : Scalar) = x\nc 65', '65'],
 ]) {

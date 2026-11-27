@@ -7276,13 +7276,14 @@ export class Interpreter {
                 }
                 // A named subtype's takes one of its values, or a plain value it
                 // converts (as (x : Int32) takes 5 and (x : Float) takes 1),
-                // either binding the plain value; never another name's.
+                // either binding a value of the name, as ascription makes; never
+                // another name's.
                 if (type.kind === "type" && type.family?.base && p.args.length === 1 && !parameters) {
                     const actual = this.dataValue(v);
-                    if (actual.kind === "variant" && actual.family === type.family) return this.matchPattern(p.args[0], actual.v[0], binds);
+                    if (actual.kind === "variant" && actual.family === type.family) return this.matchPattern(p.args[0], actual, binds);
                     if (actual.kind === "variant" && actual.family?.base) return false;
                     const member = this.refinedMember(type, v);
-                    return member?.kind === "variant" && this.matchPattern(p.args[0], member.v[0], binds);
+                    return member?.kind === "variant" && this.matchPattern(p.args[0], member, binds);
                 }
                 // A type without parameters takes its value: (Color c) takes Red,
                 // and (b : Box) what a to Box instance makes of another value.
@@ -7293,7 +7294,7 @@ export class Interpreter {
                         if (made) actual = this.dataValue(made);
                     }
                     return p.args.length === 1 && !parameters && actual.kind === "variant" && actual.family === type.family &&
-                        this.matchPattern(p.args[0], type.family.base ? actual.v[0] : this.conform(type, actual), binds);
+                        this.matchPattern(p.args[0], type.family.base ? actual : this.conform(type, actual), binds);
                 }
             }
         }
