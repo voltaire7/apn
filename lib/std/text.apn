@@ -18,7 +18,7 @@ reversed xs = foldl (acc, x -> x :: acc) [] xs
 
     isBlank text = trim text == ""
     # A final newline ends the last line, as a file's does: "a\n" is ["a"].
-    lines text = {
+    lines (text : List a) : List (List a) = {
         all = splitOn "\n" text
         endsWith "\n" text ? take (length all - 1) all : all
     }
@@ -28,32 +28,32 @@ reversed xs = foldl (acc, x -> x :: acc) [] xs
     endsWith suffix text =
         length suffix <= length text && drop (length text - length suffix) text == suffix
 
-    # Literal splitting scans once, keeping the current field backwards.
-    splitOn delimiter text = delimiter == ""
-        ? map (c -> ([c] : String)) text
+    # Literal splitting scans once, keeping the current field backwards; the
+    # parts are the text's type (a String's are Strings).
+    splitOn (delimiter : List a) (text : List a) : List (List a) = delimiter == ""
+        ? map (c -> [c]) text
         : {
             marker = reversed delimiter
             width = 0 + length marker
             step state c = {
                 current = c :: snd state
                 take width current == marker
-                    ? [prepend (reversed (drop width current) : String) (fst state), []]
+                    ? [prepend (reversed (drop width current)) (fst state), []]
                     : [fst state, current]
             }
             state = foldl step [[],[]] text
-            reversed ((reversed (snd state) : String) :: fst state)
+            reversed (reversed (snd state) :: fst state)
         }
-    # Joined as strings, not characters: a string's ++ is one step.
-    joinWith delimiter xs = {
-        xs ~ [
-            [] -> ""
-            first :: rest -> foldl (joined, x -> joined ++ delimiter ++ x) first rest
-        ]
-    } : String
+    # The parts with the delimiter between them, of their type (Strings make a
+    # String), joined from the right so a long list reads in constant stack.
+    joinWith (delimiter : List a) (xs : List (List a)) : List a = xs ~ [
+        [] -> []
+        first :: rest -> first ++ concat (map (x -> delimiter ++ x) rest)
+    ]
     replaceAll search replacement text = joinWith replacement (splitOn search text)
 
     # Lazy, so an endless String has words too.
-    words text = {
+    words (text : List a) : List (List a) = {
         inWord c = not (isSpace c)
         rest = dropWhile isSpace text
         null rest ? [] : takeWhile inWord rest :: words (dropWhile inWord rest)

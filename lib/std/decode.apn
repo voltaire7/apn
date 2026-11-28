@@ -11,7 +11,7 @@ fieldValue name value = {
     named [(key : String), _] = key == name
     named _ = False
     found = isType (List _) value ? filter named value : []
-    null found ? Err ("Expecting an OBJECT with a field named `" ++ name ++ "`") : Ok (head found 1)
+    null found ? Err ("Expecting an OBJECT with a field named `" ++ name ++ "`" : String) : Ok (head found 1)
 }
 # The values of a list of Results, or the first error.
 allOk results = results ~ [
@@ -22,7 +22,7 @@ allOk results = results ~ [
 # the record it gives (shared ++ [...]).
 shared.[..] = [
     Decoder a = | Decoder (value -> Result a String)
-    expecting what test = Decoder (value -> test value ? Ok value : Err ("Expecting " ++ what))
+    expecting what test = Decoder (value -> test value ? Ok value : Err ("Expecting " ++ what : String))
     string = expecting "a STRING" (isType String)
     int = expecting "an INT" isInteger
     float = Decoder (value -> isNumber value ? Ok (inexact value) : Err "Expecting a FLOAT")

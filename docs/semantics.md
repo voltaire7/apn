@@ -327,34 +327,31 @@ for those and variant declarations. One giving a type or a schema gives, applied
 to all its parameters, a type that remembers how it was written (`Point`,
 `Pairs 2 Int`), as do the values made with it (`typeOf p` is `Point`), which
 patterns read back (`(Pairs n a xs)`). A scalar
-type (`Count = Int`) makes a named subtype: a `Count` is an `Int` wherever one is accepted and keeps its name when
-a result fits (`(5 : Count) + 1` is `6`, a `Count`); one of a list is that
-list where a list is taken (`n : Name = "ab"` for `Name = String`: `head n`,
-`n 1`, `c :: cs`), and `++` keeps its name as arithmetic does (`n ++ "c"` is a
-`Name`). A value carries its name, `String` one of them: `['h','i']` is a list
-and shows as one, `(['h','i'] : String)` a String and shows as `"hi"`. A
-function whose result has a parameter's type gives that argument's name back
-wherever that type is in the result, by the function's type alone, so in any
-code, typed or not: `take`, `filter` and `reverse` are `List a -> List a`, so
-`take 2 "abc"` is the String `"ab"` and `take 2 n` a `Name`, and `splitOn` gives
-a `List (List a)`, a list of Strings; `map` is `List a -> List b`, so `map f "ab"`
-is a list. A parameter that is no list gives its name to the result only where
-it is the whole of it (`a -> a`: the other items of a `List a` are other values),
-and a result of a list parameter's items' type gives back its first item's
-name (`concat` is `List (List a) -> List a`, so `concat ["ab","c"]` is a String). The name is the first named argument's, left to right, of those
-evaluated by the time the result is read: no argument is read to find it, so
-`f c xs = c ? [] : xs` given `True` takes none from an `xs` not yet read.
-Whether the name fits is the type's to say, never the items': a call, `++` or
-`::` whose type is `String` gives the name; one whose type is a list of Chars
-keeps the name a side has, read or not (`"ab" ++ ['c']`, `['a'] ++ "bc"` and
-`'x' :: "yz"` are Strings, `['h'] ++ ['i']` a list); one of another list type
-has none (`"ab" ++ [1]`, `[1] ++ "ab"`). Where the type says nothing (generic
-code, `Dynamic`, or no check), two Strings made already join into one and
-anything else is a list until a function's type, a call's or an ascription
-names it: `"ab" ++ (d : Dynamic)` is a list, and `cycle "ab"` an endless String
-by `cycle`'s type (`print $ cycle "THE END IS NEVER "` shows it as it goes). An
-item of a String that is no `Char` is an error where the String is read as
-text. Two different names do not join. A constructor (`UserId (id : Int) =
+type (`Count = Int`) makes a named subtype: a `Count` is an `Int` wherever one
+is accepted, and one of a list is that list where a list is taken (`n : Name =
+"ab"` for `Name = String`: `head n`, `n 1`, `c :: cs`). `String` is one too, of
+`List Char`: `['h','i']` is a list and shows as one, `(['h','i'] : String)` a
+String and shows as `"hi"`. A value's type gives it its name, by three rules
+for every named subtype:
+- A named value with plain values of its base keeps the name, as `(5 : Count)
+  + 1` is a `Count`: `"ab" ++ ['c']`, `['a'] ++ "bc"` and `'x' :: "yz"` are
+  Strings, `['h'] ++ ['i']` is a list (no side is named), and `n ++ "c"` is a
+  `Name` (`Name = String`).
+- A function's result where it has a parameter's type has the argument's
+  name there: `take`, `filter` and `reverse` are `List a -> List a`, so
+  `take 2 "abc"` is the String `"ab"` and `take 2 n` a `Name`; `splitOn` and
+  `words` give a `List (List a)`, so a String's parts are Strings; `concat`
+  is `List (List a) -> List a`, so `concat ["ab","c"]` is a String; `map` is
+  `List a -> List b`, so `map f "ab"` is a list; `cycle "ab"` is an endless
+  String (`print $ cycle "THE END IS NEVER "` shows it as it goes).
+- A value of another type has none: `"ab" ++ [1]` is a list, and ascribed to
+  its base a named value is plain (`("hi" : List Char)` is a list, as
+  `((5 : Count) : Int)` is an `Int`).
+
+What a type does not say (`Dynamic`, code no check reached) gives no name:
+`"ab" ++ (d : Dynamic)` is a list until ascribed (`: String`). An item of a
+String that is no `Char` is an error where the String is read as text. Two
+different names do not join. A constructor (`UserId (id : Int) =
 _`) makes a distinct type: `UserId 1` has none of an Int's operations, builtins
 and `(x : Int)` patterns reject it, its clauses give it what it needs
 (`UserId a + UserId b = UserId (a + b)`), and `(UserId x)` takes it apart.

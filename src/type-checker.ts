@@ -231,13 +231,12 @@ export interface TypeBridge {
     fits(target: unknown, actual: unknown): boolean;
     concrete(type: unknown): boolean;
     text(type: unknown): string;
-    /** What the type says of the String name (see TextKind). */
-    textual(type: unknown): TextKind;
+    /** The names a value of the type has, and where (see NameShape). */
+    nameShape(type: unknown): NameShape | undefined;
 }
-/** What a type says of the String name: it is String ("string"), a list of
- * Chars, which the name fits ("fits"), another list ("other"), generic
- * ("open"), Dynamic ("dynamic"), or no list ("none"). */
-export type TextKind = "string" | "fits" | "other" | "open" | "dynamic" | "none";
+/** Where a type gives a value a named subtype's name: the value itself
+ * (String, a Name), or a list's items (List String), each or by place. */
+export type NameShape = { name?: string; element?: NameShape; items?: (NameShape | undefined)[] };
 /** A name of explicit Dynamic type: its uses are checked at run time. */
 export const dynamicEntry = (): Entry => ({ type: explicitDynamic });
 /** A definition, by name and its clauses (a function) or body (a value). */
@@ -918,24 +917,6 @@ function untagNamed(match: Expr): boolean {
     while (match.t === "block" && match.stmts.length === 1) match = match.stmts[0];
     const f = match.t === "app" ? match.f : undefined;
     return f?.t === "recordAccess" && f.field === "untag" && f.rec.t === "var" && f.rec.name === "intrinsics";
-}
-// By a definition's source text and the position of its body (keptAt), the
-// parameters whose type its result has, each with that result, the type
-// marked $name (see keptPlaces): where the run gives an argument's name back.
-// One table for every check, the prelude's and the library's too.
-export const KEPT_PLACES = new Map<string, Map<number, unknown[]>>();
-// Where a clause's body is in its source: its first part that has a place
-// (a declared result wraps it in an ascription that has none).
-export function keptAt(body: Expr): { source: string; start: number } | undefined {
-    const pending: unknown[] = [body];
-    while (pending.length) {
-        const x = pending.shift();
-        if (!x || typeof x !== "object") continue;
-        const at = sourceLocations.get(x as Expr);
-        if (at) return { source: at.source, start: at.start };
-        if (Array.isArray(x)) pending.push(...x); else if (!("p" in x)) pending.push(...Object.values(x));
-    }
-    return undefined;
 }
 export function checkTypes(program: TopLevel[], options: CheckOptions = {}): CheckResult {
     // A view making and taking apart its own values is the constructor it
@@ -1622,8 +1603,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (t.op === "++") {
             if (isString(a) && isString(b)) return a;
-            // (A String beside a list is its characters.)
-            if (isString(a) && b.k === "list" || a.k === "list" && isString(b)) return list(union([isString(a) ? atom("Char") : (a as Extract<Ty, { k: "list" }>).element, isString(b) ? atom("Char") : (b as Extract<Ty, { k: "list" }>).element]));
+            // (A String beside a list is its characters; beside Chars, a String
+            // keeps its name, as a named subtype does beside its base's values.)
+            if (isString(a) && b.k === "list" || a.k === "list" && isString(b)) {
+                const other = resolve(((isString(a) ? b : a) as Extract<Ty, { k: "list" }>).element);
+                if (other.k === "atom" && other.name === "Char") return atom("String");
+                return list(union([isString(a) ? atom("Char") : (a as Extract<Ty, { k: "list" }>).element, isString(b) ? atom("Char") : (b as Extract<Ty, { k: "list" }>).element]));
+            }
             if (a.k === "list" && b.k === "list") return list(union([a.element, b.element]));
             return problem(`cannot append ${text(a)} and ${text(b)}`);
         }
@@ -3347,6 +3333,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             }
             unify(list(a), b, e);
             const tail = resolve(b);
+            // (A Char onto a String is a String.)
+            if (isString(tail)) return tail;
             return list(a, tail.k === "list" && tail.length ? indexAdd(tail.length, constant(1n)) : undefined);
         }
         if (op === "++") {
@@ -3706,63 +3694,67 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (a.items?.length === 0 && !p.items && !p.length && !p.endless) { a.items = undefined; a.length = undefined; return; }
         if (p.items && a.items && p.items.length === a.items.length) p.items.forEach((t, n) => widenEmpty(t, a.items![n], seen));
     }
-    // A function whose result has a parameter's type (List a -> List a, a -> a,
-    // List a -> List (List a)), or its items' type (List (List a) -> List a),
-    // gives a named subtype's value its name back there: its definition's
-    // places, for the run (CheckOptions.keeps).
-    function keptPlaces(t: Ty, clauses: { params: Pattern[]; body: Expr }[]): void {
-        const at = clauses[0] && keptAt(clauses[0].body);
-        if (!at) return;
-        // (Clauses of different types are a union of them: a parameter is kept
-        // where a clause keeps it.)
-        const whole = resolve(t), types = whole.k === "union" || whole.k === "overload" ? whole.choices : [whole];
-        const marker = atom("$name"), kept: { index: number; result: Ty; item?: true }[] = [];
-        for (const type of types) {
-            const inputs: Ty[] = [];
-            let result = resolve(type);
-            while (result.k === "fn" && inputs.length < clauses[0].params.length) { inputs.push(resolve(result.input)); result = resolve(result.output); }
-            if (inputs.length !== clauses[0].params.length) continue;
-            inputs.forEach((p, index) => {
-                if (p.k === "dynamic" || p.k === "fn" || kept.some(k => k.index === index)) return;
-                // (A parameter that is no list gives its name to the result alone, a ->
-                // a: the items of a List a it is one of are other values too.)
-                if (p.k === "list" || isString(p) ? recurs(result, p, 0) : sameType(result, p)) kept.push({ index, result: renamed(result, p, marker, 0) });
-                // A result of a list parameter's items' type (List (List a) ->
-                // List a) gives back its first item's name (concat ["ab","c"]).
-                else if (p.k === "list" && resolve(p.element).k === "list" && recurs(result, p.element, 0)) kept.push({ index, result: renamed(result, p.element, marker, 0), item: true });
-            });
-        }
-        kept.sort((x, y) => x.index - y.index);
-        const places = KEPT_PLACES.get(at.source) ?? new Map<number, unknown[]>();
-        KEPT_PLACES.set(at.source, places);
-        if (kept.length) places.set(at.start, kept); else places.delete(at.start);
+    // Calls already being named (see namedResult): typed as ever inside.
+    const renaming = new WeakSet<Ty>();
+    // A function's result where it has a parameter's type gives the
+    // argument's name there, wherever the argument has one (List a given a
+    // String, List (List a) given a List String: take 2 "abc", concat
+    // ["ab","c"] are Strings): the places, found before the call binds the
+    // parameter's variables, applied to what the call gives.
+    function namedResult(f: Extract<Ty, { k: "fn" }>, argument: Ty): ((result: Ty) => Ty) | undefined {
+        const pairs: [Ty, Ty][] = [];
+        const collect = (p: Ty, given: Ty, depth: number): void => {
+            p = resolve(p); given = resolve(given);
+            if (depth > 8 || p.k === "var") return;
+            if (namedType(given)) { if (!namedType(p)) pairs.push([p, given]); return; }
+            if (p.k === "list" && given.k === "list") {
+                collect(p.element, given.element, depth + 1);
+                if (p.items && given.items && p.items.length === given.items.length) p.items.forEach((item, n) => collect(item, given.items![n], depth + 1));
+            }
+        };
+        collect(f.input, argument, 0);
+        if (!pairs.length) return undefined;
+        const output = f.output;
+        const rename = (t: Ty, depth: number): Ty => {
+            const r = resolve(t);
+            if (depth > 8) return t;
+            for (const [p, name] of pairs) if (sameType(r, p)) return name;
+            if (r.k === "list") {
+                const element = rename(r.element, depth + 1), items = r.items?.map(item => rename(item, depth + 1));
+                return element === r.element && (!items || items.every((item, n) => item === r.items![n])) ? t : { ...r, element, ...items ? { items } : {} };
+            }
+            if (r.k === "union") {
+                // ([] | List a, clauses' results: the empty list is of any type.)
+                const rest = r.choices.filter(choice => !emptyList(choice));
+                return rest.length === 1 ? rename(rest[0], depth) : t;
+            }
+            // (A curried function's result, given its later arguments: joinWith "-".)
+            if (r.k === "fn") { const out = rename(r.output, depth + 1); return out === r.output ? t : { ...r, output: out }; }
+            return t;
+        };
+        const renamed = rename(output, 0);
+        if (renamed === output) return undefined;
+        // (The call is typed as ever; its result has the names where the
+        // function's result has them, whatever copy of it the call gave.)
+        const merged = (named: Ty, given: Ty, depth: number): Ty => {
+            const n = resolve(named), g = resolve(given);
+            if (depth > 8 || n === g) return given;
+            if (namedType(n) && !namedType(g)) return n;
+            if (n.k === "fn" && g.k === "fn") { const out = merged(n.output, g.output, depth + 1); return out === g.output ? given : { ...g, output: out }; }
+            if (n.k !== "list" || g.k !== "list") return given;
+            const element = merged(n.element, g.element, depth + 1);
+            const items = g.items && n.items?.length === g.items.length ? g.items.map((item, k) => merged(n.items![k], item, depth + 1)) : g.items;
+            return element === g.element && items === g.items ? given : { ...g, element, ...items ? { items } : {} };
+        };
+        return result => merged(renamed, result, 0);
     }
-    // Whether the parameter's type is the result, or an item of it (a List
-    // (List a) of splitOn's), the places the name comes back to.
-    function recurs(t: Ty, p: Ty, depth: number): boolean {
-        t = resolve(t);
-        if (depth > 8) return false;
-        if (sameType(t, p)) return true;
-        if (t.k === "list") return recurs(t.element, p, depth + 1) || !!t.items?.some(item => recurs(item, p, depth + 1));
-        if (t.k === "union") return t.choices.some(choice => recurs(choice, p, depth + 1));
-        return false;
+    // A list known to be empty, which is of any type.
+    function emptyList(t: Ty): boolean {
+        const c = resolve(t);
+        return c.k === "list" && (c.items?.length === 0 || !!c.length && !c.length.terms.size && c.length.constant === 0n);
     }
-    // The result with the parameter's type, where it is, written as marker.
-    function renamed(t: Ty, p: Ty, name: Ty, depth: number): Ty {
-        const r = resolve(t);
-        if (depth > 8) return t;
-        if (sameType(r, p)) return name;
-        if (r.k === "list") {
-            const element = renamed(r.element, p, name, depth + 1), items = r.items?.map(item => renamed(item, p, name, depth + 1));
-            return element === r.element && (!items || items.every((item, n) => item === r.items![n])) ? t : { ...r, element, ...items ? { items } : {} };
-        }
-        if (r.k === "union") {
-            // ([] | List Char, the clauses' results: the empty list is of any.)
-            const rest = r.choices.filter(choice => { const c = resolve(choice); return !(c.k === "list" && (c.items?.length === 0 || c.length && !c.length.terms.size && c.length.constant === 0n)); });
-            return rest.length === 1 ? renamed(rest[0], p, name, depth) : t;
-        }
-        return t;
-    }
+    // A named subtype's type, or String: what gives a value its name.
+    function namedType(t: Ty): boolean { return isString(t) || t.k === "variant" && !!t.base; }
     // Whether two types are one type written twice (List a and List a, one a).
     function sameType(x: Ty, y: Ty): boolean {
         x = resolve(x); y = resolve(y);
@@ -4272,6 +4264,13 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             return result;
         }
         if (f.k === "fn") {
+            // A result of a parameter's type has the argument's name there.
+            const named = !renaming.has(f) ? namedResult(f, argument.type) : undefined;
+            if (named) {
+                const plain = { ...f };
+                renaming.add(plain);
+                return named(application(plain, argument, e, builtin, ascribed));
+            }
             if (resolve(f.input).k === "list") argument = asCharacters(argument);
             const at = parameterAt(f), given = resolve(argument.type);
             const params = at >= 0 ? f.summary!.clauses[0].params : [], param = params[at];
@@ -8586,7 +8585,6 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         try {
             defineIn(name, clauses, scope, location);
             const defined = scope.get(name);
-            if (defined) keptPlaces(defined.type, clauses);
             // A view's definition (X = view build match) keeps its matcher's
             // type for its pattern.
             const [clause] = clauses;
@@ -8721,21 +8719,37 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     }
     // A value's type for the run (see CheckOptions.valueTypes): a list's (a
     // record's, the list of its pairs) or a variant's, whose element or
-    // arguments typed patterns decide by; a String's or Dynamic's, which say
-    // whether a value is named String (see TypeBridge.textual); a do-block action's, whose result typeOf names
+    // arguments typed patterns decide by; a named subtype's (String's), which
+    // names its value (see TypeBridge.nameShape), or a call's still to be
+    // decided, which the bridge reads decided; a do-block action's, whose result typeOf names
     // before it runs.
-    // A named subtype of String (Name = String).
-    function textSubtype(t: Ty): boolean { return t.k === "variant" && !!t.base && isString(resolve(t.base)); }
+    // Where a type names a value (see NameShape).
+    function nameShape(type: Ty, depth: number): NameShape | undefined {
+        let t = resolve(type);
+        if (depth > 8) return undefined;
+        // (The empty list is of any type: [] | String, clauses' results, is a String.)
+        if (t.k === "union") {
+            const rest = t.choices.filter(choice => !emptyList(choice));
+            if (rest.length !== 1) return undefined;
+            t = resolve(rest[0]);
+        }
+        if (isString(t)) return { name: "String" };
+        if (t.k === "variant" && t.base) return { name: t.name };
+        if (t.k !== "list") return undefined;
+        const element = nameShape(t.element, depth + 1), items = t.items?.map(item => nameShape(item, depth + 1));
+        return element || items?.some(Boolean) ? { ...element ? { element } : {}, ...items?.some(Boolean) ? { items } : {} } : undefined;
+    }
     function recordValueType(e: Expr, t: Ty): void {
         if (!options.valueTypes) return;
         const r = resolve(t);
-        if (r.k === "list" || isString(r) || textSubtype(r) || r.k === "dynamic" || r.k === "record" && !(r.fields instanceof ModuleFields) || r.k === "variant" && r.args.length && (e.t === "block" || !isIO(r)) && !isPending(r)) recordType(options.valueTypes, e, r);
+        if (r.k === "list" || r.k === "operation" || nameShape(r, 0) || r.k === "record" && !(r.fields instanceof ModuleFields) || r.k === "variant" && r.args.length && (e.t === "block" || !isIO(r)) && !isPending(r)) recordType(options.valueTypes, e, r);
     }
     // Recorded once per source position; a position inferred as two types
     // (a generic body at different calls) decides nothing (null).
     const generalKeys = new Set<string>();
     function recordType(types: Map<string, unknown>, e: Expr, t: Ty): void {
-        const at = sourceLocations.get(e), key = at && `${at.file}:${at.start}`;
+        // (By its span: a call and the partial calls within it start together.)
+        const at = sourceLocations.get(e), key = at && `${at.file}:${at.start}:${at.end}`;
         if (!key || choosing) return;
         // (A place recorded outside a call's typing too, by its definition or
         // where it stands, is typed in general.)
@@ -9277,14 +9291,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         },
         concrete: type => !variables(resolve(type as Ty)).size,
         text: type => text(type as Ty),
-        textual: type => {
-            const t = resolve(type as Ty);
-            if (isString(t) || textSubtype(t)) return "string";
-            const item = t.k === "list" ? resolve(t.element) : t;
-            if (item.k === "dynamic") return "dynamic";
-            if (variables(item).size) return "open";
-            if (t.k !== "list") return "none";
-            return item.k === "atom" && item.name === "Char" ? "fits" : "other";
+        // (Read once checking is done, a call still to be decided is decided.)
+        nameShape: type => {
+            const was = deciding;
+            deciding = true;
+            try { return nameShape(type as Ty, 0); } finally { deciding = was; }
         },
     });
     // A type declaration (Color = Red | Green), at the top level or in a block

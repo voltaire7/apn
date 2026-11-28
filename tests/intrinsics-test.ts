@@ -69,7 +69,8 @@ for (const checked of [false, true]) {
         ['map (c -> c + 1) "abc"', "['b','c','d']"], ['length "abc"', "3"], ['"ab" ++ "cd"', '"abcd"'],
         // A String joined with Chars is a String; with other items, a list.
         ['"ab" ++ [\'c\']', '"abc"'], ['"ab" ++ [1]', "['a', 'b', 1]"], ['"ab" + 1', "['b','c']"],
-        ['x = "abc"; x 0 = \'z\'; x', '"zbc"'], ['f (xs : List Char) = typeOf xs; f "ab"', "String"],
+        // (Taken as its base, List Char, a String is a list, as a Count is an Int.)
+        ['x = "abc"; x 0 = \'z\'; x', '"zbc"'], ['f (xs : List Char) = typeOf xs; f "ab"', "[Char,Char]"],
         ['f (s : String) = s ++ "!"; f [\'a\',\'b\']', '"ab!"'], ['([\'h\',\'i\'] : String)', '"hi"'],
         ['f (xs : List a) = a; f "abc"', "Char"], ['isType (List Char) "ab"', "True"],
         // The check runs library code on known Strings as on lists: "" is [].
@@ -114,8 +115,8 @@ for (const checked of [false, true]) {
         ['[[1] ++ "ab", [\'a\'] ++ "bc"]', "[[1, 'a', 'b'], \"abc\"]"],
         // Any function, written without a type too, gives its argument's name back.
         ['firstTwo s = take 2 s; [firstTwo "abc", typeOf (firstTwo "abc")]', '["ab",String]'],
-        // (An argument the call never read gives no name: reverse "ab" is not run.)
-        ['std <- import "std"; [..] = std.sequence; pick c xs = c ? [] : xs; pick True (reverse "ab")', "[]"],
+        // (Its type is [] | String: the empty list it gives is the empty String.)
+        ['std <- import "std"; [..] = std.sequence; pick c xs = c ? [] : xs; pick True (reverse "ab")', '""'],
         ['Name = String; n : Name = "abc"; f (xs : Vect k a) = k; f n', '3'],
         ['keep (xs : List a) : List a = xs; [keep "ab", typeOf (keep "ab")]', '["ab",String]'],
         // A list a typed function builds by recursion is converted, and named,

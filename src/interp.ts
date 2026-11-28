@@ -1,6 +1,6 @@
 import { CheckingSession } from "./checking-session.ts";
 import type { TypeScope } from "./type-checker.ts";
-import { KEPT_PLACES, keptAt, type TextKind } from "./type-checker.ts";
+import type { NameShape } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeElementType, describeType } from "./type-description.ts";
@@ -57,9 +57,7 @@ const LITERAL_PATTERNS = new Set(["int", "bool", "string", "char", "float"]);
 // on the value (null when it does).
 const rankedAlternatives = new WeakMap<object, PatternLambda[] | null>();
 class TailCall {
-    // keep: the call's function and arguments when it gives a name back (see
-    // keepNames): the loop running the tail call names the value it ends with.
-    constructor(readonly body: Expr, readonly env: Env, readonly keep?: { clauses: DefClause[]; args: Value[] }) {}
+    constructor(readonly body: Expr, readonly env: Env) {}
 }
 // The record r ++ [...] joins, as the written record's items see it.
 const JOINED = "[..]joined";
@@ -74,19 +72,6 @@ const LAZY_OPERATORS = new Set(["::", "++", "&&", "||", "$"]);
 const stackOverflow = () => new APNError("runtime", "call stack overflow", {
     hint: "unbounded strict recursion? Use a lazy cons tail to produce lists incrementally.",
 });
-// An expression a String by how it is written, where no check recorded its
-// type: a String literal, to String x, (x : String).
-function writtenText(e: Expr): boolean {
-    while (e.t === "block" && e.style === "(" && e.stmts.length === 1) e = e.stmts[0];
-    if (e.t === "string") return true;
-    if (e.t !== "app") return false;
-    const named = (x: Expr, name: string) => x.t === "var" && x.name === name;
-    return e.ascribed ? named(e.f, "String") : e.f.t === "app" && named(e.f.f, "to") && named(e.f.a, "String");
-}
-// How a ++ or :: names its result: "name" gives the String name, "carry"
-// keeps one a side made already has, "made" gives it only when both sides
-// are Strings made already (no type to say: Dynamic), "none" gives none.
-type Join = "name" | "carry" | "made" | "none";
 // The values application calls; any other applies as get gives it.
 const CALLABLE_KINDS = new Set(["functionType", "contract", "mutable", "type", "closure", "native", "clauseFn"]);
 
@@ -1066,11 +1051,11 @@ export class Interpreter {
     // them (see ++), and that join as text when its side is a String (read a
     // few levels deep, as a String's ++ always read it before).
     private lazyJoins = new WeakMap<Value, { text: string; right: Value }>();
-    // A String ++ a side not read yet, named or not (see ++), its first cell
-    // made now so a later join can find it.
-    private textJoin(l: Extract<Value, { kind: "string" }>, r: Value, named: boolean): Value {
-        const first = this.cell(l)!, rest = this.appendCode(first.tail, r);
-        const joined: Value = named ? { kind: "cons", head: first.head, tail: this.lazyString(rest), named: "String" } : { kind: "cons", head: first.head, tail: rest };
+    // A String ++ a side not read yet (see ++), its first cell made now so a
+    // later join can find it.
+    private textJoin(l: Extract<Value, { kind: "string" }>, r: Value): Value {
+        const first = this.cell(l)!;
+        const joined: Value = { kind: "cons", head: first.head, tail: this.lazyString(this.appendCode(first.tail, r)), named: "String" };
         this.lazyJoins.set(joined, { text: l.v, right: r });
         return joined;
     }
@@ -1706,132 +1691,60 @@ export class Interpreter {
         // A list or variant an expression makes keeps the type the checker
         // gave it, for typed patterns (see staticTypeOf).
         if (!this.types?.bridge) return value;
-        if (e.t === "list" || e.t === "app") {
+        if (e.t === "list" || e.t === "app" || e.t === "binop") {
             const type = this.recordedType(e, this.types.valueTypes);
             if (type && !this.staticTypes.has(value)) this.staticTypes.set(value, type);
         }
         return value;
     }
-    // A value the type says is a String, as one: a list carrying the name (a
-    // value made already that is no list is itself).
-    private namedText(v: Value): Value {
-        const made = v.kind === "thunk" || v.kind === "deferred" ? v.value : v;
-        if (made && made.kind !== "thunk" && made.kind !== "deferred" && made.kind !== "lazyList" && (!this.isList(made) || made.kind === "cons" && made.named)) return v;
-        return this.defer(() => this.withName(this.force(v), "String"));
-    }
-    // What the checker's type for an expression says of the String name (see
-    // TextKind): with no check, nothing ("dynamic"); a place the check gave
-    // no one type (a generic body met at two types), generic ("open").
-    private textTypes = new WeakMap<Expr, TextKind>();
-    private textAt(e: Expr): TextKind {
+    // The names an expression's type gives its value (see NameShape): none
+    // where no check typed it, or typed it only for one call of a function
+    // whose body it is (a generic body met at two types says nothing either).
+    private nameShapes = new WeakMap<Expr, NameShape | null>();
+    private nameShapeAt(e: Expr): NameShape | undefined {
         const bridge = this.types?.bridge;
-        if (!bridge) return "dynamic";
-        let text = this.textTypes.get(e);
-        if (text === undefined) {
-            // (A function body's place typed for one call says nothing of the rest.)
+        if (!bridge) return undefined;
+        let shape = this.nameShapes.get(e);
+        if (shape === undefined) {
             const type = this.recordedType(e, this.types!.valueTypes), at = sourceLocations.get(e);
-            const general = !at || !this.types!.callTyped.has(`${at.file}:${at.start}`);
-            this.textTypes.set(e, text = type && general ? bridge.textual(type) : writtenText(e) ? "string" : "open");
+            const general = !at || !this.types!.callTyped.has(`${at.file}:${at.start}:${at.end}`);
+            this.nameShapes.set(e, shape = type && general ? bridge.nameShape(type) ?? null : null);
         }
-        return text;
+        return shape ?? undefined;
     }
-    // How a written ++ or :: names its result (see operate's join): String
-    // names it; a list of Chars keeps the name a side has, or names it when
-    // a side's type is String; another list keeps none; where the type does
-    // not say (generic code, Dynamic), two Strings made already make one,
-    // and a call's type decides (see evaluate).
-    private joinAt(e: Extract<Expr, { t: "binop" }>): Join {
-        const text = this.textAt(e), left = this.textAt(e.l), right = this.textAt(e.r);
-        // (A side of type Dynamic says nothing: "ab" ++ (d : Dynamic) is a list.)
-        if (left === "dynamic" || right === "dynamic") return "made";
-        // (Two sides of type String make one, whatever generic code they are in.)
-        if (left === "string" && right === "string") return "name";
-        if (text === "fits") return left === "string" || right === "string" ? "name" : "carry";
-        return text === "string" ? "name" : text === "open" || text === "dynamic" ? "made" : "none";
-    }
-    // Whether an argument as written carries the String name, read as far as
-    // it is made already: a String, or a list whose first item is one.
-    private carriesText(e: Expr, depth = 0): boolean {
-        if (e.t === "string") return true;
-        if (e.t === "list") return depth === 0 && e.v.length > 0 && this.carriesText(e.v[0], 1);
-        const bound = e.t === "var" ? this.env.get(e.name) : undefined;
-        if (!bound || !this.known(bound)) return false;
-        const v = this.reference(bound);
-        if (this.nameOf(v) === "String") return true;
-        const first = depth === 0 && v.kind === "cons" ? v.head : depth === 0 && v.kind === "list" ? v.v[0] : undefined;
-        return !!first && this.known(first) && this.nameOf(this.reference(first)) === "String";
-    }
-    // A value a call's type says is no String (a list of other items): its
-    // cells without the name generic code gave it.
-    private unnamedText(v: Value): Value {
+    // v with the names a type gives it (shape), read as v is: a String's,
+    // a Name's (as it is in scope), or its items' (a List String's). A tail
+    // named so already (a recursive call's result) is kept as it is.
+    private namedBy(v: Value, shape: NameShape, env: Env): Value {
         const made = v.kind === "thunk" || v.kind === "deferred" ? v.value : v;
-        if (made && made.kind !== "thunk" && made.kind !== "deferred" && !(made.kind === "cons" && made.named)) return v;
-        return this.defer(() => {
-            const given = this.force(v);
-            return given.kind === "cons" && given.named ? { kind: "cons", head: given.head, tail: this.unnamedText(given.tail) } : given;
-        });
-    }
-    // A function whose result has a parameter's type gives that argument's
-    // name back (take 2 "abc" is a String, take 2 n a Name; see keptPlaces):
-    // the first such argument, left to right, that is evaluated by the time the
-    // result is read and is named. No argument is read to find it.
-    private keepsFor = new WeakMap<object, Keep[] | null>();
-    private keepsOf(clauses: DefClause[]): Keep[] | null {
-        let keeps = this.keepsFor.get(clauses);
-        if (keeps === undefined) {
-            const at = clauses[0] && keptAt(clauses[0].body);
-            keeps = at ? KEPT_PLACES.get(at.source)?.get(at.start) as Keep[] | undefined ?? null : null;
-            this.keepsFor.set(clauses, keeps);
+        const settled = !!made && made.kind !== "thunk" && made.kind !== "deferred" && made.kind !== "lazyList";
+        if (shape.name) {
+            const bound = shape.name === "String" ? undefined : env.get(shape.name), type = bound && this.reference(bound);
+            const name = shape.name === "String" ? "String" : type?.kind === "type" && type.family?.base ? type.family : undefined;
+            if (!name || settled && (this.nameOf(made!) === name || !this.isList(made!) && made!.kind !== "string" && name === "String")) return v;
+            return this.defer(() => this.withName(this.force(v), name));
         }
-        return keeps;
+        const key = shapeKey(shape);
+        // (Each cell still describes the one it names, for typeOf: see cons.)
+        const items = (list: Value, n: number): Value => ({ kind: "deferred", describes: list, compute: () => {
+            // (One that is no list, an action whose result the type is, is itself.)
+            const given = this.force(list);
+            if (!shape.items && this.namedCells.get(given) === key || !this.isList(given)) return given;
+            const cell = this.cell(given);
+            if (!cell) return mkList([]);
+            const item = shape.items?.[n] ?? shape.element;
+            const out: Value = { kind: "cons", head: item ? this.namedBy(cell.head, item, env) : cell.head, tail: items(cell.tail, n + 1) };
+            this.namedCells.set(out, key);
+            return out;
+        } });
+        return items(v, 0);
     }
-    private keepNames(clauses: DefClause[], args: Value[], result: Value): Value {
-        const kept = this.keepsOf(clauses);
-        if (!kept) return result;
-        // (A value already made that is no list, an undecided one too, is left
-        // as it is: a list is what a name is given back to.)
-        const made = this.known(result) ? this.force(result) : undefined;
-        if (made && !this.isList(made) && made.kind !== "string") return result;
-        return this.defer(() => {
-            const v = this.reference(result);
-            for (const { index, result: place, item } of kept) {
-                let arg = args[index];
-                if (!arg || !this.known(arg)) continue;
-                // (Its first item's, made already, for a result of its items' type.)
-                if (item) {
-                    const list = this.reference(arg), first = list.kind === "cons" ? list.head : list.kind === "list" ? list.v[0] : undefined;
-                    if (!first || !this.known(first)) continue;
-                    arg = first;
-                }
-                const name = this.nameOf(this.reference(arg));
-                if (name) return this.named(v, place, name);
-            }
-            return v;
-        });
-    }
+    private namedCells = new WeakMap<Value, string>();
     // A named subtype's name a value carries: a String's, or a Name's family.
     private nameOf(v: Value): "String" | VariantFamily | undefined {
         if (v.kind === "string") return "String";
         if (v.kind === "cons" && v.named === "String") return "String";
         return v.kind === "variant" && v.family?.base ? v.family : undefined;
-    }
-    private namedCells = new WeakMap<Value, { place: KeptPlace; name: "String" | VariantFamily }>();
-    // v with name at the places its function's result has it (see Keep).
-    private named(v: Value, place: KeptPlace, name: "String" | VariantFamily): Value {
-        if (place.k === "atom" && place.name === "$name") return this.withName(v, name);
-        if (place.k !== "list" || !this.isList(v)) return v;
-        // (A tail named so already, a recursive call's result, is kept as it is.)
-        const items = (list: Value, n: number): Value => this.defer(() => {
-            const given = this.force(list), done = this.namedCells.get(given);
-            if (!place.items && done?.place === place && done.name === name) return given;
-            const cell = this.cell(given);
-            if (!cell) return mkList([]);
-            const item = place.items?.[n] ?? place.element;
-            const out: Value = { kind: "cons", head: item ? this.defer(() => this.named(this.reference(cell.head), item, name)) : cell.head, tail: items(cell.tail, n + 1) };
-            this.namedCells.set(out, { place, name });
-            return out;
-        });
-        return this.force(items(v, 0));
     }
     // A value given a name: a list of Chars a String (read as needed), a value
     // of a Name's base a Name; one that does not fit keeps none.
@@ -1847,13 +1760,9 @@ export class Interpreter {
         let forceResult = false;
         // The monad the checker found for an expression a tail call left.
         let decided: Value | undefined;
-        // The first tail call in the chain that gives a name back (see TailCall).
-        let keep: TailCall["keep"];
-        // What the first call in the chain whose type says has it say: String
-        // names its value (to String 5); a list of Chars, as an argument does
-        // that carries the name (concat ["ab","c"], take 2 "abc"); another
-        // list takes away a name generic code gave it.
-        let text: "string" | "other" | undefined;
+        // The names the first call in the chain whose type gives any gives its
+        // value (take 2 "abc" is a String), in the scope it was written in.
+        let shape: NameShape | undefined, shapeScope = this.env;
         this.stack++;
         try {
             if (this.stack > STACK_LIMIT) throw stackOverflow();
@@ -1916,10 +1825,7 @@ export class Interpreter {
                         break;
                     }
                     case "app": {
-                        if (!text) {
-                            const kind = this.textAt(e);
-                            if (kind === "string" || kind === "other") text = kind;
-                        }
+                        if (!shape) { shape = this.nameShapeAt(e); shapeScope = this.env; }
                         // A Bool applied to two values, with the prelude's get and
                         // Bool, is the match on it its clauses make.
                         const selection = e.f.t === "app" ? boolSelection(e) : undefined;
@@ -2202,7 +2108,6 @@ export class Interpreter {
                     // A tail call leaves this expression: keep the monad the
                     // checker found for it (the outermost), as below.
                     if (this.types?.resultHeads.size) decided ??= this.checkedMonad(e);
-                    keep ??= next.keep;
                     e = next.body;
                     this.env = next.env;
                     continue;
@@ -2214,8 +2119,7 @@ export class Interpreter {
                     const target = decided ?? this.checkedMonad(e);
                     if (target) r = this.realize(shown, target);
                 }
-                if (keep) r = this.keepNames(keep.clauses, keep.args, r);
-                if (text) r = text === "string" ? this.namedText(r) : this.unnamedText(r);
+                if (shape) r = this.namedBy(r, shape, shapeScope);
                 return forceResult ? this.force(r) : r;
             }
         } catch (error) {
@@ -2247,7 +2151,12 @@ export class Interpreter {
         const op = f.kind === "native" && !f.applied.length && !this.joins(f) ? PRIMITIVE_OPERATORS.get(f.name) : undefined;
         if (op && !LAZY_OPERATORS.has(op)) return this.operate(op, this.eval(e.l), this.eval(e.r));
         const l = this.delay(e.l), r = this.delay(e.r);
-        if (op) return this.operate(op, l, r, op === "++" || op === "::" ? this.joinAt(e) : undefined);
+        if (op) {
+            // (A join's type names it: a String's where it is made.)
+            const shape = op === "++" || op === "::" ? this.nameShapeAt(e) : undefined;
+            const joined = this.operate(op, l, r, shape?.name === "String");
+            return shape && shape.name !== "String" ? this.namedBy(joined, shape, this.env) : joined;
+        }
         // (An operand the joined clauses force first is forced here, as the
         // builtin's are: see firstForced.)
         const first = f.kind === "native" && this.attachments.size ? this.joinedFirst(f, [l, r]) : undefined;
@@ -2270,10 +2179,10 @@ export class Interpreter {
         return { kind: "thunk", body: { ...r, v: [["_", held], ...r.v], items: [opening(held), ...r.items!] }, env };
     }
 
-    // The builtin meaning of an operator, over lazy operands. join is how a
-    // ++ or :: names its result (see joinAt); called as a function, as
-    // generic code.
-    operate(op: string, lThunk: Value, rThunk: Value, join: Join = "made"): Value {
+    // The builtin meaning of an operator, over lazy operands. text: the
+    // type of a written ++ or :: is String (called as a function, it is not
+    // known: generic code).
+    operate(op: string, lThunk: Value, rThunk: Value, text = false): Value {
         if (op === "$") return this.apply(this.demand(lThunk), rThunk);
         if (op === "::") {
             const tail = rThunk;
@@ -2281,8 +2190,6 @@ export class Interpreter {
             // not say, a Char already made onto a String makes one; a Name's
             // tail gives its name, as its conversion takes it.)
             const given = this.known(tail) ? this.nameOf(this.dataValue(tail)) : undefined;
-            const text = join === "name" || given === "String" && (join === "carry"
-                || join === "made" && this.known(lThunk) && this.charOf(this.dataValue(lThunk)).kind === "char");
             const name = given && given !== "String" ? given : text ? "String" : undefined;
             const cons: Value = {
                 kind: "cons", head: lThunk,
@@ -2318,11 +2225,9 @@ export class Interpreter {
             // (An earlier join on the left whose right is text by now is that
             // text: a String built in a loop, s ++ x ++ y, stays one string.)
             const finished = this.finishedJoin(l, 0);
-            if (finished) return this.operate("++", finished, r, join);
-            // A side's name is taken as it is: no side not read yet is read to
-            // find one ("ab" ++ rest keeps "ab"'s, so cycle "ab" is a String).
-            const left = this.nameOf(l) === "String", right = this.known(r) && this.nameOf(this.dataValue(r)) === "String";
-            const named = join === "name" || join === "carry" && (left || right) || join === "made" && left && right;
+            if (finished) return this.operate("++", finished, r, text);
+            // (Two Strings made already are one, as their text is.)
+            const named = text || this.nameOf(l) === "String" && this.known(r) && this.nameOf(this.dataValue(r)) === "String";
             if (!named) {
                 // ("" is [], and [] ++ ys is ys.)
                 if (l.kind === "string" && l.v === "") return this.force(r);
@@ -2330,7 +2235,7 @@ export class Interpreter {
                 // (A side made already that is no list is an error now.)
                 const right = this.known(r) ? this.dataValue(r) : undefined;
                 if (l.kind === "string" && right && this.listy(right)) return this.appendCode(l, r);
-                if (l.kind === "string" && !right) return this.textJoin(l, r, false);
+                if (l.kind === "string" && !right) return this.appendCode(l, r);
                 throw new APNError("runtime", `cannot apply '++' to ${l.kind} and ${right?.kind ?? "a value"}`);
             }
             if (l.kind === "string" && l.v === "") return this.withName(this.force(r), "String");
@@ -2338,7 +2243,7 @@ export class Interpreter {
                 const right = this.known(r) ? this.dataValue(r) : undefined;
                 // (Two Strings join as their text.)
                 if (right?.kind === "string") return mkStr(l.v + right.v);
-                return this.textJoin(l, r, true);
+                return this.textJoin(l, r);
             }
             if (!this.listy(l)) throw new APNError("runtime", `cannot apply '++' to ${l.kind} and ${this.dataValue(r).kind}`);
             return this.lazyString(this.appendCode(l, r));
@@ -2731,8 +2636,7 @@ export class Interpreter {
                     if (this.isList(code) && this.codeItems(code)) throw new TailLoad(code, this.env);
                 }
                 // (A native the prelude defines keeps names as its definition does.)
-                const modeled = this.modeledDefinitions.get(f.name);
-                const result = modeled?.kind === "clauseFn" ? this.keepNames(modeled.clauses, args, this.callNative(f.name, args, f.tag)) : this.callNative(f.name, args, f.tag);
+                const result = this.callNative(f.name, args, f.tag);
                 // (untag's no match is a pattern's; called, it is a clause that does not fit.)
                 if (result.kind === "nomatch" && !probe) throw new APNError("runtime", `no clause of '${f.name}' matches the given arguments`, { hint: "untag c v takes apart only a value c made" });
                 return result;
@@ -2754,15 +2658,15 @@ export class Interpreter {
                     // the result chooses (Int (read "3")).
                     const choices = this.resultOverloads(f).get(clause);
                     if (choices) return { kind: "pending", step: { op: "call", fn: f, args: raw, choices } };
-                    if (tail) return new TailCall(clause.body, child, this.keepsOf(f.clauses) ? { clauses: f.clauses, args: raw } : undefined);
-                    if (probe) return this.keepNames(f.clauses, raw, this.defer(() => {
+                    if (tail) return new TailCall(clause.body, child);
+                    if (probe) return this.defer(() => {
                         const caller = this.env;
                         this.env = child;
                         try { return this.eval(clause.body); } finally { this.env = caller; }
-                    }));
+                    });
                     const caller = this.env;
                     this.env = child;
-                    try { return this.keepNames(f.clauses, raw, this.eval(clause.body)); } finally { this.env = caller; }
+                    try { return this.eval(clause.body); } finally { this.env = caller; }
                 }
                 if (f.fallback) return raw.reduce((g: Value, x) => this.apply(g, x), f.fallback);
                 if (probe) return { kind: "nomatch" };
@@ -3517,8 +3421,9 @@ export class Interpreter {
             : given.kind === "hashmap" ? mkList([...given.entries.values()].map(([key, value]) => mkList([key, value]))) : realized;
         if (!this.isList(list) && given.kind !== "string") throw new APNError("runtime", `List constructor expects a List value`);
         const element = type.arguments?.[0], read = element && this.reference(element);
-        // (A String is a List Char as it is: it keeps its name.)
-        if (given.kind === "string" && (!read || read.kind === "type" && (read.name === "Char" || read.variable) && !read.family)) return given;
+        // (A String is a List a as it is; as a List Char, its base, it is a
+        // list, as (n : Int) of a Count is an Int.)
+        if (given.kind === "string" && (!read || read.kind === "type" && read.variable && !read.family)) return given;
         if (!element) return list;
         // Each item converted as it is used; a tail already converted to this
         // type (a recursive call's result: f xs : List a = x :: f rest) is
@@ -3556,7 +3461,7 @@ export class Interpreter {
     private recordedTypes = new WeakMap<Expr, unknown>();
     private recordedType(e: Expr, types: Map<string, unknown>): unknown {
         if (this.recordedTypes.has(e)) return this.recordedTypes.get(e);
-        const at = sourceLocations.get(e), type = at ? types.get(`${at.file}:${at.start}`) ?? null : null;
+        const at = sourceLocations.get(e), type = at ? types.get(`${at.file}:${at.start}:${at.end}`) ?? null : null;
         this.recordedTypes.set(e, type);
         return type;
     }
@@ -7581,10 +7486,13 @@ export class Interpreter {
 }
 
 // Directory part of a path (no external deps).
-// Where a definition gives an argument's name back: the parameter, and its
-// result with that parameter's type marked $name (see keptPlaces).
-type KeptPlace = { k: string; name?: string; element?: KeptPlace; items?: KeptPlace[] };
-type Keep = { index: number; result: KeptPlace; item?: true };
+// A name shape's identity, for the cells named by it (see namedBy).
+const shapeKeys = new WeakMap<NameShape, string>();
+function shapeKey(shape: NameShape): string {
+    let key = shapeKeys.get(shape);
+    if (key === undefined) shapeKeys.set(shape, key = JSON.stringify(shape));
+    return key;
+}
 
 export function dirname(p: string): string {
     const i = p.lastIndexOf("/");

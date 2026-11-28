@@ -22,8 +22,8 @@ for (const [source, expected] of [
     ["(from String \"42\" : Int) + 1", "43"],
     ["to JSON [a = 1, b = [True]]", '"{\\"a\\":1,\\"b\\":[true]}"'],
     ["from JSON \"[1,2]\"", "[1,2]"],
-    // A String is its characters: to (List Char) is ascription, which keeps it.
-    ["to (List Char) \"a😀\"", '"a😀"'],
+    // A String is its characters: as its base, List Char, it is a list.
+    ["to (List Char) \"a😀\"", "['a','😀']"],
     ["(['h','i'] : String)", '"hi"'],
     // Any other type converts as applying it does.
     ["Money (x : Float) = _\nto Float (Money m) = m\nto Float (Money 1.2)", "1.2"],

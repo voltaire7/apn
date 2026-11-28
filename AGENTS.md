@@ -71,6 +71,10 @@ Deno 2.8.0 or newer (the first release that loads the interpreter's
   conflicts with them, is inconsistent, or has a simpler or more general
   alternative, say so plainly and propose the fix instead of silently
   bending the implementation to make it work.
+- Less is more; avoid special cases. Make the language as simple and general
+  as possible: one rule that covers every case beats several that each cover
+  one (a name, a form, a type treated apart), and a change that makes a rule
+  general deletes the special cases it replaces.
 - Keep it simple, stupid. Make the simplest change that serves the programs
   people write, and weigh the code a change adds against what it buys. A
   limit only contrived input reaches (an expression thousands of operators
