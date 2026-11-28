@@ -114,6 +114,9 @@ const cases: [string, string][] = [
     // Lazy: an endless String has words; a long one's are found in constant stack.
     ['take 3 (words (cycle " ab  c\n"))', '["ab","c","ab"]'],
     ['length (words (concat (replicate 3000 "ab ")))', '3000'],
+    // A list built by joins on its left reads in constant stack, lazily still.
+    ['length (foldl (++) [] (replicate 3000 [1]))', '3000'],
+    ['take 4 (foldl (++) [] [[1],[2]] ++ [3..])', '[1,2,3,4]'],
     ['joinWith "/" ["a","b"]', '"a/b"'],
     ['startsWith "ab" "abc"', 'True'],
     ['endsWith "😀" "a😀"', 'True'],

@@ -3294,20 +3294,60 @@ export class Interpreter {
     }
     // xs ++ ys: xs's items, then ys's, which see the bindings xs's make (see
     // rerun): [x = 1] ++ [x + 1] is the code [x = 1, x + 1].
-    private appendCode(xs: Value, ys: Value, before = new Map<string, Value>()): Value {
-        return this.defer(() => {
-            const cell = this.cell(xs);
-            if (cell === null) {
-                let right = this.code(this.dataValue(ys));
-                if (right.kind === "variant" && right.family?.base) right = this.dataValue(right.v[0]);
-                if (right.kind === "string") return right;
-                if (!this.isList(right)) throw new APNError("runtime", "list append expects a list");
-                return this.rerun(right, { before, changed: new Set(before.keys()) });
+    // xs ++ ys, read as it is used. A join of a join not read yet, (a ++ b) ++
+    // c, reads a, then b, then c, the bindings of each seen by those after it
+    // (code joins code), in constant stack: a list built by joins on its left
+    // (foldl (++) [] xss) reads its first cell at once.
+    private appendCode(xs: Value, ys: Value): Value {
+        const join = this.defer(() => {
+            const rights = [ys];
+            let base = xs;
+            for (let inner = this.unreadJoins.get(base); inner && !(base as { value?: Value }).value; inner = this.unreadJoins.get(base)) {
+                rights.push(inner.ys);
+                base = inner.xs;
             }
-            const binds = this.written(cell.head)?.binds;
-            return { kind: "cons", head: cell.head, tail: this.appendCode(cell.tail, ys, binds ? new Map([...before, ...binds]) : before) };
+            return this.force(this.appended(base, rights.reverse(), 0, new Map()));
         });
+        this.unreadJoins.set(join, { xs, ys });
+        return join;
     }
+    private unreadJoins = new WeakMap<Value, { xs: Value; ys: Value }>();
+    // The cells of list, then of rights[n] and those after it, each joined
+    // with the bindings of the items before it (before).
+    private appended(list: Value, rights: Value[], n: number, before: Map<string, Value>): Value {
+        const tail = this.defer(() => {
+            // (A tail that is another join's tail not read yet, a join of a
+            // join's, is read as the one list of their parts, at once.)
+            const levels: [Value[], number][] = [[rights, n]];
+            let rest = list;
+            if (!before.size) {
+                for (let inner = this.unreadTails.get(rest); inner && !(rest as { value?: Value }).value && !inner.before.size; inner = this.unreadTails.get(rest)) {
+                    levels.push([inner.rights, inner.n]);
+                    rest = inner.list;
+                }
+            }
+            const parts = levels.length === 1 ? rights : levels.reverse().flatMap(([r, k]) => r.slice(k));
+            for (let next = levels.length === 1 ? n : 0;;) {
+                checkInterrupt();
+                const cell = this.cell(rest);
+                if (cell) {
+                    const binds = this.written(cell.head)?.binds;
+                    return { kind: "cons", head: cell.head, tail: this.appended(cell.tail, parts, next, binds ? new Map([...before, ...binds]) : before) };
+                }
+                let right = this.code(this.dataValue(parts[next]));
+                if (right.kind === "variant" && right.family?.base) right = this.dataValue(right.v[0]);
+                const last = next === parts.length - 1;
+                if (last && right.kind === "string") return right;
+                if (!this.isList(right) && right.kind !== "string") throw new APNError("runtime", "list append expects a list");
+                rest = this.rerun(right, { before, changed: new Set(before.keys()) });
+                if (last) return this.force(rest);
+                next++;
+            }
+        });
+        this.unreadTails.set(tail, { list, rights, n, before });
+        return tail;
+    }
+    private unreadTails = new WeakMap<Value, { list: Value; rights: Value[]; n: number; before: Map<string, Value> }>();
     // The items of the literal a list was made from, while it is that list.
     private literalItems = new WeakMap<Value, Expr[]>();
     // A literal's text as written, its line breaks, indentation and comments

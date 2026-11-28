@@ -40,6 +40,11 @@ alongside the code, and don't restate the user-facing rules here.
   (`listType`), keeps a tail that already is one (`namedCells`,
   `declaredTypes`) instead of wrapping it again, so a list a typed function
   builds by recursion is read through one layer, not one per call.
+- `xs ++ ys` (`appendCode`) reads a join of joins not read yet, and a tail
+  that is another join's (`unreadJoins`, `unreadTails`), as one list of its
+  parts (`appended`), each part rerun with the bindings before it (code joins
+  code): `foldl (++) [] xss` reads in constant stack. Tests:
+  `tests/standard-library-test.ts`.
   Tests: `tests/intrinsics-test.ts`, `tests/standard-library-test.ts`.
   Parser expression spans keep source/file for assertions and match diagnostics.
 - The unnecessary-parentheses rule is decided where a group stands (`judge`,
