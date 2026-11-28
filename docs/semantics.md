@@ -343,7 +343,9 @@ for every named subtype:
   `words` give a `List (List a)`, so a String's parts are Strings; `concat`
   is `List (List a) -> List a`, so `concat ["ab","c"]` is a String; `map` is
   `List a -> List b`, so `map f "ab"` is a list; `cycle "ab"` is an endless
-  String (`print $ cycle "THE END IS NEVER "` shows it as it goes).
+  String (`print $ cycle "THE END IS NEVER "` shows it as it goes). A
+  constructor is such a function: `Some (take 1 "ab")` is an `Option String`,
+  so its field is a String.
 - A value of another type has none: `"ab" ++ [1]` is a list, and ascribed to
   its base a named value is plain (`("hi" : List Char)` is a list, as
   `((5 : Count) : Int)` is an `Int`).
@@ -2019,8 +2021,9 @@ is the same alternatives, each saying its index. A list's type is a list,
 made as it is read, so any list's is exact: `typeOf (filter (> 0) [1,2,3])` is
 `[Int,Int,Int]`, `head (typeOf [1, "a"])` is `Int`, and `length (typeOf xs)` is
 `length xs`. `(List a) xs` binds `a` to the type
-every item has: `Int | String` for `[1, "a"]`. Type errors use the same
-notation.
+every item has: `Int | String` for `[1, "a"]`, and `(List (List a)) xs` the
+type every item's items have: `Char | Int` for `["ab", [1]]`, never the first
+item's with the others converted to it. Type errors use the same notation.
 
 Functions display argument/result descriptions: `f (x : Int) = x` gives
 `Int -> Int`; `x -> print x` gives `a -> []`. Clauses contribute to one

@@ -129,16 +129,26 @@ for (const checked of [false, true]) {
         const shown = i.renderString(i.run(parseDocument(source)));
         if (shown !== expected) throw new Error(`expected ${expected}, got ${shown}`);
     });
+    // (Unchecked, where the join is read: its right side is not read for a name.)
     Deno.test(`named Strings of two names do not join (checked=${checked})`, () => {
         const i = new Interpreter();
         if (checked) i.enableChecking();
-        try { i.run(parseDocument('Name = String; Tag = String; a : Name = "a"; b : Tag = "b"; a ++ b')); } catch (error) {
+        try { i.run(parseDocument('Name = String; Tag = String; a : Name = "a"; b : Tag = "b"; print (a ++ b)')); } catch (error) {
             if (String(error).includes("cannot combine")) return;
             throw error;
         }
         throw new Error("accepted");
     });
 }
+Deno.test("a list of a type to find is not converted to its first item's", () => {
+    const i = new Interpreter();
+    i.enableChecking();
+    try { i.run(parseDocument('std <- import "std"; [..] = std.sequence; x : String = concat ["ab", [1]]')); } catch (error) {
+        if (String(error).includes("cannot use Int where Char is required")) return;
+        throw error;
+    }
+    throw new Error("accepted");
+});
 // Whether a value is a String is its type's to say, never its items': a
 // list of Chars keeps the name a side has, another list has none, Dynamic
 // says nothing, and a call's or function's type gives it.
@@ -150,6 +160,9 @@ for (const [source, expected] of [
     ['d : Dynamic = [1]; "ab" ++ d', "['a', 'b', 1]"],
     ['map (x -> "#" ++ to String x) [1,2]', '["#1","#2"]'],
     ['f (xs : List (List a)) : List a = head xs; [f [[1,2]], f ["ab"]]', '[[1,2], "ab"]'],
+    // (A type to find holds every item's: Char | Int, Int | Float.)
+    ['std <- import "std"; [..] = std.sequence; concat ["ab", [1]] ++ "c"', "['a', 'b', 1, 'c']"],
+    ['std <- import "std"; [..] = std.sequence; concat [[1],[1.5]]', "[1,1.5]"],
 ] as const) Deno.test(`a String by its type: ${source}`, () => {
     const i = new Interpreter();
     i.enableChecking();

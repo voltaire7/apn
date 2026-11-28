@@ -235,8 +235,9 @@ export interface TypeBridge {
     nameShape(type: unknown): NameShape | undefined;
 }
 /** Where a type gives a value a named subtype's name: the value itself
- * (String, a Name), or a list's items (List String), each or by place. */
-export type NameShape = { name?: string; element?: NameShape; items?: (NameShape | undefined)[] };
+ * (String, a Name), a list's items (List String), each or by place, or a
+ * variant's type arguments (Result Int String), its fields of their types. */
+export type NameShape = { name?: string; element?: NameShape; items?: (NameShape | undefined)[]; args?: (NameShape | undefined)[] };
 /** A name of explicit Dynamic type: its uses are checked at run time. */
 export const dynamicEntry = (): Entry => ({ type: explicitDynamic });
 /** A definition, by name and its clauses (a function) or body (a value). */
@@ -887,26 +888,31 @@ function viewConstructor(name: string, clauses: { params: Pattern[]; body: Expr 
 // The program with each view of untag's written as its constructor (see
 // viewConstructor), in blocks too: a node is copied, keeping its location,
 // only on the way to one.
-function constructorViews(node: unknown): unknown {
-    if (Array.isArray(node)) {
-        const items = node.map(constructorViews);
-        return items.some((item, n) => item !== node[n]) ? items : node;
-    }
-    if (!node || typeof node !== "object" || "p" in node) return node;
-    const n = node as Record<string, unknown>;
-    let copy: Record<string, unknown> | undefined;
-    for (const [key, value] of Object.entries(n)) {
-        if (!value || typeof value !== "object") continue;
-        const next = constructorViews(value);
-        if (next !== value) (copy ??= { ...n })[key] = next;
-    }
-    const clauses = (copy ?? n).clauses as { params: Pattern[]; body: Expr }[] | undefined;
-    const own = (n.t === "def" || n.t === "stmDef") && clauses ? viewConstructor(n.name as string, clauses) : undefined;
-    if (own) copy = { ...copy ?? n, clauses: [{ ...clauses![0], ...own }] };
-    if (!copy) return node;
-    const at = sourceLocations.get(n as Expr);
-    if (at) sourceLocations.set(copy as Expr, at);
-    return copy;
+function constructorViews(program: TopLevel[]): TopLevel[] {
+    // (Bottom up, on walkObjects's own stack: a node's copy is made once its
+    // children's are.)
+    const made = new Map<unknown, unknown>();
+    const copied = (value: unknown): unknown => {
+        if (!Array.isArray(value)) return made.get(value) ?? value;
+        const items = value.map(copied);
+        return items.some((item, n) => item !== value[n]) ? items : value;
+    };
+    walkObjects(program, n => !("p" in n), n => {
+        let copy: Record<string, unknown> | undefined;
+        for (const [key, value] of Object.entries(n)) {
+            if (!value || typeof value !== "object") continue;
+            const next = copied(value);
+            if (next !== value) (copy ??= { ...n })[key] = next;
+        }
+        const clauses = (copy ?? n).clauses as { params: Pattern[]; body: Expr }[] | undefined;
+        const own = (n.t === "def" || n.t === "stmDef") && clauses ? viewConstructor(n.name as string, clauses) : undefined;
+        if (own) copy = { ...copy ?? n, clauses: [{ ...clauses![0], ...own }] };
+        if (!copy) return;
+        const at = sourceLocations.get(n as Expr);
+        if (at) sourceLocations.set(copy as Expr, at);
+        made.set(n, copy);
+    });
+    return copied(program) as TopLevel[];
 }
 // C, for a matcher written untag C (or intrinsics.untag C).
 function untagOf(match: Expr): string | undefined {
@@ -923,7 +929,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
     // spells, checked as one (see viewConstructor), unless the program binds
     // view or untag itself.
     if (!program.some(s => (s.t === "def" || s.t === "patDef") && ["view", "untag"].some(name => s.t === "def" ? s.name === name : patternNames(s.pattern).includes(name)))) {
-        program = constructorViews(program) as TopLevel[];
+        program = constructorViews(program);
     }
     const issues: TypeIssue[] = [];
     // How often each name is bound: a top-level value bound once can keep its
@@ -1104,6 +1110,15 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (!fits) return union([a, b]);
         unify(a, b, e);
         return a;
+    }
+    // Values of several types together: lists (a String, its Chars) of any
+    // lengths are one list holding their items, as their join is.
+    function together(type: Ty): Ty {
+        const t = resolve(type);
+        if (t.k !== "union" || t.undecided) return t;
+        const lists = t.choices.map(c => { const r = resolve(c); return isString(r) ? characters() : r; });
+        if (!lists.every(r => r.k === "list")) return t;
+        return list(together(union(lists.map(r => (r as Extract<Ty, { k: "list" }>).element))));
     }
     function union(types: Ty[]): Ty {
         const choices = types.flatMap(t => { const r = resolve(t); return r.k === "union" ? r.choices : [t]; });
@@ -3172,7 +3187,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             unify(shape(t), shape(a), e);
             // An element type still to be found (List a) is the elements' type
             // together, as at runtime: Int | String for [1,"x"] and 1 :: ["x"].
+            // So is one inside it (List (List a)): concat ["ab",[1]] holds Char | Int.
             if (!t.items && resolve(t.element).k === "var") { unify(t.element, a.element, e); return target; }
+            const joined = !t.items && variables(t.element).size ? together(a.element) : undefined;
+            if (joined && succeeds(() => unify(copy(t.element), copy(joined), e))) { unify(t.element, joined, e); return target; }
             if (a.items) {
                 a.items.forEach((item, n) =>
                     t.preserve?.has(n) ? unify(t.items?.[n] ?? t.element, item, e) : convert(
@@ -8735,6 +8753,10 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
         if (isString(t)) return { name: "String" };
         if (t.k === "variant" && t.base) return { name: t.name };
+        if (t.k === "variant" && !isIO(t)) {
+            const args = t.args.map(arg => nameShape(arg, depth + 1));
+            return args.some(Boolean) ? { args } : undefined;
+        }
         if (t.k !== "list") return undefined;
         const element = nameShape(t.element, depth + 1), items = t.items?.map(item => nameShape(item, depth + 1));
         return element || items?.some(Boolean) ? { ...element ? { element } : {}, ...items?.some(Boolean) ? { items } : {} } : undefined;
@@ -9568,10 +9590,14 @@ const PRELUDE_TYPINGS = new Map<string, [string, number]>([
 // The prelude's names, read once by checking lib/prelude.apn over the
 // natives and intrinsics; each check copies them (see copyTypeScope).
 let prelude: TypeScope | undefined;
+// The prelude's places' types, as a session records its program's (see
+// CheckOptions.valueTypes), its source named PRELUDE_FILE where it is read.
+export const PRELUDE_FILE = "<prelude>";
+export const PRELUDE_PLACES = { valueTypes: new Map<string, unknown>(), callTyped: new Set<string>() };
 function preludeScope(): TypeScope {
     if (prelude) return prelude;
     let read: TypeScope = new Map();
-    const result = checkTypes(parseDocument(preludeSource), { prelude: true, result: (_, exports) => { read = exports; } });
+    const result = checkTypes(parseDocument(preludeSource, PRELUDE_FILE), { prelude: true, ...PRELUDE_PLACES, result: (_, exports) => { read = exports; } });
     if (result.issues.length) throw new Error(`the checker rejects the prelude: ${result.issues[0].message}`);
     return prelude = read;
 }

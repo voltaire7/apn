@@ -35,13 +35,13 @@ const cases: [string, string][] = [
     ['reverse [1,2,3]', '[3,2,1]'],
     ['reverse []', '[]'],
     ['reverse ""', '""'],
-    ['head (reverse [missing,2])', '2'],
+    ['head (reverse [fail "unused", 2])', '2'],
     ['lookup 1 (frequencies (replicate 1000 1))', '1000'],
     ['compose (*2) (+1) 4', '10'],
     ['uncurry (+) [2,3]', '5'],
-    ['withDefault missing (Some 42)', '42'],
+    ['withDefault (fail "unused") (Some 42)', '42'],
     ['map (*2) (Some 3)', 'Some 6'],
-    ['map missing None', 'None'],
+    ['map (fail "unused") None', 'None'],
     ['map (*2) (Ok 3)', 'Ok 6'],
     ['mapError upper (Err "oops")', 'Err "OOPS"'],
     ['okOr "empty" (Some 1)', 'Ok 1'],
@@ -122,7 +122,7 @@ const cases: [string, string][] = [
     ['endsWith "😀" "a😀"', 'True'],
     ['getOr 9 "x" ([] : HashMap _ _)', '9'],
     ['getOption "x" ([] : HashMap _ _)', 'None'],
-    ['getOr missing "x" ([["x", 2]] : HashMap _ _)', '2'],
+    ['getOr (fail "unused") "x" ([["x", 2]] : HashMap _ _)', '2'],
     ['lookup "a" (frequencies ["a","b","a"])', '2'],
     ['lookup "a" (mergeWith (+) ([["a", 2]] : HashMap _ _) ([["a", 3]] : HashMap _ _))', '5'],
     ['lookup 1 (groupBy (x -> x % 2) [1..5])', '[1,3,5]'],
@@ -130,6 +130,7 @@ const cases: [string, string][] = [
 ];
 for (const [source, expected] of cases) Deno.test(`std: ${source}`, () => {
     const i = new Interpreter();
+    i.enableChecking();
     i.run(parse('std <- import "std"\n[..] = std.[function,option,sequence,number,text,map]'));
     const actual = i.renderString(i.run(parse(source)));
     if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}`);

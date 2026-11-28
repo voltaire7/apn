@@ -1,6 +1,6 @@
 import { CheckingSession } from "./checking-session.ts";
 import type { TypeScope } from "./type-checker.ts";
-import type { NameShape } from "./type-checker.ts";
+import { type NameShape, PRELUDE_FILE, PRELUDE_PLACES } from "./type-checker.ts";
 import { checkInterrupt } from "./interrupt.ts";
 export { checkInterrupt, setInterruptFlag, resetInterrupt } from "./interrupt.ts";
 import { describeElementType, describeType } from "./type-description.ts";
@@ -450,7 +450,7 @@ export class Interpreter {
             // A native the prelude defines (see MODELED) runs as itself: its
             // definition, which the checker reads, is not run, so it neither
             // binds the name nor joins the native; typeOf describes it.
-            const prelude = parseDocument(preludeSource);
+            const prelude = parseDocument(preludeSource, PRELUDE_FILE);
             const modeled = (s: TopLevel): s is Extract<TopLevel, { t: "def" }> => s.t === "def" && MODELED.has(s.name);
             this.run(prelude.filter(s => !modeled(s)));
             const intrinsics = this.env.get("intrinsics") as Extract<Value, { kind: "record" }>;
@@ -1046,24 +1046,6 @@ export class Interpreter {
         if (v.kind === "string") return v.v;
         const text = this.isList(v) ? this.asString(v) : undefined;
         return text?.kind === "string" ? text.v : undefined;
-    }
-    // A String's text and the side joined to it, by the lazy join made of
-    // them (see ++), and that join as text when its side is a String (read a
-    // few levels deep, as a String's ++ always read it before).
-    private lazyJoins = new WeakMap<Value, { text: string; right: Value }>();
-    // A String ++ a side not read yet (see ++), its first cell made now so a
-    // later join can find it.
-    private textJoin(l: Extract<Value, { kind: "string" }>, r: Value): Value {
-        const first = this.cell(l)!;
-        const joined: Value = { kind: "cons", head: first.head, tail: this.lazyString(this.appendCode(first.tail, r)), named: "String" };
-        this.lazyJoins.set(joined, { text: l.v, right: r });
-        return joined;
-    }
-    private finishedJoin(v: Value, depth: number): Value | undefined {
-        const join = this.lazyJoins.get(v);
-        if (!join || depth > 32) return undefined;
-        const right = this.dataValue(join.right), text = right.kind === "string" ? right : this.finishedJoin(right, depth + 1);
-        return text?.kind === "string" ? mkStr(join.text + text.v) : undefined;
     }
     // Whether a value is evaluated already (reading it runs nothing).
     // (A literal, written in place, is made without reading anything.)
@@ -1707,7 +1689,7 @@ export class Interpreter {
         let shape = this.nameShapes.get(e);
         if (shape === undefined) {
             const type = this.recordedType(e, this.types!.valueTypes), at = sourceLocations.get(e);
-            const general = !at || !this.types!.callTyped.has(`${at.file}:${at.start}:${at.end}`);
+            const general = !at || !(at.file === PRELUDE_FILE ? PRELUDE_PLACES.callTyped : this.types!.callTyped).has(`${at.file}:${at.start}:${at.end}`);
             this.nameShapes.set(e, shape = type && general ? bridge.nameShape(type) ?? null : null);
         }
         return shape ?? undefined;
@@ -1724,6 +1706,17 @@ export class Interpreter {
             if (!name || settled && (this.nameOf(made!) === name || !this.isList(made!) && made!.kind !== "string" && name === "String")) return v;
             return this.defer(() => this.withName(this.force(v), name));
         }
+        if (shape.args) return this.defer(() => {
+            // (A variant's fields have the names its declared field types give
+            // them, its parameters the type's arguments: Err "x" in a Result
+            // Int String is Err of a String.)
+            const given = this.force(v), family = given.kind === "variant" ? given.family : undefined;
+            const fields = family?.fields?.get((given as Extract<Value, { kind: "variant" }>).tag);
+            if (!fields || !family?.parameters) return given;
+            const variant = given as Extract<Value, { kind: "variant" }>;
+            const shapes = fields.map(field => fieldShape(field, family.parameters!, shape.args!));
+            return shapes.some(Boolean) ? { ...variant, v: variant.v.map((x, n) => shapes[n] ? this.namedBy(x, shapes[n]!, env) : x) } : given;
+        });
         const key = shapeKey(shape);
         // (Each cell still describes the one it names, for typeOf: see cons.)
         const items = (list: Value, n: number): Value => ({ kind: "deferred", describes: list, compute: () => {
@@ -2206,47 +2199,28 @@ export class Interpreter {
         }
         if (op === "++") {
             const record = this.dataValue(lThunk);
-            // A named subtype joins as its base does and keeps its name when the
-            // result fits ("ab" : Name) ++ "c" is a Name), as in arithmetic.
-            const family = (v: Value) => v.kind === "variant" && v.family?.base ? v.family : undefined;
-            // (A side not read yet is not read to find a name; see below.)
-            const given = family(record) || record.kind === "string" && this.known(rThunk) ? this.dataValue(rThunk) : undefined;
-            const ln = family(record), rn = given && family(given);
-            if (ln || rn) {
-                if (ln && rn && ln !== rn) throw new APNError("runtime", `cannot combine ${ln.name} and ${rn.name}`, { hint: `convert one explicitly, as in \`(x : ${rn.name})\`` });
-                const base = (v: Value) => family(v) ? (v as Extract<Value, { kind: "variant" }>).v[0] : v;
-                const name = (ln ?? rn)!;
-                return this.conform({ kind: "type", name: name.name, family: name }, this.operate("++", base(record), base(given!)));
-            }
             const joined = record.kind === "record" ? this.joinRecord(record, rThunk) ?? this.mergeRecords(record, this.dataValue(rThunk)) : undefined;
             if (joined) return joined;
-            const l = this.code(record);
-            const r = rThunk;
-            // (An earlier join on the left whose right is text by now is that
-            // text: a String built in a loop, s ++ x ++ y, stays one string.)
-            const finished = this.finishedJoin(l, 0);
-            if (finished) return this.operate("++", finished, r, text);
-            // (Two Strings made already are one, as their text is.)
-            const named = text || this.nameOf(l) === "String" && this.known(r) && this.nameOf(this.dataValue(r)) === "String";
-            if (!named) {
-                // ("" is [], and [] ++ ys is ys.)
-                if (l.kind === "string" && l.v === "") return this.force(r);
-                if (this.isList(l)) return this.appendCode(l, r);
-                // (A side made already that is no list is an error now.)
-                const right = this.known(r) ? this.dataValue(r) : undefined;
-                if (l.kind === "string" && right && this.listy(right)) return this.appendCode(l, r);
-                if (l.kind === "string" && !right) return this.appendCode(l, r);
-                throw new APNError("runtime", `cannot apply '++' to ${l.kind} and ${right?.kind ?? "a value"}`);
-            }
-            if (l.kind === "string" && l.v === "") return this.withName(this.force(r), "String");
-            if (l.kind === "string") {
-                const right = this.known(r) ? this.dataValue(r) : undefined;
-                // (Two Strings join as their text.)
-                if (right?.kind === "string") return mkStr(l.v + right.v);
-                return this.textJoin(l, r);
-            }
-            if (!this.listy(l)) throw new APNError("runtime", `cannot apply '++' to ${l.kind} and ${this.dataValue(r).kind}`);
-            return this.lazyString(this.appendCode(l, r));
+            // A named value joins as its base does. The join's name is its type's
+            // (text), or one both sides made already have (n ++ "c" is a Name, as
+            // (5 : Count) + 1 is a Count); no side not read yet is read for one,
+            // and one read later that has another name is an error there.
+            const family = (v: Value) => v.kind === "variant" && v.family?.base ? v.family : undefined;
+            const ln = family(record), l = this.code(ln ? this.dataValue((record as Extract<Value, { kind: "variant" }>).v[0]) : record);
+            const r = rThunk, right = this.known(r) ? this.dataValue(r) : undefined, rn = right && family(right);
+            if (ln && rn && ln !== rn) throw new APNError("runtime", `cannot combine ${ln.name} and ${rn.name}`, { hint: `convert one explicitly, as in \`(x : ${rn.name})\`` });
+            const rightText = right && (rn ? this.dataValue((right as Extract<Value, { kind: "variant" }>).v[0]) : right);
+            const textBase = (f: VariantFamily) => { const base = this.reference(f.base!); return base.kind === "type" && base.name === "String"; };
+            const name = ln ?? rn;
+            const named = name && right && (ln ? rn === ln || this.nameOf(right) === "String" && textBase(ln) : this.nameOf(l) === "String" && textBase(rn!)) ? name : undefined;
+            const isText = text || this.nameOf(l) === "String" && !!rightText && this.nameOf(rightText) === "String" || !!named && textBase(named);
+            if (!this.listy(l) && l.kind !== "string") throw new APNError("runtime", `cannot apply '++' to ${l.kind} and ${right?.kind ?? "a value"}`);
+            if (right && !rn && !this.listy(right) && right.kind !== "string") throw new APNError("runtime", `cannot apply '++' to ${l.kind} and ${right.kind}`);
+            // (Two Strings join as their text; "" is [], and [] ++ ys is ys.)
+            const value = l.kind === "string" && rightText?.kind === "string" ? mkStr(l.v + rightText.v)
+                : l.kind === "string" && l.v === "" ? (isText ? this.withName(this.force(rn ? rightText! : r), "String") : this.force(rn ? rightText! : r))
+                : this.appendCode(l, r, isText, ln);
+            return named ? { kind: "variant", tag: named.name, family: named, v: [value] } : value;
         }
         if (op === "&&" || op === "||") {
             const left = this.truthy(lThunk);
@@ -3294,11 +3268,13 @@ export class Interpreter {
     }
     // xs ++ ys: xs's items, then ys's, which see the bindings xs's make (see
     // rerun): [x = 1] ++ [x + 1] is the code [x = 1, x + 1].
-    // xs ++ ys, read as it is used. A join of a join not read yet, (a ++ b) ++
-    // c, reads a, then b, then c, the bindings of each seen by those after it
-    // (code joins code), in constant stack: a list built by joins on its left
-    // (foldl (++) [] xss) reads its first cell at once.
-    private appendCode(xs: Value, ys: Value): Value {
+    // xs ++ ys, read as it is used, its cells a String's when text says so.
+    // A join of a join not read yet, (a ++ b) ++ c, reads a, then b, then c,
+    // the bindings of each seen by those after it (code joins code), in
+    // constant stack: a list built by joins on its left (foldl (++) [] xss)
+    // reads its first cell at once. A part of another name than family's,
+    // the left's, is an error where it is read.
+    private appendCode(xs: Value, ys: Value, text = false, family?: VariantFamily): Value {
         const join = this.defer(() => {
             const rights = [ys];
             let base = xs;
@@ -3306,7 +3282,7 @@ export class Interpreter {
                 rights.push(inner.ys);
                 base = inner.xs;
             }
-            return this.force(this.appended(base, rights.reverse(), 0, new Map()));
+            return this.force(this.appended(base, rights.reverse(), 0, new Map(), text, family));
         });
         this.unreadJoins.set(join, { xs, ys });
         return join;
@@ -3314,7 +3290,7 @@ export class Interpreter {
     private unreadJoins = new WeakMap<Value, { xs: Value; ys: Value }>();
     // The cells of list, then of rights[n] and those after it, each joined
     // with the bindings of the items before it (before).
-    private appended(list: Value, rights: Value[], n: number, before: Map<string, Value>): Value {
+    private appended(list: Value, rights: Value[], n: number, before: Map<string, Value>, text: boolean, family?: VariantFamily): Value {
         const tail = this.defer(() => {
             // (A tail that is another join's tail not read yet, a join of a
             // join's, is read as the one list of their parts, at once.)
@@ -3332,15 +3308,19 @@ export class Interpreter {
                 const cell = this.cell(rest);
                 if (cell) {
                     const binds = this.written(cell.head)?.binds;
-                    return { kind: "cons", head: cell.head, tail: this.appended(cell.tail, parts, next, binds ? new Map([...before, ...binds]) : before) };
+                    const tail = this.appended(cell.tail, parts, next, binds ? new Map([...before, ...binds]) : before, text, family);
+                    return text ? { kind: "cons", head: cell.head, tail, named: "String" } : { kind: "cons", head: cell.head, tail };
                 }
                 let right = this.code(this.dataValue(parts[next]));
-                if (right.kind === "variant" && right.family?.base) right = this.dataValue(right.v[0]);
+                if (right.kind === "variant" && right.family?.base) {
+                    if (family && right.family !== family) throw new APNError("runtime", `cannot combine ${family.name} and ${right.family.name}`, { hint: `convert one explicitly, as in \`(x : ${right.family.name})\`` });
+                    right = this.dataValue(right.v[0]);
+                }
                 const last = next === parts.length - 1;
                 if (last && right.kind === "string") return right;
                 if (!this.isList(right) && right.kind !== "string") throw new APNError("runtime", "list append expects a list");
                 rest = this.rerun(right, { before, changed: new Set(before.keys()) });
-                if (last) return this.force(rest);
+                if (last) return this.force(text ? this.lazyString(rest) : rest);
                 next++;
             }
         });
@@ -3501,7 +3481,9 @@ export class Interpreter {
     private recordedTypes = new WeakMap<Expr, unknown>();
     private recordedType(e: Expr, types: Map<string, unknown>): unknown {
         if (this.recordedTypes.has(e)) return this.recordedTypes.get(e);
-        const at = sourceLocations.get(e), type = at ? types.get(`${at.file}:${at.start}:${at.end}`) ?? null : null;
+        // (The prelude's places are typed once, for every session.)
+        const at = sourceLocations.get(e), key = at && `${at.file}:${at.start}:${at.end}`;
+        const type = key ? (at!.file === PRELUDE_FILE ? PRELUDE_PLACES.valueTypes : types).get(key) ?? null : null;
         this.recordedTypes.set(e, type);
         return type;
     }
@@ -7526,6 +7508,14 @@ export class Interpreter {
 }
 
 // Directory part of a path (no external deps).
+// The names a constructor's field of a declared type has, the type's
+// parameters having the shapes of its arguments.
+function fieldShape(e: Expr, parameters: string[], args: (NameShape | undefined)[]): NameShape | undefined {
+    while (e.t === "block" && e.stmts.length === 1) e = e.stmts[0];
+    if (e.t === "var") return e.name === "String" ? { name: "String" } : parameters.includes(e.name) ? args[parameters.indexOf(e.name)] : undefined;
+    if (e.t === "app" && e.f.t === "var" && e.f.name === "List") { const element = fieldShape(e.a, parameters, args); return element && { element }; }
+    return undefined;
+}
 // A name shape's identity, for the cells named by it (see namedBy).
 const shapeKeys = new WeakMap<NameShape, string>();
 function shapeKey(shape: NameShape): string {

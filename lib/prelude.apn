@@ -119,7 +119,7 @@ return = intrinsics.return
 # else a throw naming the condition: a False guard stops a do-block.
 throw = intrinsics.throw
 empty = throw "empty"
-guard condition = condition ? return [] : throw ("guard failed: " ++ intrinsics.source condition : String)
+guard condition = condition ? return [] : throw ("guard failed: " ++ intrinsics.source condition)
 (<*>) = intrinsics.ap
 # >>= runs an action, and waits on a return no context has decided yet; each
 # other monad's are its clauses, f's returns made in that monad.

@@ -28,15 +28,16 @@ alongside the code, and don't restate the user-facing rules here.
   partial calls in it start together); `TypeBridge.nameShape` says where a
   recorded type names a value. The run asks it (`nameShapeAt`) for a written
   `++` or `::` (`operate`'s `text`) and for a call, whose value a chain of
-  tail calls names after it ends (`namedBy`, lazily, items of a `List
-  String` cell by cell). A place recorded only while typing one call's body
-  (`callTyped`) holds that call's types, not every run's, so it says nothing.
+  tail calls names after it ends (`namedBy`, lazily: items of a `List
+  String` cell by cell, a variant's fields by its constructor's field types).
+  A place recorded only while typing one call's body (`callTyped`) holds that
+  call's types, not every run's, so it says nothing. The prelude's places are
+  recorded once, under `PRELUDE_FILE` (`PRELUDE_PLACES`).
   A String not stored as text is a `cons` whose cells carry `named:
   "String"` (`lazyString`), which display and `typeOf` take as a String, and
-  places that need text read (`textOf`, `asText`). A String `++` whose right
-  side is not evaluated (`known`) records its parts (`lazyJoins`) so a later
-  join on its left finishes it into text (`finishedJoin`): a String built in a
-  loop stays one string. A list named, or converted to a list type
+  places that need text read (`textOf`, `asText`). A named join names its
+  cells as it builds them (`appended`), so a String built in a loop is read
+  as one list, like any other join. A list named, or converted to a list type
   (`listType`), keeps a tail that already is one (`namedCells`,
   `declaredTypes`) instead of wrapping it again, so a list a typed function
   builds by recursion is read through one layer, not one per call.
@@ -219,7 +220,8 @@ imports, so editor launchers must let Deno read them.
 The checker reads the prelude too: its own scope holds only what TypeScript
 implements (the natives and `intrinsics.*`), and `preludeScope` checks
 `lib/prelude.apn` over it once (`prelude: true`), each check copying the names
-it binds (`copyTypeScope`). A method's first definition binds it
+it binds (`copyTypeScope`), recording its places' types for the run
+(`PRELUDE_PLACES`). A method's first definition binds it
 (`(>>=) = intrinsics.bind`); later clauses for a type are instances (the
 prelude's are its own, which the intrinsic's typing covers). Where inference cannot derive a
 prelude function's type (`sequence`'s recursion over any monad, `not` of an

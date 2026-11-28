@@ -23,9 +23,9 @@ readNext _ (Err _) input items = [items = reverse items, rest = input]
 shared ++ [
     # Ok of the value a parser reads from all of the input, or Err (a String
     # is read as its characters, which it is).
-    parse parser text = run parser text ~ [
+    parse parser (text : List a) = run parser text ~ [
         Ok [value,[]] -> Ok value
-        Ok [_, next :: _] -> Err ("unexpected " ++ shown next : String)
+        Ok [_, next :: _] -> Err ("unexpected " ++ shown next)
         Err message -> Err message
     ]
 
@@ -42,12 +42,12 @@ shared ++ [
     # One item, if test accepts it.
     satisfy what test = Parser (input -> input ~ [
         x :: rest | test x -> Ok [x,rest]
-        x :: _ -> Err ("expected " ++ what ++ ", got " ++ shown x : String)
-        [] -> Err ("expected " ++ what ++ ", got the end" : String)
+        x :: _ -> Err ("expected " ++ what ++ ", got " ++ shown x)
+        [] -> Err ("expected " ++ what ++ ", got the end")
     ])
     item = satisfy "an item" (_ -> True)
     char c = satisfy (shown c) (== c)
-    oneOf cs = satisfy ("one of " ++ cs : String) (c -> contains c cs)
+    oneOf cs = satisfy ("one of " ++ cs) (c -> contains c cs)
     string text = {
         chars cs = cs ~ [
             [] -> return text
@@ -62,7 +62,7 @@ shared ++ [
     letter = satisfy "a letter" (c -> c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z')
     space = oneOf " \t\n\r"
     end = Parser (input -> null input ? Ok [[],input]
-        : Err ("expected the end, got " ++ shown (head input) : String))
+        : Err ("expected the end, got " ++ shown (head input)))
 
     # p, or q if p fails.
     infixr 3 <|>
