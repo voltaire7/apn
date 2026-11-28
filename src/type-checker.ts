@@ -2339,8 +2339,8 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // As at runtime: an owner and a constructor the program defines.
         // (Data named in lowercase, sin x = _, is a constructor too.)
         const data = (name: string) => /^[A-Z]/.test(name) || isConstructor(scope.get(name));
-        if (TYPE_NAMES.includes(owner.name) || !data(owner.name)) return problem("tag's owner must be a type the program defines", e, "Some a = tag Option Some [a]");
-        if (TYPE_NAMES.includes(ctor.name) || !data(ctor.name)) {
+        if (TYPE_NAMES.has(owner.name) || !data(owner.name)) return problem("tag's owner must be a type the program defines", e, "Some a = tag Option Some [a]");
+        if (TYPE_NAMES.has(ctor.name) || !data(ctor.name)) {
             return problem("tag's constructor must be a capitalized definition or constructor", e, "Some a = tag Option Some [a]");
         }
         const fields = resolve(infer(e.a, scope));
@@ -5742,7 +5742,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A program's own type, or a constructor's pattern: 1 for a value of
         // it (one that constructor made) as it is, which the static type may
         // tell; 0 otherwise.
-        if (p.p === "constr" && !TYPE_NAMES.includes(tag)) {
+        if (p.p === "constr" && !TYPE_NAMES.has(tag)) {
             const given = resolve(argument.type), named = given.k === "variant" ? given.name : undefined;
             if (!p.typed && argument.tag) return argument.tag === tag ? [1, 1] : [0, 0];
             if (["var", "dynamic", "operation", "union"].includes(given.k)) return [0, 1];
@@ -5751,7 +5751,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (value?.k !== "variant") return [0, 1];
             return value.name === named ? [1, 1] : [0, 0];
         }
-        if (!TYPE_NAMES.includes(tag)) return [0, 0];
+        if (!TYPE_NAMES.has(tag)) return [0, 0];
         const c = category(argument.type);
         if (tag === "Dynamic") return [1, 1];
         if (tag === "Vect") return !c ? [-1000, 1] : "kind" in c && c.kind === "List" ? [1, 1] : [-1000, -1000];
@@ -6744,9 +6744,9 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const contains: Contains = (q, p) => {
             const builtin = builtinContains(q, p);
             const typed = typeName(q);
-            if (!typed || builtin !== undefined && TYPE_NAMES.includes(typed.tag) && !(p.p === "constr" && !TYPE_NAMES.includes(p.tag))) return builtin;
+            if (!typed || builtin !== undefined && TYPE_NAMES.has(typed.tag) && !(p.p === "constr" && !TYPE_NAMES.has(p.tag))) return builtin;
             const holds = typed.args.length > 0, own = declared(typed.tag);
-            if (!own && !TYPE_NAMES.includes(typed.tag)) return undefined;
+            if (!own && !TYPE_NAMES.has(typed.tag)) return undefined;
             if (p.p === "constr" && !p.typed) {
                 const entry = scope.get(p.tag);
                 if (entry && isConstructor(entry)) {
@@ -6759,7 +6759,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             if (!other || holds !== other.args.length > 0) return builtin ?? false;
             for (let name: string | undefined = other.tag, n = 0; name && n < 32; n++) {
                 if (name === typed.tag) return true;
-                if (TYPE_NAMES.includes(name) && TYPE_NAMES.includes(typed.tag)) return !!builtinContains(typed, { ...other, tag: name });
+                if (TYPE_NAMES.has(name) && TYPE_NAMES.has(typed.tag)) return !!builtinContains(typed, { ...other, tag: name });
                 const value = declared(name), next = value?.k === "variant" ? nameOf(value.base && resolve(value.base)) : nameOf(value);
                 name = next !== name ? next : undefined;
             }
@@ -7022,7 +7022,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
             // (t x): x is the value, a number without its explicit type.
             const number = value.number && { ...value.number, typeName: undefined };
             bindKnown(p.value, number ? { ...value, number } : value, env, refutable);
-        } else if (p.p === "constr" && TYPE_NAMES.includes(p.tag) && p.args.length === 1 && plain(p.args[0])) {
+        } else if (p.p === "constr" && TYPE_NAMES.has(p.tag) && p.args.length === 1 && plain(p.args[0])) {
             if (!NUMERIC_TYPES.includes(p.tag)) { env.set(p.args[0].name, value); return; }
             const n = numericOf(value);
             if (n) try { env.set(p.args[0].name, knownNumber(castNumeric(p.tag, n)) ?? {}); } catch { /* no match */ }
@@ -8005,12 +8005,12 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         // A view's: the fields its matcher certainly gives.
         if (p.p === "constr" && views.has(p.tag)) return !!viewFields(p.tag, argument) && p.args.every(irrefutable);
         // A value of a program's own type, as it is, binding it whole.
-        if (p.p === "constr" && p.typed && p.args.length === 1 && !TYPE_NAMES.includes(p.tag)) return score === 1 && irrefutable(p.args[0]);
+        if (p.p === "constr" && p.typed && p.args.length === 1 && !TYPE_NAMES.has(p.tag)) return score === 1 && irrefutable(p.args[0]);
         // A constructor the argument was visibly built with, its fields bound plainly.
-        if (p.p === "constr" && !TYPE_NAMES.includes(p.tag)) return argument.tag === p.tag && p.args.every(irrefutable);
+        if (p.p === "constr" && !TYPE_NAMES.has(p.tag)) return argument.tag === p.tag && p.args.every(irrefutable);
         // A certain member or lossless conversion (a conversion's score is
         // certain only for a known value), binding the value whole.
-        if (p.p === "constr" && TYPE_NAMES.includes(p.tag) && p.tag !== "Vect" && p.args.length === 1) {
+        if (p.p === "constr" && TYPE_NAMES.has(p.tag) && p.tag !== "Vect" && p.args.length === 1) {
             return score > -1000 && irrefutable(p.args[0]);
         }
         if (wholeList(p)) return score === 1 && irrefutable(p.value);
@@ -8045,7 +8045,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         if (p.p === "string") return argument.string !== undefined && argument.string !== p.v;
         if (p.p === "char") return argument.char !== undefined && argument.char !== p.v;
         if (p.p === "range") return !!argument.index && !argument.index.terms.size && (argument.index.constant < p.lo || argument.index.constant > p.hi);
-        if (p.p === "constr" && TYPE_NAMES.includes(p.tag)) return low === -1000 && high === -1000;
+        if (p.p === "constr" && TYPE_NAMES.has(p.tag)) return low === -1000 && high === -1000;
         // A view's whose matcher certainly takes nothing from the value.
         if (p.p === "constr" && views.has(p.tag)) return viewFields(p.tag, argument) === null;
         // A typed pattern names a type, not a constructor: (s : Shape) takes Circle 1.
@@ -8928,11 +8928,11 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         const typeTag = (p: Pattern | undefined): string | undefined => {
             // (A list pattern takes a List: [] and x :: xs beside (m : HashMap _ _).)
             if (p?.p === "cons" || p?.p === "list" && !p.v.every(q => q.p === "var")) return "List";
-            if (p?.p === "constr") return TYPE_NAMES.includes(p.tag) ? p.tag : undefined;
+            if (p?.p === "constr") return TYPE_NAMES.has(p.tag) ? p.tag : undefined;
             if (p?.p !== "schema") return undefined;
             let head = p.type;
             while (head.t === "app") head = head.f;
-            return head.t === "var" && TYPE_NAMES.includes(head.name) ? head.name : undefined;
+            return head.t === "var" && TYPE_NAMES.has(head.name) ? head.name : undefined;
         };
         const byType = clauses[0].params.some((_, i) => new Set(clauses.map(c => typeTag(c.params[i])).filter(Boolean)).size > 1);
         const self = { pending, targets: [] as Ty[], byType };
@@ -9141,7 +9141,7 @@ export function checkTypes(program: TopLevel[], options: CheckOptions = {}): Che
         }
     }
     // The built-in types; the prelude declares List and Vect (read below).
-    const scope: Scope = new Map(TYPE_NAMES.filter(name => name !== "List" && name !== "Vect").map((name) => [name, { type: { k: "type", value: atom(name) } }]));
+    const scope: Scope = new Map([...TYPE_NAMES].filter(name => name !== "List" && name !== "Vect").map((name) => [name, { type: { k: "type", value: atom(name) } }]));
     topScope = scope;
     const a = variable(), b = variable();
     for (

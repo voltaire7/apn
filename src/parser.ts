@@ -473,7 +473,7 @@ class Parser {
         const open = this.patternGroups.get(p);
         // A built-in type applied to a value ((Int x)) is the old typed
         // spelling, whose own error says how to write it.
-        const typed = p.p === "constr" && !p.typed && p.args.length > 0 && TYPE_NAMES.includes(p.tag);
+        const typed = p.p === "constr" && !p.typed && p.args.length > 0 && TYPE_NAMES.has(p.tag);
         if (open !== undefined) this.unnecessary.set(open, !typed && !needed(p));
     }
 

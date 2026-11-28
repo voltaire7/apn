@@ -12,7 +12,7 @@ export const NUMERIC_TYPES = ["Int", "UInt", ...[8, 16, 32, 64, 128].flatMap((n)
 export const SCALAR_TYPES = new Set([...NUMERIC_TYPES, "String", "Char", "Bool"]);
 // The scalar types a value has as its own (not a class).
 export const OWN_SCALAR_TYPES = new Set([...SCALAR_TYPES].filter(t => !NUMERIC_CLASSES.has(t)));
-export const TYPE_NAMES = [...NUMERIC_TYPES, "Dynamic", "Vect", "Mutable", "Pointer", "HashMap", "Bool", "String", "List", "Record", "Function", "Type", "Variant", "IO"];
+export const TYPE_NAMES: ReadonlySet<string> = new Set([...NUMERIC_TYPES, "Dynamic", "Vect", "Mutable", "Pointer", "HashMap", "Bool", "String", "List", "Record", "Function", "Type", "Variant", "IO"]);
 // Types that are their own constructors: Mutable 0 makes a
 // cell, Pointer an address. Every other type is given a value only ascribed
 // (a HashMap too: ([a = 1] : HashMap String Int)).
@@ -39,7 +39,7 @@ export function numericWithin(a: string, b: string): boolean {
 // a built-in type within it. undefined for a pattern naming no built-in type.
 // (The run decides a program's own types too, by their values.)
 export function builtinContains(q: Pattern, p: Pattern): boolean | undefined {
-    const named = (x: Pattern) => x.p === "constr" && TYPE_NAMES.includes(x.tag) && (x.typed && x.args.length === 1 || !x.args.length) ? x : undefined;
+    const named = (x: Pattern) => x.p === "constr" && TYPE_NAMES.has(x.tag) && (x.typed && x.args.length === 1 || !x.args.length) ? x : undefined;
     const typed = named(q);
     if (!typed) return undefined;
     const t = typed.tag, holds = typed.args.length > 0;

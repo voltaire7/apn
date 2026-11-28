@@ -50,7 +50,7 @@ const builtins = new Map<string, string>([
     ["debug", "debug value — action printing the value as code: a list's items as written ([1 + 1]), any other value as source writes it (strings quoted), highlighted on a terminal; yields []. step n code descends into code."],
     ["reduce", "reduce list — the list's values alone, without its code."],
     ["intrinsics", "intrinsics — the record of functions APN cannot define (the prelude binds (+) to intrinsics.add)."],
-    ...TYPE_NAMES.map((name): [string, string] => [name, "Built-in type constructor."]),
+    ...[...TYPE_NAMES].map((name): [string, string] => [name, "Built-in type constructor."]),
     ["print", "print value — action printing the value and a newline; yields []."],
     ["repl", "repl — action starting a REPL session on the names visible where it runs; what the session binds stays in it. Yields [] when the session ends (:quit or end of input)."],
     ["emit", "emit value — action printing the value without a newline; yields []."],

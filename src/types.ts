@@ -236,7 +236,8 @@ export class Env {
     get(name: string): Value | undefined {
         let e: Env | null = this;
         while (e) {
-            if (e.map.has(name)) return e.map.get(name);
+            const value = e.map.get(name);
+            if (value !== undefined) return value;
             e = e.parent;
         }
         return undefined;

@@ -208,7 +208,7 @@ export class Interpreter {
     // Whether a name is a built-in type here: one of TYPE_NAMES that the scope
     // still binds to it (a program's own Int, shadowing it, is its own).
     private builtinType(name: string, scope: Env = this.env): boolean {
-        if (!TYPE_NAMES.includes(name)) return false;
+        if (!TYPE_NAMES.has(name)) return false;
         const bound = scope.get(name);
         if (!bound || this.loadingPrelude) return true;
         if (PRELUDE_TYPES.has(name)) return bound === this.preludeBindings.get(name);
@@ -1669,6 +1669,12 @@ export class Interpreter {
     }
 
     eval(e: Expr, tailLoad = false): Value {
+        // (A name is what it is bound to, as evaluate finds it, unless that is
+        // an undecided value, which evaluate realizes where it is used.)
+        if (e.t === "var") {
+            const bound = this.env.get(e.name), shown = bound?.kind === "thunk" && bound.value ? bound.value : bound;
+            if (shown && shown.kind !== "pending") return bound!;
+        }
         const value = this.evaluate(e, tailLoad);
         // A list or variant an expression makes keeps the type the checker
         // gave it, for typed patterns (see staticTypeOf).
@@ -2032,6 +2038,9 @@ export class Interpreter {
                         break;
                     }
                     case "block": {
+                        // (One expression, declaring nothing, has nothing for a
+                        // scope of its own to hold: (f x) is f x, forced.)
+                        if (e.stmts.length === 1 && !declaresNames(e)) { forceResult = true; next = new TailCall(e.stmts[0], this.env); break; }
                         const child = new Env(this.env);
                         const old = this.env;
                         this.env = child;
@@ -2664,7 +2673,7 @@ export class Interpreter {
     private coreMatch({ value, alternatives }: CoreMatch): TailCall {
         let ranked = rankedAlternatives.get(alternatives);
         // Only a constructor pattern's rank depends on the value.
-        if (!ranked) {
+        if (ranked === undefined) {
             const dynamic = alternatives.some(a => a.params[0].p === "constr");
             ranked = dynamic ? null : this.ranked(alternatives, a => LITERAL_PATTERNS.has(a.params[0].p) ? 1 : 0, clausePlaces(alternatives, this.containsPattern));
             rankedAlternatives.set(alternatives, ranked);
@@ -2672,6 +2681,12 @@ export class Interpreter {
         // A literal pattern tried first demands the value at once.
         const first = (ranked ?? alternatives)[0].params[0];
         const argument: Value = LITERAL_PATTERNS.has(first.p) ? this.matchedValue(value) : { kind: "thunk", body: value, env: this.env };
+        // (A Bool among unguarded Bool alternatives, as a selection's are, is
+        // the one it equals, which binds nothing: taken at once.)
+        if (argument.kind === "bool" && alternatives.every(a => a.params[0].p === "bool" && !a.guard)) {
+            const taken = alternatives.find(a => (a.params[0] as Extract<Pattern, { p: "bool" }>).v === argument.v);
+            if (taken) return new TailCall(taken.body, this.env);
+        }
         const chosen = this.choose(alternatives, [argument], this.env, undefined, ranked ?? undefined);
         if (chosen) return new TailCall(chosen.clause.body, chosen.child);
         throw new APNError("runtime", "non-exhaustive match: no alternative fits this value");
@@ -6829,7 +6844,9 @@ export class Interpreter {
         if (!joined) return undefined;
         next: for (let n = joined.length - 1; n >= 0; n--) {
             const first = this.firstForced(joined[n].fn, args);
-            if (first) this.force(first);
+            if (first === null) continue;
+            // (Forced, it may be one no clause takes.)
+            if (first) { this.force(first); if (this.firstForced(joined[n].fn, args) === null) continue; }
             let g = joined[n].fn;
             for (const x of args) {
                 g = this.apply(g, x, true);
@@ -6846,13 +6863,14 @@ export class Interpreter {
     // operator (1 + count (n - 1)) goes as deep as through the builtin. A clause
     // an evaluated argument already rejects (1 is no Glsl) forces nothing; the
     // argument is one only when every other clause would force it first.
-    private firstForced(fn: Value, args: Value[]): Value | undefined {
+    // (Null when every clause is rejected so: none takes these arguments.)
+    private firstForced(fn: Value, args: Value[]): Value | null | undefined {
         const f = this.reference(fn);
         if (f.kind !== "clauseFn" || f.applied.length || f.arity !== args.length) return;
         const plain = (p: Pattern) => p.p === "var" || p.p === "wildcard";
         const settled = (x: Value) => x.kind === "thunk" ? x.value !== undefined || ["int", "float", "string", "char", "bool"].includes(x.body.t)
             : x.kind !== "deferred" || x.value !== undefined;
-        let first: number | undefined;
+        let first: number | undefined, taken = false;
         for (const clause of f.clauses) {
             let forces: number | undefined, rejected = false;
             for (let i = 0; i < clause.params.length && forces === undefined && !rejected; i++) {
@@ -6864,13 +6882,14 @@ export class Interpreter {
                 rejected = !this.matchPattern(p, this.force(args[i]), new Map());
             }
             if (rejected) continue;
+            taken = true;
             if (forces === undefined || first !== undefined && first !== forces) return;
             first = forces;
         }
-        return first === undefined ? undefined : args[first];
+        return !taken ? null : first === undefined ? undefined : args[first];
     }
     // That argument for an operator's newest joined clauses (see joinedCall).
-    private joinedFirst(f: Value, args: Value[]): Value | undefined {
+    private joinedFirst(f: Value, args: Value[]): Value | null | undefined {
         const joined = this.attachments.get(this.functionKey(this.functionRoot(f) ?? f));
         return joined && this.firstForced(joined[joined.length - 1].fn, args);
     }
@@ -7089,7 +7108,7 @@ export class Interpreter {
         if (value.kind === "string") return { kind: "type", name: "Char" };
         const text = value.kind === "list" && value.schema ? this.typeText(value).replace(/^List /, "").replace(/^\((.*)\)$/, "$1") : describeElementType(value);
         const name = /^[A-Z][A-Za-z0-9_]*/.exec(text)?.[0];
-        return name && name === text && TYPE_NAMES.includes(name) ? { kind: "type", name } : { kind: "type", inspect: true, name: name ?? "$any", description: text };
+        return name && name === text && TYPE_NAMES.has(name) ? { kind: "type", name } : { kind: "type", inspect: true, name: name ?? "$any", description: text };
     }
     private readonly schemaTypeCaptures = new WeakMap<Value, string>();
 
